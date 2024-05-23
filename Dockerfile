@@ -22,5 +22,5 @@ COPY --from=builder --chown=root:root external-dns-unifi-webhook /bin/
 EXPOSE 8888
 
 # Drop to unprivileged user to run
-USER nobody
+USER 8675:8675
 CMD ["/bin/external-dns-unifi-webhook"]

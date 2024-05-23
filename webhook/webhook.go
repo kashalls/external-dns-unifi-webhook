@@ -202,7 +202,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Debugf("requesting adjust endpoints count: %d", len(pve))
-	pve = p.provider.AdjustEndpoints(pve)
+	pve, _ = p.provider.AdjustEndpoints(pve)
 	out, _ := json.Marshal(&pve)
 	log.Debugf("return adjust endpoints response, resultEndpointCount: %d", len(pve))
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))

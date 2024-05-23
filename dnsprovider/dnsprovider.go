@@ -230,9 +230,9 @@ func (p *DNSProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) e
 }
 
 // AdjustEndpoints modifies the endpoints before they are sent to the DNS provider.
-func (p *DNSProvider) AdjustEndpoints(endpoints []*endpoint.Endpoint) []*endpoint.Endpoint {
+func (p *DNSProvider) AdjustEndpoints(endpoints []*endpoint.Endpoint) ([]*endpoint.Endpoint, error) {
 	// Implement any adjustments needed to the endpoints before processing
-	return endpoints
+	return endpoints, nil
 }
 
 // GetDomainFilter returns the domain filter for the provider.

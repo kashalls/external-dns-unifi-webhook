@@ -3,6 +3,7 @@ module github.com/kashalls/external-dns-unifi-webhook
 go 1.21
 
 require (
+	github.com/caarlos0/env/v11 v11.0.1
 	github.com/caarlos0/env/v8 v8.0.0
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/sirupsen/logrus v1.9.3

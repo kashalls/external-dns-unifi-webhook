@@ -19,7 +19,7 @@ const (
 	acceptHeader           = "Accept"
 	varyHeader             = "Vary"
 	supportedMediaVersions = "1"
-	healthPath             = "/health"
+	healthPath             = "/healthz"
 	logFieldRequestPath    = "requestPath"
 	logFieldRequestMethod  = "requestMethod"
 	logFieldError          = "error"

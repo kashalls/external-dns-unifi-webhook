@@ -3,7 +3,7 @@ package configuration
 import (
 	"time"
 
-	"github.com/caarlos0/env/v8"
+	"github.com/caarlos0/env/v11"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -13,7 +13,7 @@ type Config struct {
 	UnifiUser          string        `env:"UNIFI_USER" envDefault:"external-dns-unifi"`
 	UnifiPass          string        `env:"UNIFI_PASS" envDefault:"V3ryS3cur3!!"`
 	UnifiSkipTLSVerify bool          `env:"UNIFI_SKIP_TLS_VERIFY" envDefault:"true"`
-	ServerHost         string        `env:"SERVER_HOST" envDefault:"localhost"`
+	ServerHost         string        `env:"SERVER_HOST" envDefault:"0.0.0.0"`
 	ServerPort         int           `env:"SERVER_PORT" envDefault:"8888"`
 	ServerReadTimeout  time.Duration `env:"SERVER_READ_TIMEOUT"`
 	ServerWriteTimeout time.Duration `env:"SERVER_WRITE_TIMEOUT"`

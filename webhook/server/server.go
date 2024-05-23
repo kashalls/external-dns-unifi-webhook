@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kashalls/external-dns-unifi-webhook/webhook"
 	"github.com/kashalls/external-dns-unifi-webhook/webhook/configuration"
 
@@ -26,6 +27,7 @@ import (
 func Init(config configuration.Config, p *webhook.Webhook) *http.Server {
 	r := chi.NewRouter()
 	r.Use(webhook.Health)
+	r.Use(middleware.Logger)
 	r.Get("/", p.Negotiate)
 	r.Get("/records", p.Records)
 	r.Post("/records", p.ApplyChanges)

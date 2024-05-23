@@ -17,9 +17,15 @@ import (
 
 // DNSRecord represents a DNS record in the API.
 type DNSRecord struct {
-	ID       string `json:"id,omitempty"`
-	Hostname string `json:"hostname"`
-	IP       string `json:"ip"`
+	ID         string       `json:"_id"`
+	Enabled    bool         `json:"enabled"`
+	Key        string       `json:"key"`
+	Port       int          `json:"port"`
+	Priority   int          `json:"priority"`
+	RecordType string       `json:"record_type"`
+	TTL        endpoint.TTL `json:"ttl"`
+	Value      string       `json:"value"`
+	Weight     int          `json:"weight"`
 }
 
 // Client is the DNS provider client.
@@ -186,9 +192,11 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
 		endpoints = append(endpoints, &endpoint.Endpoint{
-			DNSName:    record.Hostname,
-			Targets:    endpoint.Targets{record.IP},
-			RecordType: "A",
+			DNSName:       record.Key,
+			Targets:       []string{record.Value},
+			RecordType:    record.RecordType,
+			SetIdentifier: record.ID,
+			RecordTTL:     record.TTL,
 		})
 	}
 	return endpoints, nil
@@ -198,8 +206,11 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 func (p *DNSProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
 	for _, ep := range changes.Create {
 		record := DNSRecord{
-			Hostname: ep.DNSName,
-			IP:       ep.Targets[0],
+			ID: ep.SetIdentifier,
+			Key: ep.DNSName,
+			Value: ep.Targets[0],
+			RecordType: ep.RecordType,
+			TTL: ep.RecordTTL,
 		}
 		if _, err := p.client.CreateRecord(record); err != nil {
 			return err
@@ -208,8 +219,11 @@ func (p *DNSProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) e
 
 	for _, ep := range changes.UpdateNew {
 		record := DNSRecord{
-			Hostname: ep.DNSName,
-			IP:       ep.Targets[0],
+			ID: ep.SetIdentifier,
+			Key: ep.DNSName,
+			Value: ep.Targets[0],
+			RecordType: ep.RecordType,
+			TTL: ep.RecordTTL,
 		}
 		// Assuming ID can be obtained from DNS name
 		id := ep.DNSName // This needs to be changed to actual ID fetching logic

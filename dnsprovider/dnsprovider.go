@@ -9,7 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"strings"
+	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
@@ -297,6 +297,9 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
+		if record.RecordType == "TXT" {
+			record.Value, _ = strconv.Unquote(record.Value)
+		}
 		endpoints = append(endpoints, &endpoint.Endpoint{
 			DNSName:       record.Key,
 			Targets:       []string{record.Value},
@@ -311,14 +314,9 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *DNSProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
 	for _, ep := range changes.Create {
-
-		target := ep.Targets[0]
-		if ep.RecordType == endpoint.RecordTypeTXT && strings.HasPrefix(target, "\"heritage=") {
-			target = strings.Trim(ep.Targets[0], "\"")
-		}
 		record := DNSRecord{
 			Key:        ep.DNSName,
-			Value:      target,
+			Value:      ep.Targets[0],
 			RecordType: ep.RecordType,
 			TTL:        ep.RecordTTL,
 		}
@@ -328,14 +326,10 @@ func (p *DNSProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) e
 	}
 
 	for _, ep := range changes.UpdateNew {
-		target := ep.Targets[0]
-		if ep.RecordType == endpoint.RecordTypeTXT && strings.HasPrefix(target, "\"heritage=") {
-			target = strings.Trim(ep.Targets[0], "\"")
-		}
 		record := DNSRecord{
 			ID:         ep.SetIdentifier,
 			Key:        ep.DNSName,
-			Value:      target,
+			Value:      ep.Targets[0],
 			RecordType: ep.RecordType,
 			TTL:        ep.RecordTTL,
 		}

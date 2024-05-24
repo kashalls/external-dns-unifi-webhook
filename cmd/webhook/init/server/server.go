@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/kashalls/external-dns-unifi-webhook/webhook"
-	"github.com/kashalls/external-dns-unifi-webhook/webhook/configuration"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -26,8 +25,8 @@ import (
 // - /adjustendpoints (POST): executes the AdjustEndpoints method
 func Init(config configuration.Config, p *webhook.Webhook) *http.Server {
 	r := chi.NewRouter()
+
 	r.Use(webhook.Health)
-	r.Use(middleware.Logger)
 	r.Get("/", p.Negotiate)
 	r.Get("/records", p.Records)
 	r.Post("/records", p.ApplyChanges)
@@ -57,6 +56,7 @@ func ShutdownGracefully(srv *http.Server) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
+
 	log.Infof("shutting down server due to received signal: %v", sig)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	if err := srv.Shutdown(ctx); err != nil {

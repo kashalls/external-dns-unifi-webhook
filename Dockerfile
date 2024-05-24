@@ -1,12 +1,13 @@
 FROM golang:1.22-alpine as builder
+ARG PKG=github.com/kashalls/external-dns-unifi-webhook
+ARG VERSION=dev
+ARG REVISION=dev
 WORKDIR /build
-COPY go.mod go.sum /build/
-RUN go mod download
 COPY . .
-RUN go build -o /external-dns-unifi-webhook
+RUN go build -ldflags "-s -w -X main.Version=${VERSION} -X main.Gitsha=${REVISION}" ./cmd/webhook
 
 FROM gcr.io/distroless/static-debian12:nonroot
 USER 8675:8675
-COPY --from=builder --chmod=555 /external-dns-unifi-webhook /usr/local/bin/external-dns-unifi-webhook
+COPY --from=builder --chmod=555 /build/webhook /usr/local/bin/external-dns-unifi-webhook
 EXPOSE 8888/tcp
 ENTRYPOINT ["/usr/local/bin/external-dns-unifi-webhook"]

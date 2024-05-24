@@ -42,12 +42,12 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
-		ep := endpoint.NewEndpointWithTTL(
-			record.Key,
-			record.RecordType,
-			record.TTL,
-			record.Value,
-		)
+		ep := &endpoint.Endpoint{
+			DNSName:    record.Key,
+			RecordType: record.RecordType,
+			RecordTTL:  record.TTL,
+			Targets:    endpoint.NewTargets(record.Value),
+		}
 
 		if !p.domainFilter.Match(ep.DNSName) {
 			continue
@@ -61,20 +61,14 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
-	for _, ep := range changes.Delete {
-		if err := p.client.DeleteEndpoint(ep); err != nil {
+	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
+		if err := p.client.DeleteEndpoint(endpoint); err != nil {
 			return err
 		}
 	}
 
-	for _, ep := range changes.UpdateNew {
-		if _, err := p.client.UpdateEndpoint(ep); err != nil {
-			return err
-		}
-	}
-
-	for _, ep := range changes.Create {
-		if _, err := p.client.CreateEndpoint(ep); err != nil {
+	for _, endpoint := range append(changes.Create, changes.UpdateNew...) {
+		if _, err := p.client.CreateEndpoint(endpoint); err != nil {
 			return err
 		}
 	}

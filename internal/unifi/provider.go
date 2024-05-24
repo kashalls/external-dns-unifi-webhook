@@ -61,8 +61,8 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
-	for _, ep := range changes.Create {
-		if _, err := p.client.CreateEndpoint(ep); err != nil {
+	for _, ep := range changes.Delete {
+		if err := p.client.DeleteEndpoint(ep); err != nil {
 			return err
 		}
 	}
@@ -73,8 +73,8 @@ func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) erro
 		}
 	}
 
-	for _, ep := range changes.Delete {
-		if err := p.client.DeleteEndpoint(ep); err != nil {
+	for _, ep := range changes.Create {
+		if _, err := p.client.CreateEndpoint(ep); err != nil {
 			return err
 		}
 	}

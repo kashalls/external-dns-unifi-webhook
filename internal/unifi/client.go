@@ -17,7 +17,6 @@ type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
 	csrf       string
-	records    []DNSRecord
 }
 
 // DNSRecord represents a DNS record in the API.
@@ -205,7 +204,6 @@ func (c *Client) ListRecords() ([]DNSRecord, error) {
 		return nil, err
 	}
 
-	c.records = records // store records for later use
 	return records, nil
 }
 
@@ -288,11 +286,12 @@ func (c *Client) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 
 // LookupIdentifier finds the ID of a DNS record.
 func (c *Client) LookupIdentifier(Key string, RecordType string) (string, error) {
-	if c.records == nil {
-		c.ListRecords()
+	records, err := c.ListRecords()
+	if err != nil {
+		return "", err
 	}
 
-	for _, r := range c.records {
+	for _, r := range records {
 		if r.Key == Key && r.RecordType == RecordType {
 			return r.ID, nil
 		}

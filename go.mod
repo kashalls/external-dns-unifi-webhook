@@ -1,4 +1,4 @@
-module github.com/kashalls/external-dns-unifi-webhook
+module github.com/kashalls/external-dns-provider-unifi
 
 go 1.22.2
 
@@ -9,7 +9,6 @@ require (
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/sirupsen/logrus v1.9.3
 	sigs.k8s.io/external-dns v0.14.2
-
 )
 
 require (
@@ -20,11 +19,13 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/apimachinery v0.30.1 // indirect

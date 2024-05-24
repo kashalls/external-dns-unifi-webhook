@@ -11,7 +11,6 @@ import (
 	"net/http/cookiejar"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
@@ -219,14 +218,10 @@ func (c *Client) CreateRecord(record DNSRecord) (*DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debugf("json marshal: %v", record)
-
 	resp, err := c.ShipData(UnifiDNSRecords, body)
 	if err != nil {
 		return nil, err
 	}
-
-	log.Debugf("json marshal 2: %v", resp)
 
 	var newRecord DNSRecord
 	err = json.Unmarshal(resp, &newRecord)
@@ -234,7 +229,6 @@ func (c *Client) CreateRecord(record DNSRecord) (*DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debugf("json marshal 3: %v", newRecord)
 	return &newRecord, nil
 }
 
@@ -291,6 +285,10 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 		return nil, err
 	}
 
+	jsonData, _ := json.Marshal(records)
+	jsonString := string(jsonData)
+	fmt.Println(jsonString)
+
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
 		if record.RecordType == "TXT" {
@@ -309,6 +307,11 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *DNSProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
+
+	jsonData, _ := json.Marshal(changes)
+	jsonString := string(jsonData)
+	fmt.Println(jsonString)
+
 	for _, ep := range changes.Create {
 		record := DNSRecord{
 			Key:        ep.DNSName,

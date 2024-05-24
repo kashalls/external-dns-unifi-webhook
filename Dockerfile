@@ -8,6 +8,6 @@ RUN go build -ldflags "-s -w -X main.Version=${VERSION} -X main.Gitsha=${REVISIO
 
 FROM gcr.io/distroless/static-debian12:nonroot
 USER 8675:8675
-COPY --from=builder --chmod=555 /build/webhook /usr/local/bin/external-dns-unifi-webhook
+COPY --from=builder --chmod=555 /build/webhook /external-dns-unifi-webhook
 EXPOSE 8888/tcp
-ENTRYPOINT ["/usr/local/bin/external-dns-unifi-webhook"]
+ENTRYPOINT ["/external-dns-unifi-webhook"]

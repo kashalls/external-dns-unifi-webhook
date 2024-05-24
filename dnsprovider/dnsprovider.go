@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
@@ -127,11 +126,10 @@ func (c *Client) GetData(url string) ([]byte, error) {
 
 func (c *Client) ShipData(url string, body []byte) ([]byte, error) {
 	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf(url, c.BaseURL), bytes.NewBuffer(body))
-
 	c.setHeaders(req)
-	log.Debugf("is it a 403 part-1? (gone wrong): %v", req)
+
 	resp, err := c.HTTPClient.Do(req)
-	log.Debugf("is it a 403?: %v", resp)
+
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +150,9 @@ func (c *Client) ShipData(url string, body []byte) ([]byte, error) {
 
 func (c *Client) PutData(url string, body []byte) ([]byte, error) {
 	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
-
 	c.setHeaders(req)
-	log.Debugf("is it a 403 part-1? (gone wrong): %v", req)
+
 	resp, err := c.HTTPClient.Do(req)
-	log.Debugf("is it a 403?: %v", resp)
 	if err != nil {
 		return nil, err
 	}
@@ -179,9 +175,8 @@ func (c *Client) DeleteData(url string) ([]byte, error) {
 	req, _ := http.NewRequest(http.MethodPost, url, nil)
 
 	c.setHeaders(req)
-	log.Debugf("is it a 403 part-1? (gone wrong): %v", req)
 	resp, err := c.HTTPClient.Do(req)
-	log.Debugf("is it a 403?: %v", resp)
+
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +218,7 @@ func (c *Client) CreateRecord(record DNSRecord) (*DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debugf("json marshal: %v", body)
+	log.Debugf("json marshal: %v", record)
 
 	resp, err := c.ShipData(UnifiDNSRecords, body)
 	if err != nil {
@@ -297,9 +292,6 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
-		if record.RecordType == "TXT" {
-			record.Value, _ = strconv.Unquote(record.Value)
-		}
 		endpoints = append(endpoints, &endpoint.Endpoint{
 			DNSName:       record.Key,
 			Targets:       []string{record.Value},

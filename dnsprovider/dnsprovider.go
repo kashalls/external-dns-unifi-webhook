@@ -218,14 +218,10 @@ func (c *Client) CreateRecord(record DNSRecord) (*DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debugf("json marshal: %v", record)
-
 	resp, err := c.ShipData(UnifiDNSRecords, body)
 	if err != nil {
 		return nil, err
 	}
-
-	log.Debugf("json marshal 2: %v", resp)
 
 	var newRecord DNSRecord
 	err = json.Unmarshal(resp, &newRecord)
@@ -233,7 +229,6 @@ func (c *Client) CreateRecord(record DNSRecord) (*DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debugf("json marshal 3: %v", newRecord)
 	return &newRecord, nil
 }
 
@@ -289,6 +284,10 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 	if err != nil {
 		return nil, err
 	}
+
+	jsonData, _ := json.Marshal(records)
+	jsonString := string(jsonData)
+	fmt.Println(jsonString)
 
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {

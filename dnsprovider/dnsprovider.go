@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
@@ -296,6 +297,9 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
+		if record.RecordType == "TXT" {
+			record.Value, _ = strconv.Unquote(record.Value)
+		}
 		endpoints = append(endpoints, &endpoint.Endpoint{
 			DNSName:       record.Key,
 			Targets:       []string{record.Value},

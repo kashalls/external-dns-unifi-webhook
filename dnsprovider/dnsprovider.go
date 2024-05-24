@@ -305,6 +305,11 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *DNSProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
+
+	jsonData, _ := json.Marshal(changes)
+	jsonString := string(jsonData)
+	fmt.Println(jsonString)
+
 	for _, ep := range changes.Create {
 		record := DNSRecord{
 			Key:        ep.DNSName,

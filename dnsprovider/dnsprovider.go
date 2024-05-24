@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
@@ -100,15 +101,15 @@ func (c *Client) setHeaders(req *http.Request) {
 }
 
 func (c *Client) GetData(url string) ([]byte, error) {
-
 	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf(url, c.BaseURL), nil)
-
 	c.setHeaders(req)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("get data: %s", resp.Status)
+	log.Debugf("get data: %v", resp.Body)
 
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")
@@ -129,10 +130,11 @@ func (c *Client) ShipData(url string, body []byte) ([]byte, error) {
 	c.setHeaders(req)
 
 	resp, err := c.HTTPClient.Do(req)
-
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("post data: %s", resp.Status)
+	log.Debugf("post data: %v", resp.Body)
 
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")
@@ -156,6 +158,8 @@ func (c *Client) PutData(url string, body []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("put data: %s", resp.Status)
+	log.Debugf("put data: %v", resp.Body)
 
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")
@@ -173,13 +177,14 @@ func (c *Client) PutData(url string, body []byte) ([]byte, error) {
 
 func (c *Client) DeleteData(url string) ([]byte, error) {
 	req, _ := http.NewRequest(http.MethodPost, url, nil)
-
 	c.setHeaders(req)
-	resp, err := c.HTTPClient.Do(req)
 
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("delete data: %s", resp.Status)
+	log.Debugf("delete data: %v", resp.Body)
 
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")

@@ -292,6 +292,9 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
+		if record.RecordType == "TXT" {
+			record.Value = strings.Trim(record.Value, "\"")
+		}
 		endpoints = append(endpoints, &endpoint.Endpoint{
 			DNSName:       record.Key,
 			Targets:       []string{record.Value},
@@ -299,7 +302,6 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 			SetIdentifier: record.ID,
 			RecordTTL:     record.TTL,
 		})
-	}
 	return endpoints, nil
 }
 

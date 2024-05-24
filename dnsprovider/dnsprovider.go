@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
@@ -302,6 +303,7 @@ func (p *DNSProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error)
 			SetIdentifier: record.ID,
 			RecordTTL:     record.TTL,
 		})
+	}
 	return endpoints, nil
 }
 

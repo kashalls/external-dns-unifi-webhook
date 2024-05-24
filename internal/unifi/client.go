@@ -212,6 +212,7 @@ func (c *Client) ListRecords() ([]DNSRecord, error) {
 // CreateEndpoint creates a new DNS record.
 func (c *Client) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 	record := DNSRecord{
+		Enabled:    true,
 		Key:        endpoint.DNSName,
 		RecordType: endpoint.RecordType,
 		TTL:        endpoint.RecordTTL,

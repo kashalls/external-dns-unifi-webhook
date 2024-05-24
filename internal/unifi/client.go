@@ -144,29 +144,6 @@ func (c *Client) ShipData(url string, body []byte) ([]byte, error) {
 	return byteArray, nil
 }
 
-func (c *Client) PutData(url string, body []byte) ([]byte, error) {
-	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
-	c.setHeaders(req)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
-		c.csrf = resp.Header.Get("x-csrf-token")
-	}
-
-	defer resp.Body.Close()
-
-	byteArray, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return byteArray, nil
-}
-
 func (c *Client) DeleteData(url string) ([]byte, error) {
 	req, _ := http.NewRequest(http.MethodDelete, url, nil)
 
@@ -236,47 +213,14 @@ func (c *Client) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error)
 	return &newRecord, nil
 }
 
-// UpdateEndpoint updates an existing DNS record.
-func (c *Client) UpdateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-	id, err := c.LookupIdentifier(endpoint.DNSName, endpoint.RecordType)
-	if err != nil {
-		return nil, err
-	}
-
-	record := DNSRecord{
-		Key:        endpoint.DNSName,
-		RecordType: endpoint.RecordType,
-		TTL:        endpoint.RecordTTL,
-		Value:      endpoint.Targets[0],
-	}
-
-	body, err := json.Marshal(record)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.PutData(fmt.Sprintf(UnifiDNSSelectRecord, c.BaseURL, id), body)
-	if err != nil {
-		return nil, err
-	}
-
-	var updatedRecord DNSRecord
-	err = json.Unmarshal(resp, &updatedRecord)
-	if err != nil {
-		return nil, err
-	}
-
-	return &updatedRecord, nil
-}
-
 // DeleteEndpoint deletes a DNS record.
 func (c *Client) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
-	id, err := c.LookupIdentifier(endpoint.DNSName, endpoint.RecordType)
+	lookup, err := c.LookupIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.DeleteData(fmt.Sprintf(UnifiDNSSelectRecord, c.BaseURL, id))
+	_, err = c.DeleteData(fmt.Sprintf(UnifiDNSSelectRecord, c.BaseURL, lookup.ID))
 	if err != nil {
 		return err
 	}
@@ -285,17 +229,17 @@ func (c *Client) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 }
 
 // LookupIdentifier finds the ID of a DNS record.
-func (c *Client) LookupIdentifier(Key string, RecordType string) (string, error) {
+func (c *Client) LookupIdentifier(Key string, RecordType string) (*DNSRecord, error) {
 	records, err := c.ListRecords()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	for _, r := range records {
 		if r.Key == Key && r.RecordType == RecordType {
-			return r.ID, nil
+			return &r, nil
 		}
 	}
 
-	return "", fmt.Errorf("record not found")
+	return nil, fmt.Errorf("record not found")
 }

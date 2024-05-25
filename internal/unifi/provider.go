@@ -9,16 +9,16 @@ import (
 	"sigs.k8s.io/external-dns/provider"
 )
 
-// Provider type for interfacing with Adguard
+// Provider type for interfacing with UniFi
 type Provider struct {
 	provider.BaseProvider
 
-	client       *Client
+	client       *httpClient
 	domainFilter endpoint.DomainFilter
 }
 
 // newUnifiProvider initializes a new DNSProvider.
-func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Configuration) (provider.Provider, error) {
+func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
 
 	if err != nil {
@@ -35,7 +35,7 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Configuration)
 
 // Records returns the list of records in the DNS provider.
 func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
-	records, err := p.client.ListRecords()
+	records, err := p.client.GetEndpoints()
 	if err != nil {
 		return nil, err
 	}

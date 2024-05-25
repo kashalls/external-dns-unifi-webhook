@@ -14,7 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type UnifiProviderFactory func(baseProvider *provider.BaseProvider, unifiConfig *unifi.Configuration) provider.Provider
+type UnifiProviderFactory func(baseProvider *provider.BaseProvider, unifiConfig *unifi.Config) provider.Provider
 
 func Init(config configuration.Config) (provider.Provider, error) {
 	var domainFilter endpoint.DomainFilter
@@ -45,9 +45,9 @@ func Init(config configuration.Config) (provider.Provider, error) {
 	}
 	log.Info(createMsg)
 
-	unifiConfig := unifi.Configuration{}
+	unifiConfig := unifi.Config{}
 	if err := env.Parse(&unifiConfig); err != nil {
-		return nil, fmt.Errorf("reading adguard configuration failed: %v", err)
+		return nil, fmt.Errorf("reading unifi configuration failed: %v", err)
 	}
 
 	return unifi.NewUnifiProvider(domainFilter, &unifiConfig)

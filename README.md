@@ -1,6 +1,8 @@
-# ExternalDNS webhook provider for UniFi
+# ExternalDNS Webhook Provider for UniFi
 
-⚠️ This software is experimental and **NOT FIT FOR PRODUCTION USE!**
+> ⚠️ This software is experimental and **NOT FIT FOR PRODUCTION USE!**
+>
+> This webhook relies on Early Access features from Unifi, and may stop working at any time.
 
 [ExternalDNS](https://github.com/kubernetes-sigs/external-dns) is a Kubernetes add-on for automatically managing DNS records for Kubernetes ingresses and services by using different DNS providers. This webhook allows to manage your UniFi domains inside your Kubernetes cluster.
 

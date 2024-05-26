@@ -59,6 +59,7 @@ func (c *httpClient) login() error {
 	body, _ := json.Marshal(map[string]string{
 		"username": c.Config.User,
 		"password": c.Config.Password,
+		"rememberMe": true,
 	})
 
 	// Perform the login request

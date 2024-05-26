@@ -106,6 +106,21 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	log.Debugf("response code from %s request to %s: %d", method, path, resp.StatusCode)
 
+	// If the status code is 401, re-login and retry the request
+	if resp.StatusCode == http.StatusUnauthorized {
+		log.Debugf("Received 401 Unauthorized, re-login required")
+		if err := c.login(); err != nil {
+			return nil, err
+		}
+		// Update the headers with new CSRF token
+		c.setHeaders(req)
+		// Retry the request
+		resp, err = c.Client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
 	}

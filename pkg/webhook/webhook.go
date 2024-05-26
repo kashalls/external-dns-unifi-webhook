@@ -17,7 +17,6 @@ const (
 	contentTypePlaintext  = "text/plain"
 	acceptHeader          = "Accept"
 	varyHeader            = "Vary"
-	healthPath            = "/healthz"
 	logFieldRequestPath   = "requestPath"
 	logFieldRequestMethod = "requestMethod"
 	logFieldError         = "error"
@@ -32,17 +31,6 @@ type Webhook struct {
 func New(provider provider.Provider) *Webhook {
 	p := Webhook{provider: provider}
 	return &p
-}
-
-// Health handles the health request
-func Health(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == healthPath {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (p *Webhook) contentTypeHeaderCheck(w http.ResponseWriter, r *http.Request) error {

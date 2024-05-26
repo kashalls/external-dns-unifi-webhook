@@ -13,9 +13,22 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
 	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	log "github.com/sirupsen/logrus"
 )
+
+// HealthCheckHandler returns the status of the service
+func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Healthy"))
+}
+
+// ReadinessHandler returns whether the service is ready to accept requests
+func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Ready"))
+}
 
 // Init server initialization function
 // The server will respond to the following endpoints:
@@ -24,22 +37,35 @@ import (
 // - /records (POST): applies the changes
 // - /adjustendpoints (POST): executes the AdjustEndpoints method
 func Init(config configuration.Config, p *webhook.Webhook) *http.Server {
-	r := chi.NewRouter()
+	mainRouter := chi.NewRouter()
 
-	r.Use(webhook.Health)
-	r.Get("/", p.Negotiate)
-	r.Get("/records", p.Records)
-	r.Post("/records", p.ApplyChanges)
-	r.Post("/adjustendpoints", p.AdjustEndpoints)
+	mainRouter.Get("/", p.Negotiate)
+	mainRouter.Get("/records", p.Records)
+	mainRouter.Post("/records", p.ApplyChanges)
+	mainRouter.Post("/adjustendpoints", p.AdjustEndpoints)
 
-	srv := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), r, config.ServerReadTimeout, config.ServerWriteTimeout)
+	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		log.Infof("starting server on addr: '%s' ", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("can't serve on addr: '%s', error: %v", srv.Addr, err)
+		log.Infof("starting server on addr: '%s' ", mainServer.Addr)
+		if err := mainServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Errorf("can't serve on addr: '%s', error: %v", mainServer.Addr, err)
 		}
 	}()
-	return srv
+
+	metricsRouter := chi.NewRouter()
+	metricsRouter.Get("/metrics", promhttp.Handler().ServeHTTP)
+	metricsRouter.Get("/healthz", HealthCheckHandler)
+	metricsRouter.Get("/readyz", ReadinessHandler)
+
+	metricsServer := createHTTPServer("0.0.0.0:8080", metricsRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	go func() {
+		log.Infof("starting metrics server on addr: '%s' ", metricsServer.Addr)
+		if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Errorf("can't serve metrics on addr: '%s', error: %v", metricsServer.Addr, err)
+		}
+	}()
+
+	return mainServer
 }
 
 func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout time.Duration) *http.Server {

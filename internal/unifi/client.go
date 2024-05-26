@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/publicsuffix"
@@ -16,9 +17,9 @@ import (
 
 // httpClient is the DNS provider client.
 type httpClient struct {
-	config *Config
-	hc     *http.Client
-	csrf   string
+	*Config
+	*http.Client
+	csrf string
 }
 
 const (
@@ -29,7 +30,6 @@ const (
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
 func newUnifiClient(config *Config) (*httpClient, error) {
-	// Create a cookie jar to store the CSRF token
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -37,14 +37,13 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 	// Create the HTTP client
 	client := &httpClient{
-		config: config,
-		hc: &http.Client{
+		Config: config,
+		Client: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipTLSVerify},
 			},
 			Jar: jar,
 		},
-		csrf: "",
 	}
 
 	if err := client.login(); err != nil {
@@ -57,19 +56,17 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
 	// Prepare the login request body
-	body, err := json.Marshal(map[string]string{
-		"username": c.config.User,
-		"password": c.config.Password,
+	body, _ := json.Marshal(map[string]string{
+		"username": c.Config.User,
+		"password": c.Config.Password,
 	})
+
+	// Perform the login request
+	resp, err := c.doRequest(http.MethodPost, fmt.Sprintf(unifiLoginPath, c.Config.Host), bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
 
-	// Perform the login request
-	resp, err := c.hc.Post(fmt.Sprintf(unifiLoginPath, c.config.Host), "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return err
-	}
 	defer resp.Body.Close()
 
 	// Check if the login was successful
@@ -80,9 +77,8 @@ func (c *httpClient) login() error {
 	}
 
 	// Retrieve CSRF token from the response headers
-	c.csrf = resp.Header.Get("X-CSRF-Token")
-	if c.csrf == "" {
-		return fmt.Errorf("login failed: CSRF token not found")
+	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
+		c.csrf = resp.Header.Get("x-csrf-token")
 	}
 
 	return nil
@@ -90,18 +86,16 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debugf("making %s request to /%s", method, path)
+	log.Debugf("making %s request to %s", method, path)
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("X-CSRF-Token", c.csrf)
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	c.setHeaders(req)
 
-	resp, err := c.hc.Do(req)
+	resp, err := c.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -119,17 +113,16 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	return resp, nil
 }
 
-// GetEndpoints retrieves the list of DNS records.
+// GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
-	resp, err := c.doRequest(http.MethodGet, fmt.Sprintf(unifiRecordsPath, c.config.Host), nil)
+	resp, err := c.doRequest(http.MethodGet, fmt.Sprintf(unifiRecordsPath, c.Config.Host), nil)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var records []DNSRecord
-	err = json.NewDecoder(resp.Body).Decode(&records)
-	if err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
 		return nil, err
 	}
 	log.Debugf("retrieved records: %+v", records)
@@ -137,7 +130,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	return records, nil
 }
 
-// CreateEndpoint creates a new DNS record.
+// CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 	jsonBody, err := json.Marshal(DNSRecord{
 		Enabled:    true,
@@ -149,17 +142,14 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal DNS record: %w", err)
 	}
-
-	bodyReader := bytes.NewReader(jsonBody)
-	resp, err := c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordsPath, c.config.Host), bodyReader)
+	resp, err := c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordsPath, c.Config.Host), bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var record DNSRecord
-	err = json.NewDecoder(resp.Body).Decode(&record)
-	if err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&record); err != nil {
 		return nil, err
 	}
 	log.Debugf("created record: %+v", record)
@@ -167,26 +157,21 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	return &record, nil
 }
 
-// DeleteEndpoint deletes a DNS record.
+// DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 	lookup, err := c.LookupIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.doRequest(
-		http.MethodPost,
-		fmt.Sprintf(unifiRecordPath, c.config.Host, lookup.ID),
-		nil,
-	)
-	if err != nil {
+	if _, err = c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordPath, c.Config.Host, lookup.ID), nil); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// LookupIdentifier finds the ID of a DNS record.
+// LookupIdentifier finds the ID of a DNS record in the UniFi controller.
 func (c *httpClient) LookupIdentifier(key, recordType string) (*DNSRecord, error) {
 	records, err := c.GetEndpoints()
 	if err != nil {
@@ -200,4 +185,20 @@ func (c *httpClient) LookupIdentifier(key, recordType string) (*DNSRecord, error
 	}
 
 	return nil, fmt.Errorf("record not found")
+}
+
+// setHeaders sets the headers for the HTTP request.
+func (c *httpClient) setHeaders(req *http.Request) {
+	// Add the saved CSRF header.
+	req.Header.Set("X-CSRF-Token", c.csrf)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+
+	// Log the request URL and cookies
+	if c.Client.Jar != nil {
+		parsedURL, _ := url.Parse(req.URL.String())
+		log.Debugf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL)))
+	} else {
+		log.Debugf("Requesting %s", req.URL)
+	}
 }

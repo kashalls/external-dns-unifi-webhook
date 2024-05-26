@@ -46,20 +46,20 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 		}
 	}()
 
-	metricsRouter := chi.NewRouter()
-	metricsRouter.Get("/metrics", promhttp.Handler().ServeHTTP)
-	metricsRouter.Get("/healthz", HealthCheckHandler)
-	metricsRouter.Get("/readyz", ReadinessHandler)
+	healthRouter := chi.NewRouter()
+	healthRouter.Get("/metrics", promhttp.Handler().ServeHTTP)
+	healthRouter.Get("/healthz", HealthCheckHandler)
+	healthRouter.Get("/readyz", ReadinessHandler)
 
-	metricsServer := createHTTPServer("0.0.0.0:8080", metricsRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		log.Infof("starting metrics server on addr: '%s' ", metricsServer.Addr)
-		if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("can't serve metrics on addr: '%s', error: %v", metricsServer.Addr, err)
+		log.Infof("starting health server on addr: '%s' ", healthServer.Addr)
+		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Errorf("can't serve health on addr: '%s', error: %v", healthServer.Addr, err)
 		}
 	}()
 
-	return mainServer, metricsServer
+	return mainServer, healthServer
 }
 
 func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout time.Duration) *http.Server {
@@ -72,7 +72,7 @@ func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout 
 }
 
 // ShutdownGracefully gracefully shutdown the http server
-func ShutdownGracefully(mainServer *http.Server, metricsServer *http.Server) {
+func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
@@ -85,7 +85,7 @@ func ShutdownGracefully(mainServer *http.Server, metricsServer *http.Server) {
 		log.Errorf("error shutting down main server: %v", err)
 	}
 
-	if err := metricsServer.Shutdown(ctx); err != nil {
-		log.Errorf("error shutting down metrics server: %v", err)
+	if err := healthServer.Shutdown(ctx); err != nil {
+		log.Errorf("error shutting down health server: %v", err)
 	}
 }

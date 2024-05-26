@@ -20,7 +20,7 @@
     helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
     ```
 
-3. Create a secret that holds `UNIFI_USE`R` and `UNIFI_PASS`
+3. Create a secret that holds `UNIFI_USER` and `UNIFI_PASS`
 
 4. Create the helm values file, for example `external-dns-unifi-values.yaml`:
 

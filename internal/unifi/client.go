@@ -23,9 +23,8 @@ type httpClient struct {
 }
 
 const (
-	unifiLoginPath   = "%s/api/auth/login"
-	unifiRecordsPath = "%s/proxy/network/v2/api/site/%s/static-dns"
-	unifiRecordPath  = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
+	unifiLoginPath  = "%s/api/auth/login"
+	unifiRecordPath = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
@@ -55,14 +54,21 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
-	// Prepare the login request body
-	body, _ := json.Marshal(map[string]string{
-		"username": c.Config.User,
-		"password": c.Config.Password,
+	jsonBody, err := json.Marshal(Login{
+		Username: c.Config.User,
+		Password: c.Config.Password,
+		Remember: true,
 	})
+	if err != nil {
+		return err
+	}
 
 	// Perform the login request
-	resp, err := c.doRequest(http.MethodPost, fmt.Sprintf(unifiLoginPath, c.Config.Host), bytes.NewBuffer(body))
+	resp, err := c.doRequest(
+		http.MethodPost,
+		FormatUrl(unifiLoginPath, c.Config.Host),
+		bytes.NewBuffer(jsonBody),
+	)
 	if err != nil {
 		return err
 	}
@@ -130,7 +136,11 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
-	resp, err := c.doRequest(http.MethodGet, fmt.Sprintf(unifiRecordsPath, c.Config.Host, c.Config.Site), nil)
+	resp, err := c.doRequest(
+		http.MethodGet,
+		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -155,9 +165,13 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		Value:      endpoint.Targets[0],
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal DNS record: %w", err)
+		return nil, err
 	}
-	resp, err := c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordsPath, c.Config.Host, c.Config.Site), bytes.NewReader(jsonBody))
+	resp, err := c.doRequest(
+		http.MethodPost,
+		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
+		bytes.NewReader(jsonBody),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -174,20 +188,24 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
-	lookup, err := c.LookupIdentifier(endpoint.DNSName, endpoint.RecordType)
+	lookup, err := c.lookupIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
 		return err
 	}
 
-	if _, err = c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordPath, c.Config.Host, c.Config.Site, lookup.ID), nil); err != nil {
+	if _, err = c.doRequest(
+		http.MethodPost,
+		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site, lookup.ID),
+		nil,
+	); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// LookupIdentifier finds the ID of a DNS record in the UniFi controller.
-func (c *httpClient) LookupIdentifier(key, recordType string) (*DNSRecord, error) {
+// lookupIdentifier finds the ID of a DNS record in the UniFi controller.
+func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error) {
 	records, err := c.GetEndpoints()
 	if err != nil {
 		return nil, err
@@ -199,7 +217,7 @@ func (c *httpClient) LookupIdentifier(key, recordType string) (*DNSRecord, error
 		}
 	}
 
-	return nil, fmt.Errorf("record not found")
+	return nil, err
 }
 
 // setHeaders sets the headers for the HTTP request.

@@ -48,6 +48,18 @@
                 key: password
           - name: LOG_LEVEL
             value: debug
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http-wh-metrics
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http-wh-metrics
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
     policy: sync
     sources: ["ingress", "service"]
     txtOwnerId: default

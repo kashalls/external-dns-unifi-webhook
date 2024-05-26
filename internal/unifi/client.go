@@ -24,8 +24,8 @@ type httpClient struct {
 
 const (
 	unifiLoginPath   = "%s/api/auth/login"
-	unifiRecordsPath = "%s/proxy/network/v2/api/site/default/static-dns"
-	unifiRecordPath  = "%s/proxy/network/v2/api/site/default/static-dns/%s"
+	unifiRecordsPath = "%s/proxy/network/v2/api/site/%s/static-dns"
+	unifiRecordPath  = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
@@ -106,6 +106,21 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	log.Debugf("response code from %s request to %s: %d", method, path, resp.StatusCode)
 
+	// If the status code is 401, re-login and retry the request
+	if resp.StatusCode == http.StatusUnauthorized {
+		log.Debugf("Received 401 Unauthorized, re-login required")
+		if err := c.login(); err != nil {
+			return nil, err
+		}
+		// Update the headers with new CSRF token
+		c.setHeaders(req)
+		// Retry the request
+		resp, err = c.Client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
 	}
@@ -115,7 +130,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
-	resp, err := c.doRequest(http.MethodGet, fmt.Sprintf(unifiRecordsPath, c.Config.Host), nil)
+	resp, err := c.doRequest(http.MethodGet, fmt.Sprintf(unifiRecordsPath, c.Config.Host, c.Config.Site), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +157,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal DNS record: %w", err)
 	}
-	resp, err := c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordsPath, c.Config.Host), bytes.NewReader(jsonBody))
+	resp, err := c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordsPath, c.Config.Host, c.Config.Site), bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +179,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
-	if _, err = c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordPath, c.Config.Host, lookup.ID), nil); err != nil {
+	if _, err = c.doRequest(http.MethodPost, fmt.Sprintf(unifiRecordPath, c.Config.Host, c.Config.Site, lookup.ID), nil); err != nil {
 		return err
 	}
 

@@ -16,11 +16,13 @@
 
 2. Add the ExternalDNS Helm repository to your cluster.
 
-    ```shell
+    ```sh
     helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
     ```
 
-3. Create the helm values file, for example `external-dns-unifi-values.yaml`:
+3. Create a secret that holds `UNIFI_USER` and `UNIFI_PASS`
+
+4. Create the helm values file, for example `external-dns-unifi-values.yaml`:
 
     ```yaml
     fullnameOverride: external-dns-unifi
@@ -34,8 +36,6 @@
         env:
           - name: UNIFI_HOST
             value: https://192.168.1.1 # replace with the address to your UniFi router
-          - name: SERVER_HOST
-            value: 0.0.0.0
           - name: UNIFI_USER
             valueFrom:
               secretKeyRef:
@@ -48,8 +48,6 @@
                 key: password
           - name: LOG_LEVEL
             value: debug
-          - name: UNIFI_SKIP_TLS_VERIFY
-            value: "true"
     policy: sync
     sources: ["ingress", "service"]
     txtOwnerId: default
@@ -57,8 +55,8 @@
     domainFilters: ["example.com"] # replace with your domain
     ```
 
-4. Install the Helm chart
+5. Install the Helm chart
 
-    ```shell
+    ```sh
     helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values yaml --version 1.14.3 -n external-dns
     ```

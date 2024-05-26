@@ -7,6 +7,7 @@ type Config struct {
 	Host          string `env:"UNIFI_HOST,notEmpty"`
 	User          string `env:"UNIFI_USER,notEmpty"`
 	Password      string `env:"UNIFI_PASS,notEmpty"`
+	Site          string `env:"UNIFI_SITE" envDefault:"default"`
 	SkipTLSVerify bool   `env:"UNIFI_SKIP_TLS_VERIFY" envDefault:"true"`
 }
 

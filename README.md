@@ -1,4 +1,4 @@
-# ExternalDNS webhook provider for UniFi
+# ExternalDNS Webhook Provider for UniFi
 
 ⚠️ This software is experimental and **NOT FIT FOR PRODUCTION USE!** until Unifi releases static dns from Early Access.
 

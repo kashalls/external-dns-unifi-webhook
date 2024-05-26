@@ -30,15 +30,9 @@ func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-// Init server initialization function
-// The server will respond to the following endpoints:
-// - / (GET): initialization, negotiates headers and returns the domain filter
-// - /records (GET): returns the current records
-// - /records (POST): applies the changes
-// - /adjustendpoints (POST): executes the AdjustEndpoints method
-func Init(config configuration.Config, p *webhook.Webhook) *http.Server {
+// Init initializes the http server
+func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
 	mainRouter := chi.NewRouter()
-
 	mainRouter.Get("/", p.Negotiate)
 	mainRouter.Get("/records", p.Records)
 	mainRouter.Post("/records", p.ApplyChanges)
@@ -65,7 +59,7 @@ func Init(config configuration.Config, p *webhook.Webhook) *http.Server {
 		}
 	}()
 
-	return mainServer
+	return mainServer, metricsServer
 }
 
 func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout time.Duration) *http.Server {
@@ -78,15 +72,20 @@ func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout 
 }
 
 // ShutdownGracefully gracefully shutdown the http server
-func ShutdownGracefully(srv *http.Server) {
+func ShutdownGracefully(mainServer *http.Server, metricsServer *http.Server) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
 
-	log.Infof("shutting down server due to received signal: %v", sig)
+	log.Infof("shutting down servers due to received signal: %v", sig)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Errorf("error shutting down server: %v", err)
+	defer cancel()
+
+	if err := mainServer.Shutdown(ctx); err != nil {
+		log.Errorf("error shutting down main server: %v", err)
 	}
-	cancel()
+
+	if err := metricsServer.Shutdown(ctx); err != nil {
+		log.Errorf("error shutting down metrics server: %v", err)
+	}
 }

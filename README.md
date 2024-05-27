@@ -1,6 +1,8 @@
 # ExternalDNS Webhook Provider for UniFi
 
-> ⚠️ This software is experimental and **NOT FIT FOR PRODUCTION USE!**
+> [!CAUTION]
+>
+> This software is experimental and **NOT FIT FOR PRODUCTION USE!**
 >
 > This webhook relies on Early Access features from Unifi, and may stop working at any time.
 

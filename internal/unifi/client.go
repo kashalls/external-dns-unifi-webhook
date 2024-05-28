@@ -194,7 +194,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 	}
 
 	if _, err = c.doRequest(
-		http.MethodPost,
+		http.MethodDelete,
 		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site, lookup.ID),
 		nil,
 	); err != nil {

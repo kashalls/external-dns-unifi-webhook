@@ -46,13 +46,13 @@
           - name: UNIFI_USER
             valueFrom:
               secretKeyRef:
-                name: external-dns-unifi-secret
-                key: username
+                name: external-dns-unifi-secret # replace with secret name
+                key: username # replace with secret key for UNIFI_USER
           - name: UNIFI_PASS
             valueFrom:
               secretKeyRef:
-                name: external-dns-unifi-secret
-                key: password
+                name: external-dns-unifi-secret # replace with secret name
+                key: password # replace with secret key for UNIFI_PASS
           - name: LOG_LEVEL
             value: debug
         livenessProbe:

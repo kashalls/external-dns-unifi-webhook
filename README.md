@@ -15,6 +15,7 @@
 ## 🎯 Requirements
 
 - ExternalDNS >= v0.14.0
+- UniFi OS >= 3.x
 - UniFi Network >= 8.2.93
 
 ## ⛵ Deployment

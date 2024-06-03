@@ -68,6 +68,8 @@
             port: http-wh-metrics
           initialDelaySeconds: 10
           timeoutSeconds: 5
+    extraArgs:
+      - --ignore-ingress-tls-spec
     policy: sync
     sources: ["ingress", "service"]
     txtOwnerId: default

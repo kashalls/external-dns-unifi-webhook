@@ -27,7 +27,7 @@
     helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
     ```
 
-3. Create a Kubernetes secret that holds `UNIFI_USER` and `UNIFI_PASS` with their respected values.
+3. Create a Kubernetes secret called `external-dns-unifi-secret` that holds `username` and `password` with their respected values from step 1.
 
 4. Create the helm values file, for example `external-dns-unifi-values.yaml`:
 
@@ -46,13 +46,13 @@
           - name: UNIFI_USER
             valueFrom:
               secretKeyRef:
-                name: external-dns-unifi-secret # replace with secret name
-                key: UNIFI_USER
+                name: external-dns-unifi-secret
+                key: username
           - name: UNIFI_PASS
             valueFrom:
               secretKeyRef:
-                name: external-dns-unifi-secret # replace with secret name
-                key: UNIFI_PASS
+                name: external-dns-unifi-secret
+                key: password
           - name: LOG_LEVEL
             value: debug
         livenessProbe:

@@ -2,7 +2,7 @@ module github.com/kashalls/external-dns-provider-unifi
 
 go 1.22.2
 
-toolchain go1.22.3
+toolchain go1.22.4
 
 require (
 	github.com/caarlos0/env/v11 v11.0.1

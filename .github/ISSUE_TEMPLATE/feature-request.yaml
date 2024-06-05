@@ -1,0 +1,28 @@
+---
+name: Feature Request
+description: Request a new feature in the project
+labels: ["feature-request"]
+
+body:
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature Description
+      description: Describe the feature that you are requesting
+
+  - type: checkboxes
+    id: search
+    attributes:
+      label: Search
+      options:
+        - label: I have searched the open and closed issues for duplicates
+          required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/kashalls/external-dns-unifi-webhook/blob/main/.github/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

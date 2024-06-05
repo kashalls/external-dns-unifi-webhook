@@ -9,7 +9,9 @@ body:
     attributes:
       label: Bug Description
       description: |
-        Describe the bug that you are experiencing, include as much detail as possible
+        Describe the bug that you are experiencing
+    validations:
+      required: true
 
   - type: textarea
     id: externaldns-configuration
@@ -17,6 +19,16 @@ body:
       label: ExternalDNS Configuration
       description: |
         Configuration of ExternalDNS that you are using, e.g. Helm Values, Kubernetes manifests, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: externaldns-logs
+    attributes:
+      label: ExternalDNS and Webhook Logs
+      description: Logs (be sure to enable debug logging on ExternalDNS and this Webhook)
+    validations:
+      required: true
 
   - type: input
     id: unifios-version

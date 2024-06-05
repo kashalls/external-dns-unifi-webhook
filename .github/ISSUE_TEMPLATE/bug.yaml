@@ -8,7 +8,8 @@ body:
     id: bug-description
     attributes:
       label: Bug Description
-      description: Describe the bug that you are experiencing
+      description: |
+        Describe the bug that you are experiencing, including what you expected to happen
     validations:
       required: true
 
@@ -29,7 +30,8 @@ body:
     id: externaldns-logs
     attributes:
       label: ExternalDNS and Webhook Logs
-      description: Logs (be sure to enable debug logging on ExternalDNS and this Webhook)
+      description: |
+        Logs (be sure to enable debug logging on ExternalDNS and this Webhook)
       placeholder: |
         ```text
         Paste your ExternalDNS and Webhook logs here

@@ -8,8 +8,7 @@ body:
     id: bug-description
     attributes:
       label: Bug Description
-      description: |
-        Describe the bug that you are experiencing
+      description: Describe the bug that you are experiencing
     validations:
       required: true
 
@@ -18,12 +17,11 @@ body:
     attributes:
       label: ExternalDNS Configuration
       description: |
-        Configuration of ExternalDNS that you are using, e.g. Helm Values, Kubernetes manifests, etc.
+        Configuration of ExternalDNS that you are using (e.g. Helm Values, Kubernetes manifests, etc)
       placeholder: |
         ```yaml
         Paste your configuation here
         ```
-
     validations:
       required: true
 
@@ -34,7 +32,7 @@ body:
       description: Logs (be sure to enable debug logging on ExternalDNS and this Webhook)
       placeholder: |
         ```text
-        Paste your logs here
+        Paste your ExternalDNS and Webhook logs here
         ```
     validations:
       required: true

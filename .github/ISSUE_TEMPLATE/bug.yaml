@@ -19,6 +19,11 @@ body:
       label: ExternalDNS Configuration
       description: |
         Configuration of ExternalDNS that you are using, e.g. Helm Values, Kubernetes manifests, etc.
+      placeholder: |
+        ```yaml
+        Paste your configuation here
+        ```
+
     validations:
       required: true
 
@@ -27,6 +32,10 @@ body:
     attributes:
       label: ExternalDNS and Webhook Logs
       description: Logs (be sure to enable debug logging on ExternalDNS and this Webhook)
+      placeholder: |
+        ```text
+        Paste your logs here
+        ```
     validations:
       required: true
 

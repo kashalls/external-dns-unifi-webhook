@@ -8,7 +8,8 @@ body:
     id: bug-description
     attributes:
       label: Bug Description
-      description: Describe the bug that you are experiencing
+      description: |
+        Describe the bug that you are experiencing, include as much detail as possible
 
   - type: textarea
     id: externaldns-configuration

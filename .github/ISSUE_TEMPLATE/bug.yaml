@@ -1,0 +1,62 @@
+---
+name: Bug Report
+description: Report a bug in the project
+labels: ["bug"]
+
+body:
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: Describe the bug that you are experiencing
+
+  - type: textarea
+    id: externaldns-configuration
+    attributes:
+      label: ExternalDNS Configuration
+      description: |
+        Configuration of ExternalDNS that you are using, e.g. Helm Values, Kubernetes manifests, etc.
+
+  - type: input
+    id: unifios-version
+    attributes:
+      label: UniFiOS Version
+      description: Version of UniFiOS that you are using
+      placeholder: e.g. 3.2.9
+    validations:
+      required: true
+
+  - type: input
+    id: unifinetwork-version
+    attributes:
+      label: UniFi Network Version
+      description: Version of UniFi Network that you are using
+      placeholder: e.g. 8.2.93
+    validations:
+      required: true
+
+  - type: input
+    id: externaldns-version
+    attributes:
+      label: ExternalDNS Version
+      description: Version of ExternalDNS that you are using
+      placeholder: e.g. 0.14.2
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: search
+    attributes:
+      label: Search
+      options:
+        - label: I have searched the open and closed issues for duplicates
+          required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/kashalls/external-dns-unifi-webhook/blob/main/.github/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

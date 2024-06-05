@@ -29,12 +29,25 @@ body:
   - type: textarea
     id: externaldns-logs
     attributes:
-      label: ExternalDNS and Webhook Logs
+      label: ExternalDNS Logs
       description: |
-        Logs (be sure to enable debug logging on ExternalDNS and this Webhook)
+        Logs (be sure to enable debug logging on ExternalDNS)
       placeholder: |
         ```text
-        Paste your ExternalDNS and Webhook logs here
+        Paste your ExternalDNS logs here
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: webhook-logs
+    attributes:
+      label: Webhook Logs
+      description: |
+        Logs (be sure to enable debug logging on this Webhook)
+      placeholder: |
+        ```text
+        Paste your Webhook logs here
         ```
     validations:
       required: true

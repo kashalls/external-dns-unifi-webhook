@@ -8,7 +8,8 @@ import (
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/server"
 	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
-	log "github.com/sirupsen/logrus"
+
+	"go.uber.org/zap"
 )
 
 const banner = `
@@ -26,11 +27,12 @@ func main() {
 	fmt.Printf(banner, Version, Gitsha)
 
 	logging.Init()
+	logger := logging.GetLogger()
 
 	config := configuration.Init()
 	provider, err := dnsprovider.Init(config)
 	if err != nil {
-		log.Fatalf("failed to initialize provider: %v", err)
+		logger.Error("failed to initialize provider", zap.Error(err))
 	}
 
 	main, health := server.Init(config, webhook.New(provider))

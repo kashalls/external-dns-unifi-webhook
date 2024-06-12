@@ -10,9 +10,11 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/publicsuffix"
 	"sigs.k8s.io/external-dns/endpoint"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
+
+	"go.uber.org/zap"
 )
 
 // httpClient is the DNS provider client.
@@ -54,6 +56,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
+	logger := logging.GetLogger()
 	jsonBody, err := json.Marshal(Login{
 		Username: c.Config.User,
 		Password: c.Config.Password,
@@ -78,7 +81,7 @@ func (c *httpClient) login() error {
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		log.Errorf("login failed: %s, response: %s", resp.Status, string(respBody))
+		logger.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
 		return fmt.Errorf("login failed: %s", resp.Status)
 	}
 
@@ -92,7 +95,8 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debugf("making %s request to %s", method, path)
+	logger := logging.GetLogger()
+	logger.Debug(fmt.Sprintf("making %s request to %s", method, path))
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
@@ -110,11 +114,11 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	log.Debugf("response code from %s request to %s: %d", method, path, resp.StatusCode)
+	logger.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
-		log.Debugf("Received 401 Unauthorized, re-login required")
+		logger.Debug("Received 401 Unauthorized, re-login required")
 		if err := c.login(); err != nil {
 			return nil, err
 		}
@@ -136,6 +140,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
+	logger := logging.GetLogger()
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
@@ -150,13 +155,15 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
 		return nil, err
 	}
-	log.Debugf("retrieved records: %+v", records)
+
+	logger.Debug(fmt.Sprintf("retrieved records: %+v", records))
 
 	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
+	logger := logging.GetLogger()
 	jsonBody, err := json.Marshal(DNSRecord{
 		Enabled:    true,
 		Key:        endpoint.DNSName,
@@ -181,7 +188,8 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	if err = json.NewDecoder(resp.Body).Decode(&record); err != nil {
 		return nil, err
 	}
-	log.Debugf("created record: %+v", record)
+
+	logger.Debug(fmt.Sprintf("created record: %+v", record))
 
 	return &record, nil
 }
@@ -222,6 +230,7 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
+	logger := logging.GetLogger()
 	// Add the saved CSRF header.
 	req.Header.Set("X-CSRF-Token", c.csrf)
 	req.Header.Add("Accept", "application/json")
@@ -230,8 +239,8 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	// Log the request URL and cookies
 	if c.Client.Jar != nil {
 		parsedURL, _ := url.Parse(req.URL.String())
-		log.Debugf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL)))
+		logger.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
 	} else {
-		log.Debugf("Requesting %s", req.URL)
+		logger.Debug(fmt.Sprintf("Requesting %s", req.URL))
 	}
 }

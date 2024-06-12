@@ -3,35 +3,52 @@ package logging
 import (
 	"os"
 
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
-func Init() {
-	setLogLevel()
-	setLogFormat()
-}
+var logger *zap.Logger
 
-func setLogFormat() {
+func Init() {
+	config := zap.NewProductionConfig()
+
+	// Set the log format
 	format := os.Getenv("LOG_FORMAT")
 	if format == "test" {
-		log.SetFormatter(&log.TextFormatter{})
+		config.Encoding = "console"
 	} else {
-		log.SetFormatter(&log.JSONFormatter{})
+		config.Encoding = "json"
 	}
-}
 
-func setLogLevel() {
+	// Set the log level
 	level := os.Getenv("LOG_LEVEL")
 	switch level {
 	case "debug":
-		log.SetLevel(log.DebugLevel)
+		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 	case "info":
-		log.SetLevel(log.InfoLevel)
+		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 	case "warn":
-		log.SetLevel(log.WarnLevel)
+		config.Level = zap.NewAtomicLevelAt(zap.WarnLevel)
 	case "error":
-		log.SetLevel(log.ErrorLevel)
+		config.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
 	default:
-		log.SetLevel(log.InfoLevel)
+		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 	}
+
+	// Build the logger
+	var err error
+	logger, err = config.Build()
+	if err != nil {
+		panic(err)
+	}
+
+	// Ensure we flush any buffered log entries
+	defer logger.Sync()
+}
+
+// GetLogger returns the initialized logger instance
+func GetLogger() *zap.Logger {
+	if logger == nil {
+		Init() // Initialize if not already done
+	}
+	return logger
 }

@@ -12,10 +12,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
 	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // HealthCheckHandler returns the status of the service
@@ -32,6 +33,8 @@ func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 
 // Init initializes the http server
 func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
+	logger := logging.GetLogger()
+
 	mainRouter := chi.NewRouter()
 	mainRouter.Get("/", p.Negotiate)
 	mainRouter.Get("/records", p.Records)
@@ -40,9 +43,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		log.Infof("starting server on addr: '%s' ", mainServer.Addr)
+		logger.Info("starting webhook server", zap.String("address", mainServer.Addr))
 		if err := mainServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("can't serve on addr: '%s', error: %v", mainServer.Addr, err)
+			logger.Error("unable to start webhook server", zap.String("address", mainServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -53,9 +56,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		log.Infof("starting health server on addr: '%s' ", healthServer.Addr)
+		logger.Info("starting health server", zap.String("address", healthServer.Addr))
 		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("can't serve health on addr: '%s', error: %v", healthServer.Addr, err)
+			logger.Error("unable to start health server", zap.String("address", healthServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -73,19 +76,21 @@ func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout 
 
 // ShutdownGracefully gracefully shutdown the http server
 func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
+	logger := logging.GetLogger()
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
 
-	log.Infof("shutting down servers due to received signal: %v", sig)
+	logger.Info("shutting down servers due to received signal", zap.Any("signal", sig))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := mainServer.Shutdown(ctx); err != nil {
-		log.Errorf("error shutting down main server: %v", err)
+		logger.Error("error shutting down main server", zap.Error(err))
 	}
 
 	if err := healthServer.Shutdown(ctx); err != nil {
-		log.Errorf("error shutting down health server: %v", err)
+		logger.Error("error shutting down health server", zap.Error(err))
 	}
 }

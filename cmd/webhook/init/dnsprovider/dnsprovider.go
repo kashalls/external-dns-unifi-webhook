@@ -7,11 +7,10 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
 	"github.com/kashalls/external-dns-provider-unifi/internal/unifi"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/provider"
-
-	log "github.com/sirupsen/logrus"
 )
 
 type UnifiProviderFactory func(baseProvider *provider.BaseProvider, unifiConfig *unifi.Config) provider.Provider
@@ -43,7 +42,8 @@ func Init(config configuration.Config) (provider.Provider, error) {
 	if strings.HasSuffix(createMsg, "with ") {
 		createMsg += "no kind of domain filters"
 	}
-	log.Info(createMsg)
+	logger := logging.GetLogger()
+	logger.Info(createMsg)
 
 	unifiConfig := unifi.Config{}
 	if err := env.Parse(&unifiConfig); err != nil {

@@ -4,7 +4,9 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
-	log "github.com/sirupsen/logrus"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
+
+	"go.uber.org/zap"
 )
 
 // Config struct for configuration environmental variables
@@ -22,8 +24,9 @@ type Config struct {
 // Init sets up configuration by reading set environmental variables
 func Init() Config {
 	cfg := Config{}
+	logger := logging.GetLogger()
 	if err := env.Parse(&cfg); err != nil {
-		log.Fatalf("error reading configuration from environment: %v", err)
+		logger.Error("error reading configuration from environment", zap.Error(err))
 	}
 	return cfg
 }

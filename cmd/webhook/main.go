@@ -5,7 +5,7 @@ import (
 
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/dnsprovider"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/server"
 	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
 

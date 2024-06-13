@@ -10,7 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"golang.org/x/net/publicsuffix"
 	"sigs.k8s.io/external-dns/endpoint"
 

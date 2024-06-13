@@ -41,9 +41,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		logging.Info("starting webhook server", zap.String("address", mainServer.Addr))
+		log.Info("starting webhook server", zap.String("address", mainServer.Addr))
 		if err := mainServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logging.Error("unable to start webhook server", zap.String("address", mainServer.Addr), zap.Error(err))
+			log.Error("unable to start webhook server", zap.String("address", mainServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -54,9 +54,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		logging.Info("starting health server", zap.String("address", healthServer.Addr))
+		log.Info("starting health server", zap.String("address", healthServer.Addr))
 		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logging.Error("unable to start health server", zap.String("address", healthServer.Addr), zap.Error(err))
+			log.Error("unable to start health server", zap.String("address", healthServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -78,15 +78,15 @@ func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
 
-	logging.Info("shutting down servers due to received signal", zap.Any("signal", sig))
+	log.Info("shutting down servers due to received signal", zap.Any("signal", sig))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := mainServer.Shutdown(ctx); err != nil {
-		logging.Error("error shutting down main server", zap.Error(err))
+		log.Error("error shutting down main server", zap.Error(err))
 	}
 
 	if err := healthServer.Shutdown(ctx); err != nil {
-		logging.Error("error shutting down health server", zap.Error(err))
+		log.Error("error shutting down health server", zap.Error(err))
 	}
 }

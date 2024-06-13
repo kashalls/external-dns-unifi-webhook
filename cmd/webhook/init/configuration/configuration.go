@@ -25,7 +25,7 @@ type Config struct {
 func Init() Config {
 	cfg := Config{}
 	if err := env.Parse(&cfg); err != nil {
-		logging.Error("error reading configuration from environment", zap.Error(err))
+		log.Error("error reading configuration from environment", zap.Error(err))
 	}
 	return cfg
 }

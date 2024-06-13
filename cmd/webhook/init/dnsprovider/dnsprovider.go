@@ -42,7 +42,7 @@ func Init(config configuration.Config) (provider.Provider, error) {
 	if strings.HasSuffix(createMsg, "with ") {
 		createMsg += "no kind of domain filters"
 	}
-	logging.Info(createMsg)
+	log.Info(createMsg)
 
 	unifiConfig := unifi.Config{}
 	if err := env.Parse(&unifiConfig); err != nil {

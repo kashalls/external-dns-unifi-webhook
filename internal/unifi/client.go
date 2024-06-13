@@ -10,9 +10,9 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
 	"golang.org/x/net/publicsuffix"
 	"sigs.k8s.io/external-dns/endpoint"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/logging"
 
 	"go.uber.org/zap"
 )
@@ -80,7 +80,7 @@ func (c *httpClient) login() error {
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		logging.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
+		log.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
 		return fmt.Errorf("login failed: %s", resp.Status)
 	}
 
@@ -94,7 +94,7 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	logging.Debug(fmt.Sprintf("making %s request to %s", method, path))
+	log.Debug(fmt.Sprintf("making %s request to %s", method, path))
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
@@ -112,11 +112,11 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	logging.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
+	log.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
-		logging.Debug("Received 401 Unauthorized, re-login required")
+		log.Debug("Received 401 Unauthorized, re-login required")
 		if err := c.login(); err != nil {
 			return nil, err
 		}
@@ -153,7 +153,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		return nil, err
 	}
 
-	logging.Debug(fmt.Sprintf("retrieved records: %+v", records))
+	log.Debug(fmt.Sprintf("retrieved records: %+v", records))
 
 	return records, nil
 }
@@ -185,7 +185,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		return nil, err
 	}
 
-	logging.Debug(fmt.Sprintf("created record: %+v", record))
+	log.Debug(fmt.Sprintf("created record: %+v", record))
 
 	return &record, nil
 }
@@ -234,8 +234,8 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	// Log the request URL and cookies
 	if c.Client.Jar != nil {
 		parsedURL, _ := url.Parse(req.URL.String())
-		logging.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
+		log.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
 	} else {
-		logging.Debug(fmt.Sprintf("Requesting %s", req.URL))
+		log.Debug(fmt.Sprintf("Requesting %s", req.URL))
 	}
 }

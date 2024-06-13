@@ -26,12 +26,12 @@ var (
 func main() {
 	fmt.Printf(banner, Version, Gitsha)
 
-	logging.Init()
+	log.Init()
 
 	config := configuration.Init()
 	provider, err := dnsprovider.Init(config)
 	if err != nil {
-		logging.Error("failed to initialize provider", zap.Error(err))
+		log.Error("failed to initialize provider", zap.Error(err))
 	}
 
 	main, health := server.Init(config, webhook.New(provider))

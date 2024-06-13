@@ -12,10 +12,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // HealthCheckHandler returns the status of the service
@@ -40,9 +41,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		log.Infof("starting server on addr: '%s' ", mainServer.Addr)
+		log.Info("starting webhook server", zap.String("address", mainServer.Addr))
 		if err := mainServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("can't serve on addr: '%s', error: %v", mainServer.Addr, err)
+			log.Error("unable to start webhook server", zap.String("address", mainServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -53,9 +54,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		log.Infof("starting health server on addr: '%s' ", healthServer.Addr)
+		log.Info("starting health server", zap.String("address", healthServer.Addr))
 		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("can't serve health on addr: '%s', error: %v", healthServer.Addr, err)
+			log.Error("unable to start health server", zap.String("address", healthServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -77,15 +78,15 @@ func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
 
-	log.Infof("shutting down servers due to received signal: %v", sig)
+	log.Info("shutting down servers due to received signal", zap.Any("signal", sig))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := mainServer.Shutdown(ctx); err != nil {
-		log.Errorf("error shutting down main server: %v", err)
+		log.Error("error shutting down main server", zap.Error(err))
 	}
 
 	if err := healthServer.Shutdown(ctx); err != nil {
-		log.Errorf("error shutting down health server: %v", err)
+		log.Error("error shutting down health server", zap.Error(err))
 	}
 }

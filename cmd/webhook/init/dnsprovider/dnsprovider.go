@@ -7,11 +7,10 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-provider-unifi/internal/unifi"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/provider"
-
-	log "github.com/sirupsen/logrus"
 )
 
 type UnifiProviderFactory func(baseProvider *provider.BaseProvider, unifiConfig *unifi.Config) provider.Provider

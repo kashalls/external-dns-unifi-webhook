@@ -19,9 +19,6 @@ const (
 	contentTypePlaintext  = "text/plain"
 	acceptHeader          = "Accept"
 	varyHeader            = "Vary"
-	logFieldRequestPath   = "requestPath"
-	logFieldRequestMethod = "requestMethod"
-	logFieldError         = "error"
 )
 
 // Webhook for external dns provider
@@ -157,14 +154,12 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 
 // AdjustEndpoints handles the post request for adjusting endpoints
 func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
-	logger := logging.GetLogger()
-
 	if err := p.contentTypeHeaderCheck(w, r); err != nil {
-		logger.Error("content-type header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
+		logging.Error("content-type header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
 		return
 	}
 	if err := p.acceptHeaderCheck(w, r); err != nil {
-		logger.Error("accept header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
+		logging.Error("accept header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
 		return
 	}
 
@@ -181,7 +176,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("requesting adjust endpoints count", zap.Int("endpoints", len(pve)))
+	logging.Debug("requesting adjust endpoints count", zap.Int("endpoints", len(pve)))
 	pve, err := p.provider.AdjustEndpoints(pve)
 	if err != nil {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
@@ -190,7 +185,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 	out, _ := json.Marshal(&pve)
 
-	logger.Debug("return adjust endpoints response", zap.Int("endpoints", len(pve)))
+	logging.Debug("return adjust endpoints response", zap.Int("endpoints", len(pve)))
 
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
 	w.Header().Set(varyHeader, contentTypeHeader)
@@ -221,7 +216,5 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 }
 
 func requestLog(r *http.Request) *zap.Logger {
-	logger := logging.GetLogger()
-
-	return logger.With(zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
+	return logging.With(zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
 }

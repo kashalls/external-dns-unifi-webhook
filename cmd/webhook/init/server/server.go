@@ -33,8 +33,6 @@ func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 
 // Init initializes the http server
 func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
-	logger := logging.GetLogger()
-
 	mainRouter := chi.NewRouter()
 	mainRouter.Get("/", p.Negotiate)
 	mainRouter.Get("/records", p.Records)
@@ -43,9 +41,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		logger.Info("starting webhook server", zap.String("address", mainServer.Addr))
+		logging.Info("starting webhook server", zap.String("address", mainServer.Addr))
 		if err := mainServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("unable to start webhook server", zap.String("address", mainServer.Addr), zap.Error(err))
+			logging.Error("unable to start webhook server", zap.String("address", mainServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -56,9 +54,9 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 
 	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
-		logger.Info("starting health server", zap.String("address", healthServer.Addr))
+		logging.Info("starting health server", zap.String("address", healthServer.Addr))
 		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("unable to start health server", zap.String("address", healthServer.Addr), zap.Error(err))
+			logging.Error("unable to start health server", zap.String("address", healthServer.Addr), zap.Error(err))
 		}
 	}()
 
@@ -76,21 +74,19 @@ func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout 
 
 // ShutdownGracefully gracefully shutdown the http server
 func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
-	logger := logging.GetLogger()
-
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
 
-	logger.Info("shutting down servers due to received signal", zap.Any("signal", sig))
+	logging.Info("shutting down servers due to received signal", zap.Any("signal", sig))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := mainServer.Shutdown(ctx); err != nil {
-		logger.Error("error shutting down main server", zap.Error(err))
+		logging.Error("error shutting down main server", zap.Error(err))
 	}
 
 	if err := healthServer.Shutdown(ctx); err != nil {
-		logger.Error("error shutting down health server", zap.Error(err))
+		logging.Error("error shutting down health server", zap.Error(err))
 	}
 }

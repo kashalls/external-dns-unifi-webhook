@@ -56,7 +56,6 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
-	logger := logging.GetLogger()
 	jsonBody, err := json.Marshal(Login{
 		Username: c.Config.User,
 		Password: c.Config.Password,
@@ -81,7 +80,7 @@ func (c *httpClient) login() error {
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		logger.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
+		logging.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
 		return fmt.Errorf("login failed: %s", resp.Status)
 	}
 
@@ -95,8 +94,7 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	logger := logging.GetLogger()
-	logger.Debug(fmt.Sprintf("making %s request to %s", method, path))
+	logging.Debug(fmt.Sprintf("making %s request to %s", method, path))
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
@@ -114,11 +112,11 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	logger.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
+	logging.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
-		logger.Debug("Received 401 Unauthorized, re-login required")
+		logging.Debug("Received 401 Unauthorized, re-login required")
 		if err := c.login(); err != nil {
 			return nil, err
 		}
@@ -140,7 +138,6 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
-	logger := logging.GetLogger()
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
@@ -156,14 +153,13 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		return nil, err
 	}
 
-	logger.Debug(fmt.Sprintf("retrieved records: %+v", records))
+	logging.Debug(fmt.Sprintf("retrieved records: %+v", records))
 
 	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-	logger := logging.GetLogger()
 	jsonBody, err := json.Marshal(DNSRecord{
 		Enabled:    true,
 		Key:        endpoint.DNSName,
@@ -189,7 +185,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		return nil, err
 	}
 
-	logger.Debug(fmt.Sprintf("created record: %+v", record))
+	logging.Debug(fmt.Sprintf("created record: %+v", record))
 
 	return &record, nil
 }
@@ -230,7 +226,6 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
-	logger := logging.GetLogger()
 	// Add the saved CSRF header.
 	req.Header.Set("X-CSRF-Token", c.csrf)
 	req.Header.Add("Accept", "application/json")
@@ -239,8 +234,8 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	// Log the request URL and cookies
 	if c.Client.Jar != nil {
 		parsedURL, _ := url.Parse(req.URL.String())
-		logger.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
+		logging.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
 	} else {
-		logger.Debug(fmt.Sprintf("Requesting %s", req.URL))
+		logging.Debug(fmt.Sprintf("Requesting %s", req.URL))
 	}
 }

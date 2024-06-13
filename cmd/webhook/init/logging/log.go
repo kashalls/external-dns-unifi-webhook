@@ -45,10 +45,22 @@ func Init() {
 	defer logger.Sync()
 }
 
-// GetLogger returns the initialized logger instance
-func GetLogger() *zap.Logger {
-	if logger == nil {
-		Init() // Initialize if not already done
-	}
-	return logger
+func Info(message string, fields ...zap.Field) {
+    logger.Info(message, fields...)
+}
+
+func Debug(message string, fields ...zap.Field) {
+    logger.Debug(message, fields...)
+}
+
+func Error(message string, fields ...zap.Field) {
+    logger.Error(message, fields...)
+}
+
+func Fatal(message string, fields ...zap.Field) {
+    logger.Fatal(message, fields...)
+}
+
+func With(fields ...zap.Field) *zap.Logger {
+	return logger.With(fields...)
 }

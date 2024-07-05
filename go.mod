@@ -9,7 +9,7 @@ require (
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/prometheus/client_golang v1.19.1
 	go.uber.org/zap v1.27.0
-	golang.org/x/net v0.26.0
+	golang.org/x/net v0.27.0
 	sigs.k8s.io/external-dns v0.14.2
 )
 
@@ -31,7 +31,7 @@ require (
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/sys v0.21.0 // indirect
+	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

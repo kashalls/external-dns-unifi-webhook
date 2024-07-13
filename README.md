@@ -80,7 +80,7 @@
 5. Install the Helm chart
 
     ```sh
-    helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values yaml --version 1.14.3 -n external-dns
+    helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values.yaml --version 1.14.3 -n external-dns
     ```
 
 ## ⭐ Stargazers

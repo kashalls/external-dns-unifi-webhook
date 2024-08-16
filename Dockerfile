@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine as builder
+FROM golang:1.23-alpine as builder
 ARG PKG=github.com/kashalls/external-dns-unifi-webhook
 ARG VERSION=dev
 ARG REVISION=dev

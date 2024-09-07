@@ -17,7 +17,7 @@ type Provider struct {
 	domainFilter endpoint.DomainFilter
 }
 
-// newUnifiProvider initializes a new DNSProvider.
+// NewUnifiProvider initializes a new DNSProvider.
 func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
 
@@ -77,6 +77,6 @@ func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) erro
 }
 
 // GetDomainFilter returns the domain filter for the provider.
-func (p *Provider) GetDomainFilter() endpoint.DomainFilter {
+func (p *Provider) GetDomainFilter() endpoint.DomainFilterInterface {
 	return p.domainFilter
 }

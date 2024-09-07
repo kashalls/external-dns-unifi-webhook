@@ -200,16 +200,10 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := p.provider.GetDomainFilter().MarshalJSON()
+	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
+	err := json.NewEncoder(w).Encode(p.provider.GetDomainFilter())
 	if err != nil {
 		requestLog(r).Error("failed to marshal domain filter")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
-	if _, writeError := w.Write(b); writeError != nil {
-		requestLog(r).With(zap.Error(writeError)).Error("error writing response")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

@@ -59,13 +59,13 @@
         livenessProbe:
           httpGet:
             path: /healthz
-            port: http-wh-metrics
+            port: http-webhook
           initialDelaySeconds: 10
           timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /readyz
-            port: http-wh-metrics
+            port: http-webhook
           initialDelaySeconds: 10
           timeoutSeconds: 5
     extraArgs:

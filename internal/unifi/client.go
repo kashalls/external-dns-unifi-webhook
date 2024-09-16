@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"golang.org/x/net/publicsuffix"
@@ -94,10 +95,15 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
+
+	var imCrazy strings.Builder
+	tee := io.TeeReader(body, &imCrazy)
+	bodyBytes, _ := io.ReadAll(tee)
+
 	log.With(
 		zap.String("req_method", method),
 		zap.String("req_path", path),
-		zap.Any("req_body", body),
+		zap.ByteString("req_body", bodyBytes),
 	).Debug("Creating Request")
 
 	req, err := http.NewRequest(method, path, body)
@@ -116,7 +122,11 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	log.With(zap.String("req_method", method), zap.String("req_path", path), zap.Int("req_code", resp.StatusCode)).Debug("Returned Request")
+	var stillCrazy strings.Builder
+	tee2 := io.TeeReader(resp.Body, &stillCrazy)
+	bodyBytes2, _ := io.ReadAll(tee2)
+
+	log.With(zap.String("req_method", method), zap.String("req_path", path), zap.Int("res_code", resp.StatusCode), zap.ByteString("res_body", bodyBytes2)).Debug("Returned Request")
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {

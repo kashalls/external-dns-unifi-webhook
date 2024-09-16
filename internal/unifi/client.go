@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -117,14 +116,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Error("Failed to read response body", zap.Error(err))
-		return resp, nil
-	}
-	bodyString := string(bodyBytes)
-
-	log.With(zap.String("req_method", method), zap.String("req_path", path), zap.Int("req_code", resp.StatusCode), zap.String("req_body", bodyString)).Debug("Returned Request")
+	log.With(zap.String("req_method", method), zap.String("req_path", path), zap.Int("req_code", resp.StatusCode)).Debug("Returned Request")
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -160,7 +152,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	var records []DNSRecord
 	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
-		log.With(zap.Error(err), zap.String("req_url", url), zap.Any("req_body", resp.Body)).Debug("JSON Encoding Error")
+		log.With(zap.Error(err), zap.String("req_url", url), zap.Any("req_body", resp.Body)).Debug("Endpoint JSON Decoding Error")
 		return nil, err
 	}
 

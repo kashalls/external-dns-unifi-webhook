@@ -160,7 +160,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	var records []DNSRecord
 	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
-		log.With(zap.Error(err), zap.String("req_url", url)).Debug("JSON Encoding Error")
+		log.With(zap.Error(err), zap.String("req_url", url), zap.Any("req_body", resp.Body)).Debug("JSON Encoding Error")
 		return nil, err
 	}
 

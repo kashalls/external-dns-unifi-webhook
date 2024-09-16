@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -94,7 +95,11 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debug(fmt.Sprintf("making %s request to %s", method, path))
+	log.With(
+		zap.String("req_method", method),
+		zap.String("req_path", path),
+		zap.Any("req_body", body),
+	).Debug("Creating Request")
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
@@ -112,7 +117,14 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	log.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Error("Failed to read response body", zap.Error(err))
+		return resp, nil
+	}
+	bodyString := string(bodyBytes)
+
+	log.With(zap.String("req_method", method), zap.String("req_path", path), zap.Int("req_code", resp.StatusCode), zap.String("req_body", bodyString)).Debug("Returned Request")
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {

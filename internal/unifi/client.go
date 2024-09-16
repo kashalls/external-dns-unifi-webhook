@@ -150,18 +150,17 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
-	resp, err := c.doRequest(
-		http.MethodGet,
-		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
-		nil,
-	)
+	url := FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site)
+	resp, err := c.doRequest(http.MethodGet, url, nil)
 	if err != nil {
+		log.With(zap.Error(err), zap.String("req_url", url)).Debug("Endpoint Request Failed")
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var records []DNSRecord
 	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
+		log.With(zap.Error(err), zap.String("req_url", url)).Debug("JSON Encoding Error")
 		return nil, err
 	}
 

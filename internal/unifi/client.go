@@ -166,6 +166,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		TTL:        endpoint.RecordTTL,
 		Value:      endpoint.Targets[0],
 	})
+	log.With(zap.ByteString("body", jsonBody), zap.Error(err)).Debug("Client CreateEndpoint")
 	if err != nil {
 		return nil, err
 	}

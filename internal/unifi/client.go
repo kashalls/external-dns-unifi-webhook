@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"strings"
 
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"golang.org/x/net/publicsuffix"
@@ -95,16 +94,7 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-
-	var imCrazy strings.Builder
-	tee := io.TeeReader(body, &imCrazy)
-	bodyBytes, _ := io.ReadAll(tee)
-
-	log.With(
-		zap.String("req_method", method),
-		zap.String("req_path", path),
-		zap.ByteString("req_body", bodyBytes),
-	).Debug("Creating Request")
+	log.With(zap.String("req_method", method), zap.String("req_path", path)).Debug("Client Preforming Request")
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
@@ -122,11 +112,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	var stillCrazy strings.Builder
-	tee2 := io.TeeReader(resp.Body, &stillCrazy)
-	bodyBytes2, _ := io.ReadAll(tee2)
-
-	log.With(zap.String("req_method", method), zap.String("req_path", path), zap.Int("res_code", resp.StatusCode), zap.ByteString("res_body", bodyBytes2)).Debug("Returned Request")
+	log.With(zap.String("req_method", method), zap.String("req_path", path), zap.Int("res_code", resp.StatusCode)).Debug("Client Returning Request")
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -155,14 +141,14 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	url := FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site)
 	resp, err := c.doRequest(http.MethodGet, url, nil)
 	if err != nil {
-		log.With(zap.Error(err), zap.String("req_url", url)).Debug("Endpoint Request Failed")
+		log.With(zap.Error(err), zap.String("req_url", url)).Debug("Client GetEndpoint Failed")
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var records []DNSRecord
 	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
-		log.With(zap.Error(err), zap.String("req_url", url), zap.Any("req_body", resp.Body)).Debug("Endpoint JSON Decoding Error")
+		log.With(zap.Error(err), zap.String("req_url", url), zap.Any("req_body", resp.Body)).Debug("Client GetEndpoint Decoding Failed")
 		return nil, err
 	}
 

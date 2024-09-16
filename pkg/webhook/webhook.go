@@ -207,6 +207,8 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestLog(r).With(zap.ByteString("domain_filter", b)).Debug("marshal domain filter")
+
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
 	if _, writeError := w.Write(b); writeError != nil {
 		requestLog(r).With(zap.Error(writeError)).Error("error writing response")

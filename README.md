@@ -9,7 +9,6 @@
 
 > [!WARNING]
 > This software is experimental and **NOT FIT FOR PRODUCTION USE!**
-
 [ExternalDNS](https://github.com/kubernetes-sigs/external-dns) is a Kubernetes add-on for automatically managing DNS records for Kubernetes ingresses and services by using different DNS providers. This webhook provider allows you to automate DNS records from your Kubernetes clusters into your UniFi Network controller.
 
 ## 🎯 Requirements
@@ -17,6 +16,10 @@
 - ExternalDNS >= v0.14.0
 - UniFi OS >= 3.x
 - UniFi Network >= 8.2.93
+
+## 🚫 Limitations
+
+- Wildcard CNAME Records are not supported by UniFi.
 
 ## ⛵ Deployment
 

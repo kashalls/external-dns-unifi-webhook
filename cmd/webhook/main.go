@@ -31,7 +31,7 @@ func main() {
 	config := configuration.Init()
 	provider, err := dnsprovider.Init(config)
 	if err != nil {
-		log.Error("failed to initialize provider", zap.Error(err))
+		log.Fatal("failed to initialize provider", zap.Error(err))
 	}
 
 	main, health := server.Init(config, webhook.New(provider))

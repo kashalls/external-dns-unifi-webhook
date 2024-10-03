@@ -101,6 +101,13 @@ func (c *httpClient) login() error {
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
     log.Debug(fmt.Sprintf("making %s request to %s", method, path))
 
+    // Convert body to bytes for logging and reuse
+    var bodyBytes []byte
+    if body != nil {
+        bodyBytes, _ = io.ReadAll(body)
+        body = bytes.NewReader(bodyBytes)
+    }
+
     req, err := http.NewRequest(method, path, body)
     if err != nil {
         return nil, err
@@ -115,6 +122,11 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
         }
     }
 
+    // Log request body
+    if len(bodyBytes) > 0 {
+        log.Debug(fmt.Sprintf("Request Body: %s", string(bodyBytes)))
+    }
+
     resp, err := c.Client.Do(req)
     if err != nil {
         return nil, err
@@ -126,6 +138,11 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
             log.Debug(fmt.Sprintf("Response Header: %s: %s", name, value))
         }
     }
+
+    // Log response body
+    respBody, _ := io.ReadAll(resp.Body)
+    log.Debug(fmt.Sprintf("Response Body: %s", string(respBody)))
+    resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore the response body for further use
 
     if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
         c.csrf = csrf
@@ -154,7 +171,6 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
     return resp, nil
 }
-
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
     resp, err := c.doRequest(

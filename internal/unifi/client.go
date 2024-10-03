@@ -25,7 +25,7 @@ type httpClient struct {
 }
 
 const (
-	unifiLoginPath  = "%s/api/auth/login"
+	unifiLoginPath  = "%s/api/login"
 	unifiRecordPath = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 )
 

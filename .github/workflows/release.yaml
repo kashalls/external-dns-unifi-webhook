@@ -3,7 +3,6 @@ name: Release
 
 on:
   pull_request:
-  workflow_dispatch:
   push:
     branches: ["main"]
   release:
@@ -11,7 +10,6 @@ on:
 
 jobs:
   build-image:
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,7 +23,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/aki-${{ github.repository }}
+            ghcr.io/${{ github.repository }}
           tags: |
             type=semver,pattern={{version}},prefix=v
             type=semver,pattern={{major}}.{{minor}},prefix=v
@@ -48,6 +46,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Restore Docker cache
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Build and Push
         uses: docker/build-push-action@v6
         with:
@@ -60,3 +66,12 @@ jobs:
           build-args: |
             VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
             REVISION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
+
+      - name: Save Docker cache
+        if: always()
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}

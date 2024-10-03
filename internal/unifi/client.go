@@ -113,7 +113,6 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
         return nil, err
     }
 	// Set the required headers
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	if body != nil {
 		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(bodyBytes)))
 	}
@@ -122,7 +121,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
     if err != nil {
         return nil, err
     }
+
     req.Host = parsedURL.Host
+	log.Debug(fmt.Sprintf("Host test AKI: %s", req.Host))
+
     c.setHeaders(req)
 
     // Log all request headers

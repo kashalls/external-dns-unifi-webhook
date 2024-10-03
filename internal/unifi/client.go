@@ -98,7 +98,6 @@ func (c *httpClient) login() error {
     return nil
 }
 
-// doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
     log.Debug(fmt.Sprintf("making %s request to %s", method, path))
 
@@ -109,9 +108,23 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
     c.setHeaders(req)
 
+    // Log all request headers
+    for name, values := range req.Header {
+        for _, value := range values {
+            log.Debug(fmt.Sprintf("Request Header: %s: %s", name, value))
+        }
+    }
+
     resp, err := c.Client.Do(req)
     if err != nil {
         return nil, err
+    }
+
+    // Log all response headers
+    for name, values := range resp.Header {
+        for _, value := range values {
+            log.Debug(fmt.Sprintf("Response Header: %s: %s", name, value))
+        }
     }
 
     if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {

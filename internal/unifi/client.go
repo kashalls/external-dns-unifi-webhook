@@ -1,247 +1,291 @@
 package unifi
 
 import (
-    "bytes"
-    "crypto/tls"
-    "encoding/json"
-    "fmt"
-    "io"
-    "net/http"
-    "net/http/cookiejar"
-    "net/url"
+	"bytes"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 
-    "github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
-    "golang.org/x/net/publicsuffix"
-    "sigs.k8s.io/external-dns/endpoint"
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
+	"golang.org/x/net/publicsuffix"
+	"sigs.k8s.io/external-dns/endpoint"
 
-    "go.uber.org/zap"
+	"go.uber.org/zap"
 )
 
 // httpClient is the DNS provider client.
 type httpClient struct {
-    *Config
-    *http.Client
-    csrf string
+	*Config
+	*http.Client
+	csrf string
 }
 
 const (
-    unifiLoginPath  = "%s/api/auth/login"
-    unifiRecordPath = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
+	unifiLoginPath  = "%s/api/auth/login"
+	unifiRecordPath = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
 func newUnifiClient(config *Config) (*httpClient, error) {
-    jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-    if err != nil {
-        return nil, err
-    }
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		return nil, err
+	}
 
-    // Create the HTTP client
-    client := &httpClient{
-        Config: config,
-        Client: &http.Client{
-            Transport: &http.Transport{
-                TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipTLSVerify},
-            },
-            Jar: jar,
-        },
-    }
+	// Create the HTTP client
+	client := &httpClient{
+		Config: config,
+		Client: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipTLSVerify},
+			},
+			Jar: jar,
+		},
+	}
 
-    if err := client.login(); err != nil {
-        return nil, err
-    }
+	if err := client.login(); err != nil {
+		return nil, err
+	}
 
-    return client, nil
+	return client, nil
 }
 
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
-    jsonBody, err := json.Marshal(Login{
-        Username: c.Config.User,
-        Password: c.Config.Password,
-        Remember: true,
-    })
-    if err != nil {
-        return err
-    }
+	jsonBody, err := json.Marshal(Login{
+		Username: c.Config.User,
+		Password: c.Config.Password,
+		Remember: true,
+	})
+	if err != nil {
+		return err
+	}
 
-    // Print request details
-    log.Debug(fmt.Sprintf("Request sent to URL: %s with params: %s", FormatUrl(unifiLoginPath, c.Config.Host), string(jsonBody)))
+	// Print request details
+	log.Debug(fmt.Sprintf("Request sent to URL: %s with params: %s", FormatUrl(unifiLoginPath, c.Config.Host), string(jsonBody)))
 
-    // Perform the login request
-    resp, err := c.doRequest(
-        http.MethodPost,
-        FormatUrl(unifiLoginPath, c.Config.Host),
-        bytes.NewBuffer(jsonBody),
-    )
-    if err != nil {
-        return err
-    }
+	// Perform the login request
+	resp, err := c.doRequest(
+		http.MethodPost,
+		FormatUrl(unifiLoginPath, c.Config.Host),
+		bytes.NewBuffer(jsonBody),
+	)
+	if err != nil {
+		return err
+	}
 
-    defer resp.Body.Close()
+	defer resp.Body.Close()
 
-    // Check if the login was successful
-    if resp.StatusCode != http.StatusOK {
-        respBody, _ := io.ReadAll(resp.Body)
-        log.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
-        return fmt.Errorf("login failed: %s", resp.Status)
-    }
+	// Check if the login was successful
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
+		return fmt.Errorf("login failed: %s", resp.Status)
+	}
 
-    // Retrieve CSRF token from the response headers
-    if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
-        c.csrf = resp.Header.Get("x-csrf-token")
-    }
+	// Retrieve CSRF token from the response headers
+	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
+		c.csrf = resp.Header.Get("x-csrf-token")
+	}
 
-    // Print response details
-    log.Debug(fmt.Sprintf("Response received with status: %s", resp.Status))
+	// Print response details
+	log.Debug(fmt.Sprintf("Response received with status: %s", resp.Status))
 
-    return nil
+	return nil
 }
 
-// doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-    log.Debug(fmt.Sprintf("making %s request to %s", method, path))
+	log.Debug(fmt.Sprintf("making %s request to %s", method, path))
 
-    req, err := http.NewRequest(method, path, body)
-    if err != nil {
-        return nil, err
-    }
+	// Convert body to bytes for logging and reuse
+	var bodyBytes []byte
+	if body != nil {
+		bodyBytes, _ = io.ReadAll(body)
+		body = bytes.NewReader(bodyBytes)
+	}
 
-    c.setHeaders(req)
+	req, err := http.NewRequest(method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	// Set the required headers
+	if body != nil {
+		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(bodyBytes)))
+	}
+	// Dynamically set the Host header
+	parsedURL, err := url.Parse(path)
+	if err != nil {
+		return nil, err
+	}
+	req.Host = fmt.Sprintf("%s", parsedURL.Host)
+	// // req.Header.Set("Host", fmt.Sprintf("%s", req.Host))
+	// req.Host = fmt.Sprintf("%s", parsedURL.Host)
 
-    resp, err := c.Client.Do(req)
-    if err != nil {
-        return nil, err
-    }
+	log.Debug(fmt.Sprintf("Host test AKI: %s", req.Host))
 
-    if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
-        c.csrf = csrf
-    }
+	c.setHeaders(req)
 
-    log.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
+	// Log all request headers
+	for name, values := range req.Header {
+		for _, value := range values {
+			log.Debug(fmt.Sprintf("Request Header: %s: %s", name, value))
+		}
+	}
 
-    // If the status code is 401, re-login and retry the request
-    if resp.StatusCode == http.StatusUnauthorized {
-        log.Debug("Received 401 Unauthorized, re-login required")
-        if err := c.login(); err != nil {
-            return nil, err
-        }
-        // Update the headers with new CSRF token
-        c.setHeaders(req)
-        // Retry the request
-        resp, err = c.Client.Do(req)
-        if err != nil {
-            return nil, err
-        }
-    }
+	// Log request body
+	if len(bodyBytes) > 0 {
+		log.Debug(fmt.Sprintf("Request Body: %s", string(bodyBytes)))
+	}
 
-    if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
-    }
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
 
-    return resp, nil
+	// Log all response headers
+	for name, values := range resp.Header {
+		for _, value := range values {
+			log.Debug(fmt.Sprintf("Response Header: %s: %s", name, value))
+		}
+	}
+
+	// Log response body
+	respBody, _ := io.ReadAll(resp.Body)
+	log.Debug(fmt.Sprintf("Response Body: %s", string(respBody)))
+	resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore the response body for further use
+
+	if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
+		c.csrf = csrf
+	}
+
+	log.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
+
+	// If the status code is 401, re-login and retry the request
+	if resp.StatusCode == http.StatusUnauthorized {
+		log.Debug("Received 401 Unauthorized, re-login required")
+		if err := c.login(); err != nil {
+			return nil, err
+		}
+		// Update the headers with new CSRF token
+		c.setHeaders(req)
+		// Retry the request
+		resp, err = c.Client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
+	}
+
+	return resp, nil
 }
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
-    resp, err := c.doRequest(
-        http.MethodGet,
-        FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
-        nil,
-    )
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
+	resp, err := c.doRequest(
+		http.MethodGet,
+		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-    var records []DNSRecord
-    if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
-        return nil, err
-    }
+	var records []DNSRecord
+	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
+		return nil, err
+	}
 
-    log.Debug(fmt.Sprintf("retrieved records: %+v", records))
+	log.Debug(fmt.Sprintf("retrieved records: %+v", records))
 
-    return records, nil
+	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-    jsonBody, err := json.Marshal(DNSRecord{
-        Enabled:    true,
-        Key:        endpoint.DNSName,
-        RecordType: endpoint.RecordType,
-        TTL:        endpoint.RecordTTL,
-        Value:      endpoint.Targets[0],
-    })
-    if err != nil {
-        return nil, err
-    }
-    resp, err := c.doRequest(
-        http.MethodPost,
-        FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
-        bytes.NewReader(jsonBody),
-    )
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
+	jsonBody, err := json.Marshal(DNSRecord{
+		Enabled:    true,
+		Key:        endpoint.DNSName,
+		RecordType: endpoint.RecordType,
+		TTL:        endpoint.RecordTTL,
+		Value:      endpoint.Targets[0],
+	})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.doRequest(
+		http.MethodPost,
+		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
+		bytes.NewReader(jsonBody),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-    var record DNSRecord
-    if err = json.NewDecoder(resp.Body).Decode(&record); err != nil {
-        return nil, err
-    }
+	var record DNSRecord
+	if err = json.NewDecoder(resp.Body).Decode(&record); err != nil {
+		return nil, err
+	}
 
-    log.Debug(fmt.Sprintf("created record: %+v", record))
+	log.Debug(fmt.Sprintf("created record: %+v", record))
 
-    return &record, nil
+	return &record, nil
 }
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
-    lookup, err := c.lookupIdentifier(endpoint.DNSName, endpoint.RecordType)
-    if err != nil {
-        return err
-    }
+	lookup, err := c.lookupIdentifier(endpoint.DNSName, endpoint.RecordType)
+	if err != nil {
+		return err
+	}
 
-    if _, err = c.doRequest(
-        http.MethodDelete,
-        FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site, lookup.ID),
-        nil,
-    ); err != nil {
-        return err
-    }
+	if _, err = c.doRequest(
+		http.MethodDelete,
+		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site, lookup.ID),
+		nil,
+	); err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }
 
 // lookupIdentifier finds the ID of a DNS record in the UniFi controller.
 func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error) {
-    records, err := c.GetEndpoints()
-    if err != nil {
-        return nil, err
-    }
+	records, err := c.GetEndpoints()
+	if err != nil {
+		return nil, err
+	}
 
-    for _, r := range records {
-        if r.Key == key && r.RecordType == recordType {
-            return &r, nil
-        }
-    }
+	for _, r := range records {
+		if r.Key == key && r.RecordType == recordType {
+			return &r, nil
+		}
+	}
 
-    return nil, err
+	return nil, err
 }
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
-    // Add the saved CSRF header.
-    req.Header.Set("X-CSRF-Token", c.csrf)
-    req.Header.Add("Accept", "application/json")
-    req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	// Add the saved CSRF header.
+	req.Header.Set("X-CSRF-Token", c.csrf)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 
-    // Log the request URL and cookies
-    if c.Client.Jar != nil {
-        parsedURL, _ := url.Parse(req.URL.String())
-        log.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
-    } else {
-        log.Debug(fmt.Sprintf("Requesting %s", req.URL))
-    }
+	// Log the request URL and cookies
+	if c.Client.Jar != nil {
+		parsedURL, _ := url.Parse(req.URL.String())
+		log.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
+	} else {
+		log.Debug(fmt.Sprintf("Requesting %s", req.URL))
+	}
 }

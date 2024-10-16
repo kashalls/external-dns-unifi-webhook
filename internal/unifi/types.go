@@ -8,7 +8,7 @@ type Config struct {
 	User           string `env:"UNIFI_USER,notEmpty"`
 	Password       string `env:"UNIFI_PASS,notEmpty"`
 	Site           string `env:"UNIFI_SITE" envDefault:"default"`
-	ControllerType string `env:"CONTRAOLLOER_TYPE" envDefault:"default"`
+	ControllerType string `env:"CONTROLLER_TYPE" envDefault:"default"`
 	SkipTLSVerify  bool   `env:"UNIFI_SKIP_TLS_VERIFY" envDefault:"true"`
 }
 

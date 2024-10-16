@@ -52,7 +52,7 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 	healthRouter.Get("/healthz", HealthCheckHandler)
 	healthRouter.Get("/readyz", ReadinessHandler)
 
-	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	healthServer := createHTTPServer("0.0.0.0:8090", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
 		log.Info("starting health server", zap.String("address", healthServer.Addr))
 		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

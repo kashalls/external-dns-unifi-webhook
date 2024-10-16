@@ -143,29 +143,15 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	c.setHeaders(req)
 
-	// Log all request headers
-	for name, values := range req.Header {
-		for _, value := range values {
-			log.Debug("Request header", zap.String("name", name), zap.String("value", value))
-		}
-	}
-
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		log.Error("Request failed", zap.Error(err))
 		return nil, err
 	}
 
-	// Log all response headers
-	for name, values := range resp.Header {
-		for _, value := range values {
-			log.Debug("Response header", zap.String("name", name), zap.String("value", value))
-		}
-	}
-
 	// Log response body
 	respBody, _ := io.ReadAll(resp.Body)
-	log.Debug("Response body", zap.String("body", string(respBody)))
+	log.Debug("response body", zap.String("body", string(respBody)))
 	resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore the response body for further use
 
 	if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {

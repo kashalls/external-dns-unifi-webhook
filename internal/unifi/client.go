@@ -300,7 +300,6 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		nil,
 	)
 	if err != nil {
-		log.Error("Failed to delete endpoint", zap.Error(err))
 		return err
 	}
 
@@ -343,9 +342,6 @@ func (c *httpClient) setHeaders(req *http.Request) {
 		log.Debug("Request cookies",
 			zap.String("url", req.URL.String()),
 			zap.Int("cookieCount", len(cookies)))
-		for _, cookie := range cookies {
-			log.Debug("Cookie", zap.String("name", cookie.Name), zap.String("value", cookie.Value))
-		}
 	} else {
 		log.Debug("No cookie jar available", zap.String("url", req.URL.String()))
 	}

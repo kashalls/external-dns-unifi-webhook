@@ -47,7 +47,7 @@
           tag: main # replace with a versioned release tag
         env:
           - name: UNIFI_HOST
-            value: https://192.168.1.1 # replace with the address to your UniFi router
+            value: https://192.168.1.1 # replace with the address to your UniFi router/controller
           - name: UNIFI_USER
             valueFrom:
               secretKeyRef:
@@ -58,10 +58,10 @@
               secretKeyRef:
                 name: external-dns-unifi-secret
                 key: password
-          - name: LOG_LEVEL
-            value: debug
-          - name: CONTROLLER_TYPE # Defaults to gateway, possible values: standalone(hosting unifi controller remotely, for ex: gateway max) or gateway(unifi server is build into hardware like cloud gateway max)
-            value: gateway
+        #  - name: LOG_LEVEL
+        #    value: debug
+
+        # Apply additional configurations here as needed.
         livenessProbe:
           httpGet:
             path: /healthz
@@ -88,6 +88,33 @@
     ```sh
     helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values.yaml --version 1.14.3 -n external-dns
     ```
+
+## Configuration
+
+### Unifi Controller Configuration
+
+| Environment Variable    | Description                                                  | Default Value |
+|-------------------------|--------------------------------------------------------------|---------------|
+| `UNIFI_USER`            | Username for the Unifi Controller (must be provided).        | N/A           |
+| `UNIFI_SKIP_TLS_VERIFY` | Whether to skip TLS verification (true or false).            | `true`        |
+| `UNIFI_SITE`            | Unifi Site Identifier (used in multi-site installations)     | `default`     |
+| `UNIFI_PASS`            | Password for the Unifi Controller (must be provided).        | N/A           |
+| `UNIFI_HOST`            | Host of the Unifi Controller (must be provided).             | N/A           |
+| `CONTROLLER_TYPE`       | Type of Unifi controller (e.g., gateway or standalone).      | `gateway`     |
+| `LOG_LEVEL`             | Change the verbosity of logs (used when making a bug report) | `info`        |
+
+### Server Configuration
+
+| Environment Variable             | Description                                                      | Default Value |
+|----------------------------------|------------------------------------------------------------------|---------------|
+| `SERVER_HOST`                    | The host address where the server listens.                       | `localhost`   |
+| `SERVER_PORT`                    | The port where the server listens.                               | `8888`        |
+| `SERVER_READ_TIMEOUT`            | Duration the server waits before timing out on read operations.  | N/A           |
+| `SERVER_WRITE_TIMEOUT`           | Duration the server waits before timing out on write operations. | N/A           |
+| `DOMAIN_FILTER`                  | List of domains to include in the filter.                        | Empty         |
+| `EXCLUDE_DOMAIN_FILTER`          | List of domains to exclude from filtering.                       | Empty         |
+| `REGEXP_DOMAIN_FILTER`           | Regular expression for filtering domains.                        | Empty         |
+| `REGEXP_DOMAIN_FILTER_EXCLUSION` | Regular expression for excluding domains from the filter.        | Empty         |
 
 ## ⭐ Stargazers
 

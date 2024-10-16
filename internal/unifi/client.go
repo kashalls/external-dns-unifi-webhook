@@ -31,10 +31,10 @@ type httpClient struct {
 }
 
 const (
-	unifiLoginPathGateway     = "%s/api/auth/login"
-	unifiLoginPathStandalone  = "%s/api/login"
-	unifiRecordPathGateway    = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
-	unifiRecordPathStandalone = "%s/v2/api/site/%s/static-dns/%s"
+	unifiLoginPath          = "%s/api/auth/login"
+	unifiLoginPathExternal  = "%s/api/login"
+	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
+	unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
@@ -54,14 +54,14 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 			Jar: jar,
 		},
 		ClientURLs: &ClientURLs{
-			Login:   unifiLoginPathGateway,
-			Records: unifiRecordPathGateway,
+			Login:   unifiLoginPath,
+			Records: unifiRecordPath,
 		},
 	}
 
 	if config.ExternalController {
-		client.ClientURLs.Login = unifiLoginPathStandalone
-		client.ClientURLs.Records = unifiRecordPathStandalone
+		client.ClientURLs.Login = unifiLoginPathExternal
+		client.ClientURLs.Records = unifiRecordPathExternal
 	}
 
 	if err := client.login(); err != nil {

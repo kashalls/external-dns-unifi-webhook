@@ -38,7 +38,7 @@
 
     ```yaml
     fullnameOverride: external-dns-unifi
-    logLevel: debug
+    logLevel: &logLevel debug
     provider:
       name: webhook
       webhook:
@@ -48,6 +48,8 @@
         env:
           - name: UNIFI_HOST
             value: https://192.168.1.1 # replace with the address to your UniFi router/controller
+          - name: UNIFI_EXTERNAL_CONTROLLER
+            value: false
           - name: UNIFI_USER
             valueFrom:
               secretKeyRef:
@@ -58,10 +60,8 @@
               secretKeyRef:
                 name: external-dns-unifi-secret
                 key: password
-        #  - name: LOG_LEVEL
-        #    value: debug
-
-        # Apply additional configurations here as needed.
+          - name: LOG_LEVEL
+            value: *logLevel
         livenessProbe:
           httpGet:
             path: /healthz

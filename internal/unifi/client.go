@@ -37,7 +37,6 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
-		log.Error("Failed to create cookie jar", zap.Error(err))
 		return nil, err
 	}
 
@@ -52,13 +51,10 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		},
 	}
 
-	log.Debug("Attempting to login")
 	if err := client.login(); err != nil {
-		log.Error("Failed to login", zap.Error(err))
 		return nil, err
 	}
 
-	log.Debug("UniFi client created and logged in successfully")
 	return client, nil
 }
 
@@ -68,7 +64,6 @@ func (c *httpClient) login() error {
 	if c.Config.ControllerType == "standalone" {
 		loginPath = unifiLoginPathStandalone
 	}
-	log.Debug("Logging in", zap.String("loginPath", loginPath))
 
 	jsonBody, err := json.Marshal(Login{
 		Username: c.Config.User,
@@ -76,13 +71,8 @@ func (c *httpClient) login() error {
 		Remember: true,
 	})
 	if err != nil {
-		log.Error("Failed to marshal login JSON", zap.Error(err))
 		return err
 	}
-
-	// Print request details
-	log.Debug("Sending login request",
-		zap.String("URL", FormatUrl(loginPath, c.Config.Host)))
 
 	// Perform the login request
 	resp, err := c.doRequest(
@@ -109,12 +99,7 @@ func (c *httpClient) login() error {
 	// Retrieve CSRF token from the response headers
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")
-		log.Debug("Retrieved CSRF token", zap.String("token", c.csrf))
-	} else {
-		log.Debug("No CSRF token found in response headers")
 	}
-
-	log.Debug("Login successful", zap.String("status", resp.Status))
 	return nil
 }
 

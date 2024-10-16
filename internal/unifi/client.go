@@ -163,8 +163,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		}
 		// Update the headers with new CSRF token
 		c.setHeaders(req)
+
 		// Retry the request
 		log.Debug("retrying request after re-login")
+
 		resp, err = c.Client.Do(req)
 		if err != nil {
 			log.Error("Retry request failed", zap.Error(err))
@@ -268,7 +270,6 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 
 	for _, r := range records {
 		if r.Key == key && r.RecordType == recordType {
-			log.Debug("Found matching record", zap.Any("record", r))
 			return &r, nil
 		}
 	}
@@ -287,9 +288,8 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	if c.Client.Jar != nil {
 		parsedURL, _ := url.Parse(req.URL.String())
 		cookies := c.Client.Jar.Cookies(parsedURL)
-		log.Debug("Request cookies",
-			zap.String("url", req.URL.String()),
-			zap.Int("cookieCount", len(cookies)))
+
+		log.Debug("Request cookies", zap.String("url", req.URL.String()), zap.Int("cookieCount", len(cookies)))
 	} else {
 		log.Debug("No cookie jar available", zap.String("url", req.URL.String()))
 	}

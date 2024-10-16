@@ -39,8 +39,6 @@ const (
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
 func newUnifiClient(config *Config) (*httpClient, error) {
-	log.Debug("Creating new UniFi client", zap.String("host", config.Host), zap.String("controllerType", config.ControllerType))
-
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, err
@@ -61,7 +59,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		},
 	}
 
-	if config.ControllerType == "standalone" {
+	if config.ExternalController {
 		client.ClientURLs.Login = unifiLoginPathStandalone
 		client.ClientURLs.Records = unifiRecordPathStandalone
 	}

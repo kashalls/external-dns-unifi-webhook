@@ -4,12 +4,12 @@ import "sigs.k8s.io/external-dns/endpoint"
 
 // Config represents the configuration for the UniFi API.
 type Config struct {
-	Host           string `env:"UNIFI_HOST,notEmpty"`
-	User           string `env:"UNIFI_USER,notEmpty"`
-	Password       string `env:"UNIFI_PASS,notEmpty"`
-	Site           string `env:"UNIFI_SITE" envDefault:"default"`
-	ControllerType string `env:"UNIFI_CONTROLLER_TYPE" envDefault:"gateway"`
-	SkipTLSVerify  bool   `env:"UNIFI_SKIP_TLS_VERIFY" envDefault:"true"`
+	Host               string `env:"UNIFI_HOST,notEmpty"`
+	User               string `env:"UNIFI_USER,notEmpty"`
+	Password           string `env:"UNIFI_PASS,notEmpty"`
+	Site               string `env:"UNIFI_SITE" envDefault:"default"`
+	ExternalController bool   `env:"UNIFI_EXTERNAL_CONTROLLER" envDefault:"false"`
+	SkipTLSVerify      bool   `env:"UNIFI_SKIP_TLS_VERIFY" envDefault:"true"`
 }
 
 // Login represents a login request to the UniFi API.

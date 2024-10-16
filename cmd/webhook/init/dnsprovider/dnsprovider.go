@@ -49,9 +49,5 @@ func Init(config configuration.Config) (provider.Provider, error) {
 		return nil, fmt.Errorf("reading unifi configuration failed: %v", err)
 	}
 
-	if unifiConfig.ControllerType != "gateway" && unifiConfig.ControllerType != "standalone" {
-		return nil, fmt.Errorf("unsupported controller type: %s", unifiConfig.ControllerType)
-	}
-
 	return unifi.NewUnifiProvider(domainFilter, &unifiConfig)
 }

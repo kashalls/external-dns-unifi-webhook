@@ -93,15 +93,15 @@
 
 ### Unifi Controller Configuration
 
-| Environment Variable    | Description                                                  | Default Value |
-|-------------------------|--------------------------------------------------------------|---------------|
-| `UNIFI_USER`            | Username for the Unifi Controller (must be provided).        | N/A           |
-| `UNIFI_SKIP_TLS_VERIFY` | Whether to skip TLS verification (true or false).            | `true`        |
-| `UNIFI_SITE`            | Unifi Site Identifier (used in multi-site installations)     | `default`     |
-| `UNIFI_PASS`            | Password for the Unifi Controller (must be provided).        | N/A           |
-| `UNIFI_HOST`            | Host of the Unifi Controller (must be provided).             | N/A           |
-| `UNIFI_CONTROLLER_TYPE`       | Type of Unifi controller (e.g., gateway or standalone).      | `gateway`     |
-| `LOG_LEVEL`             | Change the verbosity of logs (used when making a bug report) | `info`        |
+| Environment Variable        | Description                                                  | Default Value |
+|-----------------------------|--------------------------------------------------------------|---------------|
+| `UNIFI_USER`                | Username for the Unifi Controller (must be provided).        | N/A           |
+| `UNIFI_SKIP_TLS_VERIFY`     | Whether to skip TLS verification (true or false).            | `true`        |
+| `UNIFI_SITE`                | Unifi Site Identifier (used in multi-site installations)     | `default`     |
+| `UNIFI_PASS`                | Password for the Unifi Controller (must be provided).        | N/A           |
+| `UNIFI_HOST`                | Host of the Unifi Controller (must be provided).             | N/A           |
+| `UNIFI_EXTERNAL_CONTROLLER` | Whether your controller is running on official hardware.     | `false`       |
+| `LOG_LEVEL`                 | Change the verbosity of logs (used when making a bug report) | `info`        |
 
 ### Server Configuration
 

@@ -60,8 +60,8 @@
                 key: password
           - name: LOG_LEVEL
             value: debug
-          - name: CONTROLLER_TYPE # if you have Unifi Network Server running remotely
-            value: NETWORK_SERVER
+          - name: CONTROLLER_TYPE # Defaults to gateway, possible values: standalone(hosting unifi controller remotely, for ex: gateway max) or gateway(unifi server is build into hardware like cloud gateway max)
+            value: gateway
         livenessProbe:
           httpGet:
             path: /healthz

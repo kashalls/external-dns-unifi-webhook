@@ -65,7 +65,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
 	loginPath := unifiLoginPathUDM
-	if c.Config.ControllerType == "NETWORK_SERVER" {
+	if c.Config.ControllerType == "standalone" {
 		loginPath = unifiLoginPathNetworkApp
 	}
 	log.Debug("Logging in", zap.String("loginPath", loginPath))
@@ -218,7 +218,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	log.Debug("Getting endpoints")
 	recordPath := unifiRecordPathUDM
-	if c.Config.ControllerType == "NETWORK_SERVER" {
+	if c.Config.ControllerType == "standalone" {
 		recordPath = unifiRecordPathNetworkApp
 	}
 
@@ -251,7 +251,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 	log.Debug("Creating endpoint", zap.String("dnsName", endpoint.DNSName))
 	recordPath := unifiRecordPathUDM
-	if c.Config.ControllerType == "NETWORK_SERVER" {
+	if c.Config.ControllerType == "standalone" {
 		recordPath = unifiRecordPathNetworkApp
 	}
 
@@ -302,7 +302,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 	}
 
 	recordPath := unifiRecordPathUDM
-	if c.Config.ControllerType == "NETWORK_SERVER" {
+	if c.Config.ControllerType == "standalone" {
 		recordPath = unifiRecordPathNetworkApp
 	}
 

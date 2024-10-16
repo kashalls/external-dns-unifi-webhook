@@ -89,7 +89,6 @@ func (c *httpClient) login() error {
 		bytes.NewBuffer(jsonBody),
 	)
 	if err != nil {
-		log.Error("Login request failed", zap.Error(err))
 		return err
 	}
 
@@ -98,9 +97,7 @@ func (c *httpClient) login() error {
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		log.Error("Login failed",
-			zap.String("status", resp.Status),
-			zap.String("response", string(respBody)))
+		log.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
 		return fmt.Errorf("login failed: %s", resp.Status)
 	}
 
@@ -112,7 +109,7 @@ func (c *httpClient) login() error {
 }
 
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debug("Making request", zap.String("method", method), zap.String("path", path))
+	log.Debug("Do request", zap.String("method", method), zap.String("path", path))
 
 	// Convert body to bytes for logging and reuse
 	var bodyBytes []byte
@@ -124,7 +121,6 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
-		log.Error("Failed to create request", zap.Error(err))
 		return nil, err
 	}
 	// Set the required headers
@@ -134,12 +130,9 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	// Dynamically set the Host header
 	parsedURL, err := url.Parse(path)
 	if err != nil {
-		log.Error("Failed to parse URL", zap.Error(err))
 		return nil, err
 	}
 	req.Host = parsedURL.Host
-
-	log.Debug("Request host", zap.String("host", req.Host))
 
 	c.setHeaders(req)
 
@@ -180,10 +173,6 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Error("Request was not successful",
-			zap.String("method", method),
-			zap.String("path", path),
-			zap.Int("statusCode", resp.StatusCode))
 		return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
 	}
 
@@ -200,7 +189,6 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		nil,
 	)
 	if err != nil {
-		log.Error("failed to get endpoints", zap.Error(err))
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -218,8 +206,6 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-	log.Debug("Creating endpoint", zap.String("key", endpoint.DNSName))
-
 	record := DNSRecord{
 		Enabled:    true,
 		Key:        endpoint.DNSName,
@@ -230,10 +216,8 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 
 	jsonBody, err := json.Marshal(record)
 	if err != nil {
-		log.Error("Failed to marshal record", zap.Error(err))
 		return nil, err
 	}
-	log.Debug("Creating record", zap.String("record", string(jsonBody)))
 
 	resp, err := c.doRequest(
 		http.MethodPost,
@@ -241,18 +225,14 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
-		log.Error("Failed to create endpoint", zap.Error(err))
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var createdRecord DNSRecord
 	if err = json.NewDecoder(resp.Body).Decode(&createdRecord); err != nil {
-		log.Error("Failed to decode response", zap.Error(err))
 		return nil, err
 	}
-
-	log.Debug("Created record", zap.Any("record", createdRecord))
 
 	return &createdRecord, nil
 }

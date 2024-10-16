@@ -60,6 +60,8 @@
                 key: password
           - name: LOG_LEVEL
             value: debug
+          - name: CONTROLLER_TYPE # if you have Unifi Network Server running remotely
+            value: NETWORK_SERVER
         livenessProbe:
           httpGet:
             path: /healthz

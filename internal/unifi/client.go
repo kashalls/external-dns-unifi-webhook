@@ -82,8 +82,7 @@ func (c *httpClient) login() error {
 
 	// Print request details
 	log.Debug("Sending login request",
-		zap.String("URL", FormatUrl(loginPath, c.Config.Host)),
-		zap.String("body", string(jsonBody)))
+		zap.String("URL", FormatUrl(loginPath, c.Config.Host)))
 
 	// Perform the login request
 	resp, err := c.doRequest(

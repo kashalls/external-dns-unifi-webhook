@@ -173,22 +173,19 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		log.Debug("Updated CSRF token", zap.String("token", c.csrf))
 	}
 
-	log.Debug("Response received",
-		zap.String("method", method),
-		zap.String("path", path),
-		zap.Int("statusCode", resp.StatusCode))
+	log.Debug("recieved response", zap.String("method", method), zap.String("path", path), zap.Int("statusCode", resp.StatusCode))
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
-		log.Debug("Received 401 Unauthorized, attempting to re-login")
+		log.Debug("received 401 unauthorized, attempting to re-login")
 		if err := c.login(); err != nil {
-			log.Error("Re-login failed", zap.Error(err))
+			log.Error("re-login failed", zap.Error(err))
 			return nil, err
 		}
 		// Update the headers with new CSRF token
 		c.setHeaders(req)
 		// Retry the request
-		log.Debug("Retrying request after re-login")
+		log.Debug("retrying request after re-login")
 		resp, err = c.Client.Do(req)
 		if err != nil {
 			log.Error("Retry request failed", zap.Error(err))
@@ -217,7 +214,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		nil,
 	)
 	if err != nil {
-		log.Error("Failed to get endpoints", zap.Error(err))
+		log.Error("failed to get endpoints", zap.Error(err))
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -228,10 +225,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debug("Retrieved records", zap.Int("count", len(records)))
-	for _, record := range records {
-		log.Debug("Record", zap.Any("record", record))
-	}
+	log.Debug("retrieved records", zap.Int("count", len(records)))
 
 	return records, nil
 }

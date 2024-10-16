@@ -109,50 +109,21 @@ func (c *httpClient) login() error {
 }
 
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debug("Do request", zap.String("method", method), zap.String("path", path))
-
-	// Convert body to bytes for logging and reuse
-	var bodyBytes []byte
-	if body != nil {
-		bodyBytes, _ = io.ReadAll(body)
-		body = bytes.NewReader(bodyBytes)
-		log.Debug("Request body", zap.String("body", string(bodyBytes)))
-	}
-
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
 		return nil, err
 	}
-	// Set the required headers
-	if body != nil {
-		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(bodyBytes)))
-	}
-	// Dynamically set the Host header
-	parsedURL, err := url.Parse(path)
-	if err != nil {
-		return nil, err
-	}
-	req.Host = parsedURL.Host
 
 	c.setHeaders(req)
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		log.Error("Request failed", zap.Error(err))
 		return nil, err
 	}
 
-	// Log response body
-	respBody, _ := io.ReadAll(resp.Body)
-	log.Debug("response body", zap.String("body", string(respBody)))
-	resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore the response body for further use
-
 	if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
 		c.csrf = csrf
-		log.Debug("Updated CSRF token", zap.String("token", c.csrf))
 	}
-
-	log.Debug("recieved response", zap.String("method", method), zap.String("path", path), zap.Int("statusCode", resp.StatusCode))
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -183,8 +154,6 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
-	log.Debug("Getting endpoints")
-
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),

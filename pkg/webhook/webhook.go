@@ -97,7 +97,6 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestLog(r).Debug("requesting records")
 	ctx := r.Context()
 	records, err := p.provider.Records(ctx)
 	if err != nil {
@@ -106,7 +105,6 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestLog(r).With(zap.Int("count", len(records))).Debug("returning records")
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
 	w.Header().Set(varyHeader, contentTypeHeader)
 	err = json.NewEncoder(w).Encode(records)

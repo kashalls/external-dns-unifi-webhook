@@ -145,6 +145,7 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 		zap.Int("delete", len(changes.Delete)),
 	).Debug("requesting apply changes")
 	if err := p.provider.ApplyChanges(ctx, &changes); err != nil {
+		requestLog(r).Error("error when applying changes", zap.Error(err))
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusInternalServerError)
 		return

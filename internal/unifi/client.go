@@ -279,10 +279,8 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
-	log.Debug("Deleting endpoint", zap.String("dnsName", endpoint.DNSName))
 	lookup, err := c.lookupIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
-		log.Error("Failed to lookup identifier", zap.Error(err))
 		return err
 	}
 
@@ -292,7 +290,6 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 	}
 
 	deleteURL := FormatUrl(recordPath, c.Config.Host, c.Config.Site, lookup.ID)
-	log.Debug("Deleting record", zap.String("url", deleteURL))
 
 	_, err = c.doRequest(
 		http.MethodDelete,
@@ -303,7 +300,6 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
-	log.Debug("Successfully deleted endpoint", zap.String("dnsName", endpoint.DNSName))
 	return nil
 }
 
@@ -312,7 +308,6 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 	log.Debug("Looking up identifier", zap.String("key", key), zap.String("recordType", recordType))
 	records, err := c.GetEndpoints()
 	if err != nil {
-		log.Error("Failed to get endpoints", zap.Error(err))
 		return nil, err
 	}
 
@@ -323,13 +318,11 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 		}
 	}
 
-	log.Debug("Record not found", zap.String("key", key), zap.String("recordType", recordType))
-	return nil, fmt.Errorf("record not found")
+	return nil, fmt.Errorf("record not found: %s", key)
 }
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
-	log.Debug("Setting headers for request")
 	// Add the saved CSRF header.
 	req.Header.Set("X-CSRF-Token", c.csrf)
 	req.Header.Add("Accept", "application/json")

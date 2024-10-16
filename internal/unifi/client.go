@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"golang.org/x/net/publicsuffix"
@@ -252,14 +251,4 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	req.Header.Set("X-CSRF-Token", c.csrf)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
-
-	// Log the request URL and cookies
-	if c.Client.Jar != nil {
-		parsedURL, _ := url.Parse(req.URL.String())
-		cookies := c.Client.Jar.Cookies(parsedURL)
-
-		log.Debug("Request cookies", zap.String("url", req.URL.String()), zap.Int("cookieCount", len(cookies)))
-	} else {
-		log.Debug("No cookie jar available", zap.String("url", req.URL.String()))
-	}
 }

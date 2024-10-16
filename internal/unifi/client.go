@@ -25,10 +25,10 @@ type httpClient struct {
 }
 
 const (
-	unifiLoginPathUDM         = "%s/api/auth/login"
-	unifiLoginPathNetworkApp  = "%s/api/login"
-	unifiRecordPathUDM        = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
-	unifiRecordPathNetworkApp = "%s/v2/api/site/%s/static-dns/%s"
+	unifiLoginPathGateway         = "%s/api/auth/login"
+	unifiLoginPathStandalone  = "%s/api/login"
+	unifiRecordPathGateway        = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
+	unifiRecordPathStandalone = "%s/v2/api/site/%s/static-dns/%s"
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
@@ -64,9 +64,9 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
-	loginPath := unifiLoginPathUDM
+	loginPath := unifiLoginPathGateway
 	if c.Config.ControllerType == "standalone" {
-		loginPath = unifiLoginPathNetworkApp
+		loginPath = unifiLoginPathStandalone
 	}
 	log.Debug("Logging in", zap.String("loginPath", loginPath))
 
@@ -217,9 +217,9 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	log.Debug("Getting endpoints")
-	recordPath := unifiRecordPathUDM
+	recordPath := unifiRecordPathGateway
 	if c.Config.ControllerType == "standalone" {
-		recordPath = unifiRecordPathNetworkApp
+		recordPath = unifiRecordPathStandalone
 	}
 
 	resp, err := c.doRequest(
@@ -250,9 +250,9 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 	log.Debug("Creating endpoint", zap.String("dnsName", endpoint.DNSName))
-	recordPath := unifiRecordPathUDM
+	recordPath := unifiRecordPathGateway
 	if c.Config.ControllerType == "standalone" {
-		recordPath = unifiRecordPathNetworkApp
+		recordPath = unifiRecordPathStandalone
 	}
 
 	record := DNSRecord{
@@ -301,9 +301,9 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
-	recordPath := unifiRecordPathUDM
+	recordPath := unifiRecordPathGateway
 	if c.Config.ControllerType == "standalone" {
-		recordPath = unifiRecordPathNetworkApp
+		recordPath = unifiRecordPathStandalone
 	}
 
 	deleteURL := FormatUrl(recordPath, c.Config.Host, c.Config.Site, lookup.ID)

@@ -17,17 +17,23 @@ import (
 	"go.uber.org/zap"
 )
 
+type ClientURLs struct {
+	Login   string
+	Records string
+}
+
 // httpClient is the DNS provider client.
 type httpClient struct {
 	*Config
 	*http.Client
-	csrf string
+	csrf       string
+	ClientURLs *ClientURLs
 }
 
 const (
-	unifiLoginPathGateway         = "%s/api/auth/login"
+	unifiLoginPathGateway     = "%s/api/auth/login"
 	unifiLoginPathStandalone  = "%s/api/login"
-	unifiRecordPathGateway        = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
+	unifiRecordPathGateway    = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 	unifiRecordPathStandalone = "%s/v2/api/site/%s/static-dns/%s"
 )
 
@@ -49,6 +55,15 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 			},
 			Jar: jar,
 		},
+		ClientURLs: &ClientURLs{
+			Login:   unifiLoginPathGateway,
+			Records: unifiRecordPathGateway,
+		},
+	}
+
+	if config.ControllerType == "standalone" {
+		client.ClientURLs.Login = unifiLoginPathStandalone
+		client.ClientURLs.Records = unifiRecordPathStandalone
 	}
 
 	if err := client.login(); err != nil {
@@ -60,11 +75,6 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
-	loginPath := unifiLoginPathGateway
-	if c.Config.ControllerType == "standalone" {
-		loginPath = unifiLoginPathStandalone
-	}
-
 	jsonBody, err := json.Marshal(Login{
 		Username: c.Config.User,
 		Password: c.Config.Password,
@@ -77,7 +87,7 @@ func (c *httpClient) login() error {
 	// Perform the login request
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(loginPath, c.Config.Host),
+		FormatUrl(c.ClientURLs.Login, c.Config.Host),
 		bytes.NewBuffer(jsonBody),
 	)
 	if err != nil {
@@ -202,14 +212,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	log.Debug("Getting endpoints")
-	recordPath := unifiRecordPathGateway
-	if c.Config.ControllerType == "standalone" {
-		recordPath = unifiRecordPathStandalone
-	}
 
 	resp, err := c.doRequest(
 		http.MethodGet,
-		FormatUrl(recordPath, c.Config.Host, c.Config.Site),
+		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
 		nil,
 	)
 	if err != nil {
@@ -234,11 +240,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-	log.Debug("Creating endpoint", zap.String("dnsName", endpoint.DNSName))
-	recordPath := unifiRecordPathGateway
-	if c.Config.ControllerType == "standalone" {
-		recordPath = unifiRecordPathStandalone
-	}
+	log.Debug("Creating endpoint", zap.String("key", endpoint.DNSName))
 
 	record := DNSRecord{
 		Enabled:    true,
@@ -257,7 +259,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(recordPath, c.Config.Host, c.Config.Site),
+		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
@@ -284,12 +286,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
-	recordPath := unifiRecordPathGateway
-	if c.Config.ControllerType == "standalone" {
-		recordPath = unifiRecordPathStandalone
-	}
-
-	deleteURL := FormatUrl(recordPath, c.Config.Host, c.Config.Site, lookup.ID)
+	deleteURL := FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site, lookup.ID)
 
 	_, err = c.doRequest(
 		http.MethodDelete,

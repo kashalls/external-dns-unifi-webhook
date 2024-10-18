@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 
 	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
 	"golang.org/x/net/publicsuffix"
@@ -17,16 +16,24 @@ import (
 	"go.uber.org/zap"
 )
 
+type ClientURLs struct {
+	Login   string
+	Records string
+}
+
 // httpClient is the DNS provider client.
 type httpClient struct {
 	*Config
 	*http.Client
-	csrf string
+	csrf       string
+	ClientURLs *ClientURLs
 }
 
 const (
-	unifiLoginPath  = "%s/api/auth/login"
-	unifiRecordPath = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
+	unifiLoginPath          = "%s/api/auth/login"
+	unifiLoginPathExternal  = "%s/api/login"
+	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
+	unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
@@ -45,6 +52,15 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 			},
 			Jar: jar,
 		},
+		ClientURLs: &ClientURLs{
+			Login:   unifiLoginPath,
+			Records: unifiRecordPath,
+		},
+	}
+
+	if config.ExternalController {
+		client.ClientURLs.Login = unifiLoginPathExternal
+		client.ClientURLs.Records = unifiRecordPathExternal
 	}
 
 	if err := client.login(); err != nil {
@@ -68,7 +84,7 @@ func (c *httpClient) login() error {
 	// Perform the login request
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(unifiLoginPath, c.Config.Host),
+		FormatUrl(c.ClientURLs.Login, c.Config.Host),
 		bytes.NewBuffer(jsonBody),
 	)
 	if err != nil {
@@ -88,14 +104,10 @@ func (c *httpClient) login() error {
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")
 	}
-
 	return nil
 }
 
-// doRequest makes an HTTP request to the UniFi controller.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debug(fmt.Sprintf("making %s request to %s", method, path))
-
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
 		return nil, err
@@ -112,19 +124,22 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		c.csrf = csrf
 	}
 
-	log.Debug(fmt.Sprintf("response code from %s request to %s: %d", method, path, resp.StatusCode))
-
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
-		log.Debug("Received 401 Unauthorized, re-login required")
+		log.Debug("received 401 unauthorized, attempting to re-login")
 		if err := c.login(); err != nil {
+			log.Error("re-login failed", zap.Error(err))
 			return nil, err
 		}
 		// Update the headers with new CSRF token
 		c.setHeaders(req)
+
 		// Retry the request
+		log.Debug("retrying request after re-login")
+
 		resp, err = c.Client.Do(req)
 		if err != nil {
+			log.Error("Retry request failed", zap.Error(err))
 			return nil, err
 		}
 	}
@@ -140,7 +155,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	resp, err := c.doRequest(
 		http.MethodGet,
-		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
+		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
 		nil,
 	)
 	if err != nil {
@@ -150,29 +165,33 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	var records []DNSRecord
 	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
+		log.Error("Failed to decode response", zap.Error(err))
 		return nil, err
 	}
 
-	log.Debug(fmt.Sprintf("retrieved records: %+v", records))
+	log.Debug("retrieved records", zap.Int("count", len(records)))
 
 	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-	jsonBody, err := json.Marshal(DNSRecord{
+	record := DNSRecord{
 		Enabled:    true,
 		Key:        endpoint.DNSName,
 		RecordType: endpoint.RecordType,
 		TTL:        endpoint.RecordTTL,
 		Value:      endpoint.Targets[0],
-	})
+	}
+
+	jsonBody, err := json.Marshal(record)
 	if err != nil {
 		return nil, err
 	}
+
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site),
+		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
@@ -180,14 +199,12 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	}
 	defer resp.Body.Close()
 
-	var record DNSRecord
-	if err = json.NewDecoder(resp.Body).Decode(&record); err != nil {
+	var createdRecord DNSRecord
+	if err = json.NewDecoder(resp.Body).Decode(&createdRecord); err != nil {
 		return nil, err
 	}
 
-	log.Debug(fmt.Sprintf("created record: %+v", record))
-
-	return &record, nil
+	return &createdRecord, nil
 }
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
@@ -197,11 +214,14 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
-	if _, err = c.doRequest(
+	deleteURL := FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site, lookup.ID)
+
+	_, err = c.doRequest(
 		http.MethodDelete,
-		FormatUrl(unifiRecordPath, c.Config.Host, c.Config.Site, lookup.ID),
+		deleteURL,
 		nil,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -210,6 +230,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 
 // lookupIdentifier finds the ID of a DNS record in the UniFi controller.
 func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error) {
+	log.Debug("Looking up identifier", zap.String("key", key), zap.String("recordType", recordType))
 	records, err := c.GetEndpoints()
 	if err != nil {
 		return nil, err
@@ -221,7 +242,7 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 		}
 	}
 
-	return nil, err
+	return nil, fmt.Errorf("record not found: %s", key)
 }
 
 // setHeaders sets the headers for the HTTP request.
@@ -230,12 +251,4 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	req.Header.Set("X-CSRF-Token", c.csrf)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
-
-	// Log the request URL and cookies
-	if c.Client.Jar != nil {
-		parsedURL, _ := url.Parse(req.URL.String())
-		log.Debug(fmt.Sprintf("Requesting %s cookies: %d", req.URL, len(c.Client.Jar.Cookies(parsedURL))))
-	} else {
-		log.Debug(fmt.Sprintf("Requesting %s", req.URL))
-	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
+	"go.uber.org/zap"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
@@ -62,13 +64,19 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
+		log.Debug("deleting endpoint", zap.String("name", endpoint.DNSName), zap.String("type", endpoint.RecordType))
+
 		if err := p.client.DeleteEndpoint(endpoint); err != nil {
+			log.Error("failed to delete endpoint", zap.String("name", endpoint.DNSName), zap.String("type", endpoint.RecordType), zap.Error(err))
 			return err
 		}
 	}
 
 	for _, endpoint := range append(changes.Create, changes.UpdateNew...) {
+		log.Debug("creating endpoint", zap.String("name", endpoint.DNSName), zap.String("type", endpoint.RecordType))
+
 		if _, err := p.client.CreateEndpoint(endpoint); err != nil {
+			log.Error("failed to create endpoint", zap.String("name", endpoint.DNSName), zap.String("type", endpoint.RecordType), zap.Error(err))
 			return err
 		}
 	}

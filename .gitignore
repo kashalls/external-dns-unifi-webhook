@@ -3,3 +3,4 @@
 ###
 .private/
 external-dns-unifi-webhook
+.DS_Store

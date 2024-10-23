@@ -36,7 +36,7 @@ func Init() {
 
 	// Build the logger
 	var err error
-	logger, err = config.Build()
+	logger, err = config.Build(zap.AddCallerSkip(1))
 	if err != nil {
 		panic(err)
 	}
@@ -46,19 +46,19 @@ func Init() {
 }
 
 func Info(message string, fields ...zap.Field) {
-    logger.Info(message, fields...)
+	logger.Info(message, fields...)
 }
 
 func Debug(message string, fields ...zap.Field) {
-    logger.Debug(message, fields...)
+	logger.Debug(message, fields...)
 }
 
 func Error(message string, fields ...zap.Field) {
-    logger.Error(message, fields...)
+	logger.Error(message, fields...)
 }
 
 func Fatal(message string, fields ...zap.Field) {
-    logger.Fatal(message, fields...)
+	logger.Fatal(message, fields...)
 }
 
 func With(fields ...zap.Field) *zap.Logger {

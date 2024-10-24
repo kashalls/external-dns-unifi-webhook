@@ -175,6 +175,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
+// Future Kash: We don't support multiple targets per dns name and need to effectively create x records.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 	record := DNSRecord{
 		Enabled:    true,
@@ -182,6 +183,20 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		RecordType: endpoint.RecordType,
 		TTL:        endpoint.RecordTTL,
 		Value:      endpoint.Targets[0],
+	}
+
+	if endpoint.RecordType == "SRV" {
+		srvdata, err := ParseSRVContent(endpoint.Targets[0])
+		if err != nil {
+			return nil, err
+		}
+
+		record.Priority = srvdata.Priority
+		record.Weight = srvdata.Weight
+		record.Port = srvdata.Port
+		record.Value = srvdata.Target
+
+		log.With(zap.Any("endpoint", endpoint), zap.Any("record", record)).Debug("Trying to create an SRV record")
 	}
 
 	jsonBody, err := json.Marshal(record)
@@ -195,6 +210,12 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr == nil {
+			log.With(
+				zap.Any("response_body", string(body)),
+			).Debug("failed to create unifi record, unifi replied back")
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()

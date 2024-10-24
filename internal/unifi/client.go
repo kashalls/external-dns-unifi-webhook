@@ -183,6 +183,9 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		TTL:        endpoint.RecordTTL,
 		Value:      endpoint.Targets[0],
 	}
+	if endpoint.RecordType == "SRV" {
+		log.With(zap.Any("endpoint", endpoint), zap.Any("record", record)).Debug("Trying to create an SRV record")
+	}
 
 	jsonBody, err := json.Marshal(record)
 	if err != nil {

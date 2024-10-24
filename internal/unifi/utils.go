@@ -47,7 +47,7 @@ func ParseSRVContent(target string) (*SRVData, error) {
 		zap.Any("priority", priority),
 		zap.Any("weight", weight),
 		zap.Any("port", port),
-		zap.Any("target", parts[5]),
+		zap.Any("target", parts[3]),
 	).Debug("parsed srv content")
 
 	// Target can be an IP or a hostname (which is essentially a string)

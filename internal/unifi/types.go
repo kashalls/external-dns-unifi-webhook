@@ -31,3 +31,10 @@ type DNSRecord struct {
 	Value      string       `json:"value"`
 	Weight     int          `json:"weight,omitempty"`
 }
+
+type SRVData struct {
+	Priority int    `json:"priority,omitempty"`
+	Weight   int    `json:"weight,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	Target   string `json:"target,omitempty"`
+}

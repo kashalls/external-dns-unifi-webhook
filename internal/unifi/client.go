@@ -210,6 +210,12 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr == nil {
+			log.With(
+				zap.Any("response_body", string(body)),
+			).Debug("failed to create unifi record, unifi replied back")
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()

@@ -34,3 +34,9 @@ type DNSRecord struct {
 	Weight     *int          `json:"weight,omitempty"`
 }
 
+type UnifiErrorResponse struct {
+	Code      string                 `json:"code"`
+	Details   map[string]interface{} `json:"details"`
+	ErrorCode int                    `json:"errorCode"`
+	Message   string                 `json:"message"`
+}

@@ -144,8 +144,19 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		}
 	}
 
+	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
+		body, bodyErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if bodyErr != nil {
+			return nil, bodyErr
+		}
+
+		var apiError UnifiErrorResponse
+		if err := json.Unmarshal(body, &apiError); err != nil {
+			return nil, fmt.Errorf("failed to decode json: %w", err)
+		}
+
+		return nil, fmt.Errorf("%s request to %s returned %d: %s", method, path, resp.StatusCode, apiError.Message)
 	}
 
 	return resp, nil
@@ -224,13 +235,6 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
-		// The request failed, its likely a record validation issue. If we can't parse the body, oh well.
-		body, readErr := io.ReadAll(resp.Body)
-		if readErr == nil {
-			log.With(
-				zap.Any("response_body", string(body)),
-			).Debug("failed to create unifi record, unifi replied back")
-		}
 		return nil, err
 	}
 	defer resp.Body.Close()

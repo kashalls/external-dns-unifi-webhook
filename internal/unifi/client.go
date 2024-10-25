@@ -191,9 +191,9 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		).Debug("GetEndpoints() unmodified srv record")
 		// Modify the Target for SRV records
 		records[i].Value = fmt.Sprintf("%d %d %d %s",
-			record.Priority,
-			record.Weight,
-			record.Port,
+			*record.Priority,
+			*record.Weight,
+			*record.Port,
 			record.Value,
 		)
 		records[i].Priority = nil

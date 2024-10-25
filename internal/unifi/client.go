@@ -181,8 +181,8 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 			record.Port,
 			record.Value,
 		)
-		records[i].Priority = 0
-		records[i].Weight = 0
+		records[i].Priority = nil
+		records[i].Weight = nil
 		records[i].Port = 0
 	}
 
@@ -203,22 +203,8 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	}
 
 	if endpoint.RecordType == "SRV" {
-		var srvdata SRVData
-		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", &srvdata.Priority, &srvdata.Weight, &srvdata.Port, &srvdata.Target); err != nil {
+		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", &record.Priority, &record.Weight, &record.Port, &record.Value); err != nil {
 			return nil, err
-		}
-
-		record.Priority = srvdata.Priority
-		record.Weight = srvdata.Weight
-		record.Port = srvdata.Port
-		record.Value = srvdata.Target
-
-		// Todo: SRV Data Priority and Weight are supposed to be 0+ but because we use omitempty for optional properties it counts 0 as nil. So we set it to 1, as UniFi needs this property to create the record.
-		if record.Priority == 0 {
-			record.Priority = 1
-		}
-		if record.Weight == 0 {
-			record.Weight = 1
 		}
 
 		log.With(

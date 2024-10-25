@@ -1,6 +1,8 @@
 package unifi
 
-import "sigs.k8s.io/external-dns/endpoint"
+import (
+	"sigs.k8s.io/external-dns/endpoint"
+)
 
 // Config represents the configuration for the UniFi API.
 type Config struct {
@@ -25,16 +27,10 @@ type DNSRecord struct {
 	Enabled    bool         `json:"enabled,omitempty"`
 	Key        string       `json:"key"`
 	Port       int          `json:"port,omitempty"`
-	Priority   int          `json:"priority,omitempty"`
+	Priority   *int          `json:"priority,omitempty"`
 	RecordType string       `json:"record_type"`
 	TTL        endpoint.TTL `json:"ttl,omitempty"`
 	Value      string       `json:"value"`
-	Weight     int          `json:"weight,omitempty"`
+	Weight     *int          `json:"weight,omitempty"`
 }
 
-type SRVData struct {
-	Priority int    `json:"priority,omitempty"`
-	Weight   int    `json:"weight,omitempty"`
-	Port     int    `json:"port,omitempty"`
-	Target   string `json:"target,omitempty"`
-}

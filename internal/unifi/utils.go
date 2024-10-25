@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"go.uber.org/zap"
 )
 

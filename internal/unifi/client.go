@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"golang.org/x/net/publicsuffix"
 	"sigs.k8s.io/external-dns/endpoint"
 
@@ -169,6 +169,22 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		return nil, err
 	}
 
+	// Loop through records to modify SRV type
+	for i, record := range records {
+		if record.RecordType == "SRV" {
+			// Modify the Target for SRV records
+			records[i].Value = fmt.Sprintf("%d %d %d %s",
+				record.Priority,
+				record.Weight,
+				record.Port,
+				record.Value,
+			)
+			records[i].Priority = 0
+			records[i].Weight = 0
+			records[i].Port = 0
+		}
+	}
+
 	log.Debug("retrieved records", zap.Int("count", len(records)))
 
 	return records, nil
@@ -195,6 +211,13 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		record.Weight = srvdata.Weight
 		record.Port = srvdata.Port
 		record.Value = srvdata.Target
+
+		if record.Priority == 0 {
+			record.Priority = 1
+		}
+		if record.Weight == 0 {
+			record.Weight = 1
+		}
 
 		log.With(zap.Any("endpoint", endpoint), zap.Any("record", record)).Debug("Trying to create an SRV record")
 	}

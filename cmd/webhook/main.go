@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/dnsprovider"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/server"
-	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/dnsprovider"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/server"
+	"github.com/kashalls/external-dns-unifi-webhook/pkg/webhook"
 
 	"go.uber.org/zap"
 )

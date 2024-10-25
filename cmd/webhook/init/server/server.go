@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-provider-unifi/pkg/webhook"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/pkg/webhook"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"go.uber.org/zap"

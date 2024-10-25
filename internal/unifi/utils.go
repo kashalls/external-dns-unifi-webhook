@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"go.uber.org/zap"
 )
 
 // FormatUrl formats a URL with the given parameters.
@@ -42,16 +39,6 @@ func ParseSRVContent(target string) (*SRVData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("srv record contains invalid port: %s", parts[2])
 	}
-
-	log.With(
-		zap.Any("priority", priority),
-		zap.Any("weight", weight),
-		zap.Any("port", port),
-		zap.Any("target", parts[3]),
-		zap.Any("priority_pre", parts[0]),
-		zap.Any("weight_pre", parts[1]),
-		zap.Any("port_pre", parts[2]),
-	).Debug("parsed srv content")
 
 	// Target can be an IP or a hostname (which is essentially a string)
 	return &SRVData{

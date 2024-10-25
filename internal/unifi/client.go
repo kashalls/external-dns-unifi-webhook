@@ -194,7 +194,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		)
 		records[i].Priority = nil
 		records[i].Weight = nil
-		records[i].Port = 0
+		records[i].Port = nil
 	}
 
 	log.Debug("retrieved records", zap.Int("count", len(records)))
@@ -214,7 +214,10 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	}
 
 	if endpoint.RecordType == "SRV" {
-		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", &record.Priority, &record.Weight, &record.Port, &record.Value); err != nil {
+		record.Priority = new(int)
+		record.Weight = new(int)
+		record.Port = new(int)
+		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
 			return nil, err
 		}
 

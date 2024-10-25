@@ -203,8 +203,8 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 	}
 
 	if endpoint.RecordType == "SRV" {
-		srvdata, err := ParseSRVContent(endpoint.Targets[0])
-		if err != nil {
+		var srvdata SRVData
+		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", &srvdata.Priority, &srvdata.Weight, &srvdata.Port, &srvdata.Target); err != nil {
 			return nil, err
 		}
 
@@ -213,6 +213,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		record.Port = srvdata.Port
 		record.Value = srvdata.Target
 
+		// Todo: SRV Data Priority and Weight are supposed to be 0+ but because we use omitempty for optional properties it counts 0 as nil. So we set it to 1, as UniFi needs this property to create the record.
 		if record.Priority == 0 {
 			record.Priority = 1
 		}
@@ -220,7 +221,10 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 			record.Weight = 1
 		}
 
-		log.With(zap.Any("endpoint", endpoint), zap.Any("record", record)).Debug("Trying to create an SRV record")
+		log.With(
+			zap.Any("endpoint", endpoint),
+			zap.Any("record", record),
+		).Debug("Trying to create an SRV record")
 	}
 
 	jsonBody, err := json.Marshal(record)
@@ -234,6 +238,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
+		// The request failed, its likely a record validation issue. If we can't parse the body, oh well.
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr == nil {
 			log.With(

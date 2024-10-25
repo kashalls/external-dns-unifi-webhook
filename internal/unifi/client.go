@@ -185,6 +185,10 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		if record.RecordType != "SRV" {
 			continue
 		}
+
+		log.With(
+			zap.Any("record", records[i]),
+		).Debug("GetEndpoints() unmodified srv record")
 		// Modify the Target for SRV records
 		records[i].Value = fmt.Sprintf("%d %d %d %s",
 			record.Priority,
@@ -195,10 +199,13 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		records[i].Priority = nil
 		records[i].Weight = nil
 		records[i].Port = nil
+
+		log.With(
+			zap.Any("record", records[i]),
+		).Debug("GetEndpoints() modified srv record")
 	}
 
 	log.Debug("retrieved records", zap.Int("count", len(records)))
-
 	return records, nil
 }
 

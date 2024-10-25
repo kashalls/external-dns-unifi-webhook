@@ -171,18 +171,19 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	// Loop through records to modify SRV type
 	for i, record := range records {
-		if record.RecordType == "SRV" {
-			// Modify the Target for SRV records
-			records[i].Value = fmt.Sprintf("%d %d %d %s",
-				record.Priority,
-				record.Weight,
-				record.Port,
-				record.Value,
-			)
-			records[i].Priority = 0
-			records[i].Weight = 0
-			records[i].Port = 0
+		if record.RecordType != "SRV" {
+			continue
 		}
+		// Modify the Target for SRV records
+		records[i].Value = fmt.Sprintf("%d %d %d %s",
+			record.Priority,
+			record.Weight,
+			record.Port,
+			record.Value,
+		)
+		records[i].Priority = 0
+		records[i].Weight = 0
+		records[i].Port = 0
 	}
 
 	log.Debug("retrieved records", zap.Int("count", len(records)))

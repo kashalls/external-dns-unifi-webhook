@@ -186,9 +186,6 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 			continue
 		}
 
-		log.With(
-			zap.Any("record", records[i]),
-		).Debug("GetEndpoints() unmodified srv record")
 		// Modify the Target for SRV records
 		records[i].Value = fmt.Sprintf("%d %d %d %s",
 			*record.Priority,
@@ -199,10 +196,6 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		records[i].Priority = nil
 		records[i].Weight = nil
 		records[i].Port = nil
-
-		log.With(
-			zap.Any("record", records[i]),
-		).Debug("GetEndpoints() modified srv record")
 	}
 
 	log.Debug("retrieved records", zap.Int("count", len(records)))
@@ -224,14 +217,10 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		record.Priority = new(int)
 		record.Weight = new(int)
 		record.Port = new(int)
+
 		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
 			return nil, err
 		}
-
-		log.With(
-			zap.Any("endpoint", endpoint),
-			zap.Any("record", record),
-		).Debug("Trying to create an SRV record")
 	}
 
 	jsonBody, err := json.Marshal(record)

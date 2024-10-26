@@ -1,8 +1,6 @@
 package unifi
 
-import (
-	"strings"
-)
+import "strings"
 
 // FormatUrl formats a URL with the given parameters.
 func FormatUrl(path string, params ...string) string {

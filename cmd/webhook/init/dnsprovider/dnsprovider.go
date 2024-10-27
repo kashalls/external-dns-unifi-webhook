@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-provider-unifi/internal/unifi"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/internal/unifi"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/provider"
 )

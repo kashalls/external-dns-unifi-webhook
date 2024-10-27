@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"golang.org/x/net/publicsuffix"
 	"sigs.k8s.io/external-dns/endpoint"
 
@@ -144,8 +144,19 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		}
 	}
 
+	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
+		body, bodyErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if bodyErr != nil {
+			return nil, bodyErr
+		}
+
+		var apiError UnifiErrorResponse
+		if err := json.Unmarshal(body, &apiError); err != nil {
+			return nil, fmt.Errorf("failed to decode json: %w", err)
+		}
+
+		return nil, fmt.Errorf("%s request to %s returned %d: %s", method, path, resp.StatusCode, apiError.Message)
 	}
 
 	return resp, nil
@@ -169,12 +180,30 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debug("retrieved records", zap.Int("count", len(records)))
+	// Loop through records to modify SRV type
+	for i, record := range records {
+		if record.RecordType != "SRV" {
+			continue
+		}
 
+		// Modify the Target for SRV records
+		records[i].Value = fmt.Sprintf("%d %d %d %s",
+			*record.Priority,
+			*record.Weight,
+			*record.Port,
+			record.Value,
+		)
+		records[i].Priority = nil
+		records[i].Weight = nil
+		records[i].Port = nil
+	}
+
+	log.Debug("retrieved records", zap.Int("count", len(records)))
 	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
+// Future Kash: We don't support multiple targets per dns name and need to effectively create x records.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 	record := DNSRecord{
 		Enabled:    true,
@@ -182,6 +211,16 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		RecordType: endpoint.RecordType,
 		TTL:        endpoint.RecordTTL,
 		Value:      endpoint.Targets[0],
+	}
+
+	if endpoint.RecordType == "SRV" {
+		record.Priority = new(int)
+		record.Weight = new(int)
+		record.Port = new(int)
+
+		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
+			return nil, err
+		}
 	}
 
 	jsonBody, err := json.Marshal(record)

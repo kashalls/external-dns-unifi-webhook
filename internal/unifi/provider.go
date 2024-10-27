@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"go.uber.org/zap"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"

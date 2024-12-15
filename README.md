@@ -46,7 +46,7 @@
           - name: UNIFI_HOST
             value: https://192.168.1.1 # replace with the address to your UniFi router/controller
           - name: UNIFI_EXTERNAL_CONTROLLER
-            value: false
+            value: "false"
           - name: UNIFI_USER
             valueFrom:
               secretKeyRef:

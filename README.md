@@ -90,15 +90,17 @@
 
 ### Unifi Controller Configuration
 
-| Environment Variable        | Description                                                         | Default Value |
-|-----------------------------|---------------------------------------------------------------------|---------------|
-| `UNIFI_USER`                | Username for the Unifi Controller (must be provided).               | N/A           |
-| `UNIFI_SKIP_TLS_VERIFY`     | Whether to skip TLS verification (true or false).                   | `true`        |
-| `UNIFI_SITE`                | Unifi Site Identifier (used in multi-site installations)            | `default`     |
-| `UNIFI_PASS`                | Password for the Unifi Controller (must be provided).               | N/A           |
-| `UNIFI_HOST`                | Host of the Unifi Controller (must be provided).                    | N/A           |
-| `UNIFI_EXTERNAL_CONTROLLER` | Whether your controller is supported by official Ubiquiti hardware. | `false`       |
-| `LOG_LEVEL`                 | Change the verbosity of logs (used when making a bug report)        | `info`        |
+| Environment Variable         | Description                                                  | Default Value |
+|------------------------------|--------------------------------------------------------------|---------------|
+| `UNIFI_USER`                 | Username for the Unifi Controller (must be provided).        | N/A           |
+| `UNIFI_SKIP_TLS_VERIFY`      | Whether to skip TLS verification (true or false).            | `true`        |
+| `UNIFI_SITE`                 | Unifi Site Identifier (used in multi-site installations)     | `default`     |
+| `UNIFI_PASS`                 | Password for the Unifi Controller (must be provided).        | N/A           |
+| `UNIFI_HOST`                 | Host of the Unifi Controller (must be provided).             | N/A           |
+| `UNIFI_EXTERNAL_CONTROLLER`* | Toggles support for non-UniFi Hardware                       | `false`       |
+| `LOG_LEVEL`                  | Change the verbosity of logs (used when making a bug report) | `info`        |
+
+*`UNIFI_EXTERNAL_CONTROLLER` is used to toggle between two versions of the Network Controller API. If you are running the UniFi software outside of UniFi's official hardware (e.g., Cloud Key or Dream Machine), you'll need to set `UNIFI_EXTERNAL_CONTROLLER` to `true`
 
 ### Server Configuration
 

@@ -67,6 +67,8 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		return client, nil
 	}
 
+	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
+
 	if err := client.login(); err != nil {
 		return nil, err
 	}
@@ -124,13 +126,13 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		return nil, err
 	}
 
-	if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
-		c.csrf = csrf
-	}
-
-	// If the status code is 401, re-login and retry the request
-	if resp.StatusCode == http.StatusUnauthorized {
-		if c.Config.ApiKey == "" {
+	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
+	if c.Config.User != "" && c.Config.Password != "" {
+		if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
+			c.csrf = csrf
+		}
+		// If the status code is 401, re-login and retry the request
+		if resp.StatusCode == http.StatusUnauthorized {
 			log.Debug("received 401 unauthorized, attempting to re-login")
 			if err := c.login(); err != nil {
 				log.Error("re-login failed", zap.Error(err))
@@ -147,8 +149,6 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 				log.Error("Retry request failed", zap.Error(err))
 				return nil, err
 			}
-		} else {
-			log.Error("recieved 401 unauthorized, cannot attempt request again")
 		}
 	}
 

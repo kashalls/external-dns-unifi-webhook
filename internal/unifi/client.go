@@ -58,9 +58,13 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		},
 	}
 
-	if config.ExternalController {
+	if client.Config.ExternalController {
 		client.ClientURLs.Login = unifiLoginPathExternal
 		client.ClientURLs.Records = unifiRecordPathExternal
+	}
+
+	if client.Config.ApiKey != "" {
+		return client, nil
 	}
 
 	if err := client.login(); err != nil {
@@ -126,21 +130,25 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	// If the status code is 401, re-login and retry the request
 	if resp.StatusCode == http.StatusUnauthorized {
-		log.Debug("received 401 unauthorized, attempting to re-login")
-		if err := c.login(); err != nil {
-			log.Error("re-login failed", zap.Error(err))
-			return nil, err
-		}
-		// Update the headers with new CSRF token
-		c.setHeaders(req)
+		if c.Config.ApiKey == "" {
+			log.Debug("received 401 unauthorized, attempting to re-login")
+			if err := c.login(); err != nil {
+				log.Error("re-login failed", zap.Error(err))
+				return nil, err
+			}
+			// Update the headers with new CSRF token
+			c.setHeaders(req)
 
-		// Retry the request
-		log.Debug("retrying request after re-login")
+			// Retry the request
+			log.Debug("retrying request after re-login")
 
-		resp, err = c.Client.Do(req)
-		if err != nil {
-			log.Error("Retry request failed", zap.Error(err))
-			return nil, err
+			resp, err = c.Client.Do(req)
+			if err != nil {
+				log.Error("Retry request failed", zap.Error(err))
+				return nil, err
+			}
+		} else {
+			log.Error("recieved 401 unauthorized, cannot attempt request again")
 		}
 	}
 
@@ -286,8 +294,12 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
-	// Add the saved CSRF header.
-	req.Header.Set("X-CSRF-Token", c.csrf)
+	if c.Config.ApiKey != "" {
+		req.Header.Set("X-API-KEY", c.Config.ApiKey)
+	} else {
+		req.Header.Set("X-CSRF-Token", c.csrf)
+	}
+
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 }

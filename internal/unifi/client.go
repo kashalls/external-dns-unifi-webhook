@@ -58,10 +58,16 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		},
 	}
 
-	if config.ExternalController {
+	if client.Config.ExternalController {
 		client.ClientURLs.Login = unifiLoginPathExternal
 		client.ClientURLs.Records = unifiRecordPathExternal
 	}
+
+	if client.Config.ApiKey != "" {
+		return client, nil
+	}
+
+	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
 
 	if err := client.login(); err != nil {
 		return nil, err
@@ -120,27 +126,29 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		return nil, err
 	}
 
-	if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
-		c.csrf = csrf
-	}
-
-	// If the status code is 401, re-login and retry the request
-	if resp.StatusCode == http.StatusUnauthorized {
-		log.Debug("received 401 unauthorized, attempting to re-login")
-		if err := c.login(); err != nil {
-			log.Error("re-login failed", zap.Error(err))
-			return nil, err
+	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
+	if c.Config.ApiKey == "" {
+		if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
+			c.csrf = csrf
 		}
-		// Update the headers with new CSRF token
-		c.setHeaders(req)
+		// If the status code is 401, re-login and retry the request
+		if resp.StatusCode == http.StatusUnauthorized {
+			log.Debug("received 401 unauthorized, attempting to re-login")
+			if err := c.login(); err != nil {
+				log.Error("re-login failed", zap.Error(err))
+				return nil, err
+			}
+			// Update the headers with new CSRF token
+			c.setHeaders(req)
 
-		// Retry the request
-		log.Debug("retrying request after re-login")
+			// Retry the request
+			log.Debug("retrying request after re-login")
 
-		resp, err = c.Client.Do(req)
-		if err != nil {
-			log.Error("Retry request failed", zap.Error(err))
-			return nil, err
+			resp, err = c.Client.Do(req)
+			if err != nil {
+				log.Error("Retry request failed", zap.Error(err))
+				return nil, err
+			}
 		}
 	}
 
@@ -198,7 +206,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		records[i].Port = nil
 	}
 
-	log.Debug("retrieved records", zap.Int("count", len(records)))
+	log.Debug("provider retrieved records", zap.Int("count", len(records)))
 	return records, nil
 }
 
@@ -243,6 +251,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		return nil, err
 	}
 
+	log.Debug("client created new record", zap.Any("record", &createdRecord))
 	return &createdRecord, nil
 }
 
@@ -264,6 +273,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
+	log.Debug("client deleted record", zap.Any("record", endpoint))
 	return nil
 }
 
@@ -286,8 +296,12 @@ func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
-	// Add the saved CSRF header.
-	req.Header.Set("X-CSRF-Token", c.csrf)
+	if c.Config.ApiKey != "" {
+		req.Header.Set("X-API-KEY", c.Config.ApiKey)
+	} else {
+		req.Header.Set("X-CSRF-Token", c.csrf)
+	}
+
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 }

@@ -175,7 +175,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Debug("adjust endpoints count", zap.Int("endpoints", len(pve)))
+	log.Debug("webhook adjust endpoints count", zap.Int("endpoints", len(pve)))
 	pve, err := p.provider.AdjustEndpoints(pve)
 	if err != nil {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)

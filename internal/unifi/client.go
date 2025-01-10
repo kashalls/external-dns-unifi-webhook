@@ -206,7 +206,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		records[i].Port = nil
 	}
 
-	log.Debug("retrieved records", zap.Int("count", len(records)))
+	log.Debug("provider retrieved records", zap.Int("count", len(records)))
 	return records, nil
 }
 
@@ -251,6 +251,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, er
 		return nil, err
 	}
 
+	log.Debug("client created new record", zap.Any("record", &createdRecord))
 	return &createdRecord, nil
 }
 
@@ -272,6 +273,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
+	log.Debug("client deleted record", zap.Any("record", endpoint))
 	return nil
 }
 

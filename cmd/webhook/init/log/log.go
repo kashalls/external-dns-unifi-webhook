@@ -13,10 +13,10 @@ func Init() {
 
 	// Set the log format
 	format := os.Getenv("LOG_FORMAT")
-	if format == "json" {
-		config.Encoding = "json"
-	} else {
+	if format == "test" {
 		config.Encoding = "console"
+	} else {
+		config.Encoding = "json"
 	}
 
 	// Set the log level

@@ -26,6 +26,7 @@
 <details>
 <summary>UniFi Api Key - Network v9.0.0+</summary>
 <br>
+
 1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
 
 2. Selecting your user to operate under. Whenever we modify the DNS Records, this user will show up under `System Log > Admin Activity`
@@ -48,6 +49,7 @@ data:
 <details>
 <summary>Username & Password (Deprecated)</summary>
 <br>
+
 1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
 
 2. Select `Create New Admin`.

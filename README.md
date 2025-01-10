@@ -21,17 +21,21 @@
 
 ## ⛵ Deployment
 
-1. Create a local user with a password in your UniFi OS, this user only needs read/write access to the UniFi Network appliance.
+1. Open your network settings menu and go to `Settings > Control Plane > Admins & Users`.
 
-2. Add the ExternalDNS Helm repository to your cluster.
+2a. If you are running `UniFi Network v9.0.0` or greater, you can create an `Api Key` by selecting your user, going under `Control Plane API Key` and clicking `Create New`. Set the name to whatever you want, and the expiration to whatever you feel like commiting to. You can set `UNIFI_KEY` to this key.
+
+2b. Otherwise, create a local user with a password in your UniFi OS, this user only needs read/write access to the UniFi Network appliance.
+
+3. Add the ExternalDNS Helm repository to your cluster.
 
     ```sh
     helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
     ```
 
-3. Create a Kubernetes secret called `external-dns-unifi-secret` that holds `username` and `password` with their respected values from step 1.
+4. Create a Kubernetes secret called `external-dns-unifi-secret` that holds `username` and `password` with their respected values from step 1.
 
-4. Create the helm values file, for example `external-dns-unifi-values.yaml`:
+5. Create the helm values file, for example `external-dns-unifi-values.yaml`:
 
     ```yaml
     fullnameOverride: external-dns-unifi
@@ -80,7 +84,7 @@
     domainFilters: ["example.com"] # replace with your domain
     ```
 
-5. Install the Helm chart
+6. Install the Helm chart
 
     ```sh
     helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values.yaml --version 1.14.3 -n external-dns
@@ -92,10 +96,11 @@
 
 | Environment Variable         | Description                                                  | Default Value |
 |------------------------------|--------------------------------------------------------------|---------------|
+| `UNIFI_KEY`                  | The local api key provided for your user                     | N/A           |
 | `UNIFI_USER`                 | Username for the Unifi Controller (must be provided).        | N/A           |
+| `UNIFI_PASS`                 | Password for the Unifi Controller (must be provided).        | N/A           |
 | `UNIFI_SKIP_TLS_VERIFY`      | Whether to skip TLS verification (true or false).            | `true`        |
 | `UNIFI_SITE`                 | Unifi Site Identifier (used in multi-site installations)     | `default`     |
-| `UNIFI_PASS`                 | Password for the Unifi Controller (must be provided).        | N/A           |
 | `UNIFI_HOST`                 | Host of the Unifi Controller (must be provided).             | N/A           |
 | `UNIFI_EXTERNAL_CONTROLLER`* | Toggles support for non-UniFi Hardware                       | `false`       |
 | `LOG_LEVEL`                  | Change the verbosity of logs (used when making a bug report) | `info`        |

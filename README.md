@@ -21,7 +21,7 @@
 
 ## ⛵ Deployment
 
-1. Open your network settings menu and go to `Settings > Control Plane > Admins & Users`.
+1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
 
 2a. If you are running `UniFi Network v9.0.0` or greater, you can create an `Api Key` by selecting your user, going under `Control Plane API Key` and clicking `Create New`. Set the name to whatever you want, and the expiration to whatever you feel like commiting to. You can set `UNIFI_KEY` to this key.
 

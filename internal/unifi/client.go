@@ -127,7 +127,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	}
 
 	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
-	if c.Config.User != "" && c.Config.Password != "" {
+	if c.Config.ApiKey == "" {
 		if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
 			c.csrf = csrf
 		}

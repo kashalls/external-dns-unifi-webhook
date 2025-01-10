@@ -21,21 +21,64 @@
 
 ## ⛵ Deployment
 
+### Gathering your credentials
+
+<details>
+<summary>UniFi Api Key - Network v9.0.0+</summary>
+<br>
 1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
 
-2a. If you are running `UniFi Network v9.0.0` or greater, you can create an `Api Key` by selecting your user, going under `Control Plane API Key` and clicking `Create New`. Set the name to whatever you want, and the expiration to whatever you feel like commiting to. You can set `UNIFI_API_KEY` to this key.
+2. Selecting your user to operate under. Whenever we modify the DNS Records, this user will show up under `System Log > Admin Activity`
 
-2b. Otherwise, create a local user with a password in your UniFi OS, this user only needs read/write access to the UniFi Network appliance.
+3. Go under `Control Plane API Key` and click `Create New`. You can set the name to whatever you want, and the expiration to whatever you feel like.
 
-3. Add the ExternalDNS Helm repository to your cluster.
+4. Create a Kubernetes secret called `external-dns-unifi-secret` that will hold your `UNIFI_API_KEY` with their respected values from Step 3.
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+    name: external-dns-unifi-secret
+data:
+  api-key: <your-api-key>
+```
+</details>
+
+<details>
+<summary>Username & Password (Deprecated)</summary>
+<br>
+1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
+
+2. Select `Create New Admin`.
+
+3. In the menu that appears, enable `Restrict to Local Access Only`. Deselect `Use a Predefined Role`. Set `Network: Site Admin`. All other selections can be set to `None`. Click `Create`.
+
+4. Create a Kubernetes secret called `external-dns-unifi-secret` that holds the `username` and `password` with their respected values from Step 3.
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+    name: external-dns-unifi-secret
+data:
+  username: <your-username>
+  password: <your-password>
+```
+</details>
+
+### Installing the provider
+
+1. Add the ExternalDNS Helm repository to your cluster.
 
     ```sh
     helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
     ```
 
-4. Create a Kubernetes secret called `external-dns-unifi-secret` that holds either `api-key` or the `username` and `password` with their respected values from step 2.
+2. Deploy your `external-dns-unifi-secret` secret that holds your authentication credentials from either of the
 
-5. Create the helm values file, for example `external-dns-unifi-values.yaml`:
+3. Create the helm values file, for example `external-dns-unifi-values.yaml`:
 
     ```yaml
     fullnameOverride: external-dns-unifi
@@ -51,16 +94,11 @@
             value: https://192.168.1.1 # replace with the address to your UniFi router/controller
           - name: UNIFI_EXTERNAL_CONTROLLER
             value: "false"
-          - name: UNIFI_USER
+          - name: UNIFI_API_KEY
             valueFrom:
               secretKeyRef:
                 name: external-dns-unifi-secret
-                key: username
-          - name: UNIFI_PASS
-            valueFrom:
-              secretKeyRef:
-                name: external-dns-unifi-secret
-                key: password
+                key: api-key
           - name: LOG_LEVEL
             value: *logLevel
         livenessProbe:
@@ -84,10 +122,10 @@
     domainFilters: ["example.com"] # replace with your domain
     ```
 
-6. Install the Helm chart
+4. Install the Helm chart
 
     ```sh
-    helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values.yaml --version 1.14.3 -n external-dns
+    helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values.yaml --version 1.15.0 -n external-dns
     ```
 
 ## Configuration

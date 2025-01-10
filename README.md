@@ -23,7 +23,7 @@
 
 1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
 
-2a. If you are running `UniFi Network v9.0.0` or greater, you can create an `Api Key` by selecting your user, going under `Control Plane API Key` and clicking `Create New`. Set the name to whatever you want, and the expiration to whatever you feel like commiting to. You can set `UNIFI_KEY` to this key.
+2a. If you are running `UniFi Network v9.0.0` or greater, you can create an `Api Key` by selecting your user, going under `Control Plane API Key` and clicking `Create New`. Set the name to whatever you want, and the expiration to whatever you feel like commiting to. You can set `UNIFI_API_KEY` to this key.
 
 2b. Otherwise, create a local user with a password in your UniFi OS, this user only needs read/write access to the UniFi Network appliance.
 
@@ -33,7 +33,7 @@
     helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
     ```
 
-4. Create a Kubernetes secret called `external-dns-unifi-secret` that holds `username` and `password` with their respected values from step 1.
+4. Create a Kubernetes secret called `external-dns-unifi-secret` that holds either `api-key` or the `username` and `password` with their respected values from step 2.
 
 5. Create the helm values file, for example `external-dns-unifi-values.yaml`:
 
@@ -94,16 +94,16 @@
 
 ### Unifi Controller Configuration
 
-| Environment Variable         | Description                                                  | Default Value |
-|------------------------------|--------------------------------------------------------------|---------------|
-| `UNIFI_KEY`                  | The local api key provided for your user                     | N/A           |
-| `UNIFI_USER`                 | Username for the Unifi Controller (must be provided).        | N/A           |
-| `UNIFI_PASS`                 | Password for the Unifi Controller (must be provided).        | N/A           |
-| `UNIFI_SKIP_TLS_VERIFY`      | Whether to skip TLS verification (true or false).            | `true`        |
-| `UNIFI_SITE`                 | Unifi Site Identifier (used in multi-site installations)     | `default`     |
-| `UNIFI_HOST`                 | Host of the Unifi Controller (must be provided).             | N/A           |
-| `UNIFI_EXTERNAL_CONTROLLER`* | Toggles support for non-UniFi Hardware                       | `false`       |
-| `LOG_LEVEL`                  | Change the verbosity of logs (used when making a bug report) | `info`        |
+| Environment Variable         | Description                                                       | Default Value |
+|------------------------------|-------------------------------------------------------------------|---------------|
+| `UNIFI_API_KEY`              | The local api key provided for your user                          | N/A           |
+| `UNIFI_USER`                 | Username for the Unifi Controller (deprecated use `UNIFI_API_KEY`). | N/A           |
+| `UNIFI_PASS`                 | Password for the Unifi Controller (deprecated use `UNIFI_API_KEY`). | N/A           |
+| `UNIFI_SKIP_TLS_VERIFY`      | Whether to skip TLS verification (true or false).                 | `true`        |
+| `UNIFI_SITE`                 | Unifi Site Identifier (used in multi-site installations)          | `default`     |
+| `UNIFI_HOST`                 | Host of the Unifi Controller (must be provided).                  | N/A           |
+| `UNIFI_EXTERNAL_CONTROLLER`* | Toggles support for non-UniFi Hardware                            | `false`       |
+| `LOG_LEVEL`                  | Change the verbosity of logs (used when making a bug report)      | `info`        |
 
 *`UNIFI_EXTERNAL_CONTROLLER` is used to toggle between two versions of the Network Controller API. If you are running the UniFi software outside of UniFi's official hardware (e.g., Cloud Key or Dream Machine), you'll need to set `UNIFI_EXTERNAL_CONTROLLER` to `true`
 

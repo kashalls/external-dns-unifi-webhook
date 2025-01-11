@@ -78,7 +78,7 @@ data:
     helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
     ```
 
-2. Deploy your `external-dns-unifi-secret` secret that holds your authentication credentials from either of the
+2. Deploy your `external-dns-unifi-secret` secret that holds your authentication credentials from either of the credential types above.
 
 3. Create the helm values file, for example `external-dns-unifi-values.yaml`:
 

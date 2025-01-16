@@ -2,7 +2,7 @@ module github.com/kashalls/external-dns-unifi-webhook
 
 go 1.23.3
 
-toolchain go1.23.4
+toolchain go1.23.5
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1

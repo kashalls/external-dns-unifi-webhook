@@ -6,7 +6,7 @@ toolchain go1.23.5
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
-	github.com/go-chi/chi/v5 v5.2.0
+	github.com/go-chi/chi/v5 v5.2.1
 	github.com/prometheus/client_golang v1.21.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.34.0

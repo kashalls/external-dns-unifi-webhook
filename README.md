@@ -41,7 +41,7 @@ apiVersion: v1
 kind: Secret
 metadata:
     name: external-dns-unifi-secret
-data:
+stringData:
   api-key: <your-api-key>
 ```
 </details>
@@ -64,7 +64,7 @@ apiVersion: v1
 kind: Secret
 metadata:
     name: external-dns-unifi-secret
-data:
+stringData:
   username: <your-username>
   password: <your-password>
 ```

@@ -211,87 +211,84 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
-// Future Kash: We don't support multiple targets per dns name and need to effectively create x records.
-func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-	record := DNSRecord{
-		Enabled:    true,
-		Key:        endpoint.DNSName,
-		RecordType: endpoint.RecordType,
-		TTL:        endpoint.RecordTTL,
-		Value:      endpoint.Targets[0],
-	}
+func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, error) {
+	var createdRecords []*DNSRecord
 
-	if endpoint.RecordType == "SRV" {
-		record.Priority = new(int)
-		record.Weight = new(int)
-		record.Port = new(int)
+	for _, target := range endpoint.Targets {
+		record := DNSRecord{
+			Enabled:    true,
+			Key:        endpoint.DNSName,
+			RecordType: endpoint.RecordType,
+			TTL:        endpoint.RecordTTL,
+			Value:      target,
+		}
 
-		if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
+		if endpoint.RecordType == "SRV" {
+			record.Priority = new(int)
+			record.Weight = new(int)
+			record.Port = new(int)
+
+			if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
+				return nil, err
+			}
+		}
+
+		jsonBody, err := json.Marshal(record)
+		if err != nil {
 			return nil, err
 		}
+
+		resp, err := c.doRequest(
+			http.MethodPost,
+			FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
+			bytes.NewReader(jsonBody),
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		var createdRecord DNSRecord
+		if err = json.NewDecoder(resp.Body).Decode(&createdRecord); err != nil {
+			return nil, err
+		}
+
+		createdRecords = append(createdRecords, &createdRecord)
+		log.Debug("client created new record", zap.Any("record", &createdRecord))
 	}
 
-	jsonBody, err := json.Marshal(record)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.doRequest(
-		http.MethodPost,
-		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
-		bytes.NewReader(jsonBody),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var createdRecord DNSRecord
-	if err = json.NewDecoder(resp.Body).Decode(&createdRecord); err != nil {
-		return nil, err
-	}
-
-	log.Debug("client created new record", zap.Any("record", &createdRecord))
-	return &createdRecord, nil
+	return createdRecords, nil
 }
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
-	lookup, err := c.lookupIdentifier(endpoint.DNSName, endpoint.RecordType)
-	if err != nil {
-		return err
-	}
-
-	deleteURL := FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site, lookup.ID)
-
-	_, err = c.doRequest(
-		http.MethodDelete,
-		deleteURL,
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-
-	log.Debug("client deleted record", zap.Any("record", endpoint))
-	return nil
-}
-
-// lookupIdentifier finds the ID of a DNS record in the UniFi controller.
-func (c *httpClient) lookupIdentifier(key, recordType string) (*DNSRecord, error) {
-	log.Debug("Looking up identifier", zap.String("key", key), zap.String("recordType", recordType))
 	records, err := c.GetEndpoints()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	for _, r := range records {
-		if r.Key == key && r.RecordType == recordType {
-			return &r, nil
+	var deleteErrors []error
+	for _, record := range records {
+		if record.Key == endpoint.DNSName && record.RecordType == endpoint.RecordType {
+			deleteURL := FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site, record.ID)
+
+			_, err := c.doRequest(
+				http.MethodDelete,
+				deleteURL,
+				nil,
+			)
+			if err != nil {
+				deleteErrors = append(deleteErrors, err)
+			} else {
+				log.Debug("Client deleted record", zap.Any("record", record))
+			}
 		}
 	}
 
-	return nil, fmt.Errorf("record not found: %s", key)
+	if len(deleteErrors) > 0 {
+		return fmt.Errorf("failed to delete some records: %v", deleteErrors)
+	}
+	return nil
 }
 
 // setHeaders sets the headers for the HTTP request.

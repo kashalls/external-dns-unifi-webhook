@@ -42,16 +42,40 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 		return nil, err
 	}
 
-	var endpoints []*endpoint.Endpoint
-	for _, record := range records {
-		ep := &endpoint.Endpoint{
-			DNSName:    record.Key,
-			RecordType: record.RecordType,
-			RecordTTL:  record.TTL,
-			Targets:    endpoint.NewTargets(record.Value),
+	endpoints := []*endpoint.Endpoint{}
+	groups := map[string][]DNSRecord{}
+
+	for _, r := range records {
+		if !provider.SupportedRecordType(r.RecordType) {
+			continue
 		}
 
-		if !p.domainFilter.Match(ep.DNSName) {
+		groupBy := r.Key + r.RecordType
+		if _, ok := groups[groupBy]; !ok {
+			groups[groupBy] = []DNSRecord{}
+		}
+
+		groups[groupBy] = append(groups[groupBy], r)
+	}
+
+	for _, records := range groups {
+		if len(records) == 0 {
+			return endpoints, nil
+		}
+
+		targets := make([]string, len(records))
+		for i, record := range records {
+			targets[i] = record.Value
+		}
+
+		ep := endpoint.NewEndpointWithTTL(
+			records[0].Key,
+			records[0].RecordType,
+			endpoint.TTL(records[0].TTL),
+			targets...,
+		)
+
+		if ep == nil {
 			continue
 		}
 

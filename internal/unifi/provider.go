@@ -42,25 +42,18 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 		return nil, err
 	}
 
-	endpoints := []*endpoint.Endpoint{}
-	groups := map[string][]DNSRecord{}
-
+	groups := make(map[string][]DNSRecord)
 	for _, r := range records {
-		if !provider.SupportedRecordType(r.RecordType) {
-			continue
+		if provider.SupportedRecordType(r.RecordType) {
+			groupKey := r.Key + r.RecordType
+			groups[groupKey] = append(groups[groupKey], r)
 		}
-
-		groupBy := r.Key + r.RecordType
-		if _, ok := groups[groupBy]; !ok {
-			groups[groupBy] = []DNSRecord{}
-		}
-
-		groups[groupBy] = append(groups[groupBy], r)
 	}
 
+	var endpoints []*endpoint.Endpoint
 	for _, records := range groups {
 		if len(records) == 0 {
-			return endpoints, nil
+			continue
 		}
 
 		targets := make([]string, len(records))
@@ -68,18 +61,11 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 			targets[i] = record.Value
 		}
 
-		ep := endpoint.NewEndpointWithTTL(
-			records[0].Key,
-			records[0].RecordType,
-			endpoint.TTL(records[0].TTL),
-			targets...,
-		)
-
-		if ep == nil {
-			continue
+		if ep := endpoint.NewEndpointWithTTL(
+			records[0].Key, records[0].RecordType, endpoint.TTL(records[0].TTL), targets...,
+		); ep != nil {
+			endpoints = append(endpoints, ep)
 		}
-
-		endpoints = append(endpoints, ep)
 	}
 
 	return endpoints, nil

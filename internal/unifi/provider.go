@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/external-dns/provider"
 )
 
-// Provider type for interfacing with UniFi
-type Provider struct {
+// UnifiProvider type for interfacing with UniFi
+type UnifiProvider struct {
 	provider.BaseProvider
 
 	client       *httpClient
@@ -27,7 +27,7 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provi
 		return nil, fmt.Errorf("failed to create the unifi client: %w", err)
 	}
 
-	p := &Provider{
+	p := &UnifiProvider{
 		client:       c,
 		domainFilter: domainFilter,
 	}
@@ -36,7 +36,7 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provi
 }
 
 // Records returns the list of records in the DNS provider.
-func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
+func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 	records, err := p.client.GetEndpoints()
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 }
 
 // ApplyChanges applies a given set of changes in the DNS provider.
-func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
+func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
 		log.Debug("deleting endpoint", zap.String("name", endpoint.DNSName), zap.String("type", endpoint.RecordType))
 
@@ -85,6 +85,6 @@ func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) erro
 }
 
 // GetDomainFilter returns the domain filter for the provider.
-func (p *Provider) GetDomainFilter() endpoint.DomainFilterInterface {
+func (p *UnifiProvider) GetDomainFilter() endpoint.DomainFilterInterface {
 	return p.domainFilter
 }

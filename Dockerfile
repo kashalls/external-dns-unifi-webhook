@@ -7,7 +7,7 @@ COPY . .
 RUN go build -ldflags "-s -w -X main.Version=${VERSION} -X main.Gitsha=${REVISION}" ./cmd/webhook
 
 FROM gcr.io/distroless/static-debian12:nonroot
-USER 8675:8675
+USER nonroot:nonroot
 COPY --from=builder --chmod=555 /build/webhook /external-dns-unifi-webhook
-EXPOSE 8888/tcp
+EXPOSE 8888/tcp 8080/tcp
 ENTRYPOINT ["/external-dns-unifi-webhook"]

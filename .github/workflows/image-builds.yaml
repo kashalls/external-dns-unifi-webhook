@@ -44,6 +44,7 @@ jobs:
             type=semver,pattern={{version}},prefix=v
             type=semver,pattern={{major}}.{{minor}},prefix=v
             type=semver,pattern={{major}},prefix=v
+            type=ref,event=pr
             type=ref,event=branch
           flavor: latest=false
 

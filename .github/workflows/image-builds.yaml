@@ -10,7 +10,7 @@ on:
     types: ["published"]
 
 jobs:
-  build-image:
+  build:
     name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest'}}
     strategy:
@@ -72,7 +72,7 @@ jobs:
 
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/') && github.event_name == 'push' }}
-    needs: build-image
+    needs: build
     name: Release Container
     runs-on: ubuntu-latest
     outputs:
@@ -104,8 +104,8 @@ jobs:
         with:
           inputs: ${{ join(fromJSON(steps.meta.outputs.json).tags, ',') }}
           images: >-
-            ghcr.io/${{ github.repository }}@${{ needs.build-image.outputs.amd64 }},
-            ghcr.io/${{ github.repository }}@${{ needs.build-image.outputs.arm64 }}
+            ghcr.io/${{ github.repository }}@${{ needs.build.outputs.amd64 }},
+            ghcr.io/${{ github.repository }}@${{ needs.build.outputs.arm64 }}
           push: true
 
       - name: Export Digest
@@ -117,7 +117,7 @@ jobs:
   sign:
     if: ${{ startsWith(github.ref, 'refs/tags/') && github.event_name == 'push' }}
     needs: release
-    name: Sign Contains
+    name: Sign Container
     runs-on: ubuntu-latest
     steps:
       - name: Login to GitHub Container Registry

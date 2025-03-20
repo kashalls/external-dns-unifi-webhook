@@ -1,5 +1,5 @@
 ---
-name: Image Build
+name: Container Builds
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-image:
-    name: Build Container (${{ matrix.platform }})
+    name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest'}}
     strategy:
       matrix:
@@ -58,7 +58,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           outputs: |
             type=docker
-            ${{ startsWith(github.ref, 'refs/tags/') && github.event_name == 'push' && format('type=image,name=ghcr.io/{0}/{1},push-by-digest=true,name-canonical=true,push=true', github.repository_owner, inputs.app) || '' }}
+            ${{ startsWith(github.ref, 'refs/tags/') && github.event_name == 'push' && format('type=image,name=ghcr.io/{0},push-by-digest=true,name-canonical=true,push=true', github.repository) || '' }}
           context: .
           file: ./Dockerfile
           platforms: linux/${{ matrix.platform }}
@@ -104,8 +104,8 @@ jobs:
         with:
           inputs: ${{ join(fromJSON(steps.meta.outputs.json).tags, ',') }}
           images: >-
-            ghcr.io/${{ github.repository }}@${{ needs.build.outputs.amd64 }},
-            ghcr.io/${{ github.repository }}@${{ needs.build.outputs.arm64 }}
+            ghcr.io/${{ github.repository }}@${{ needs.build-image.outputs.amd64 }},
+            ghcr.io/${{ github.repository }}@${{ needs.build-image.outputs.arm64 }}
           push: true
 
       - name: Export Digest

@@ -212,8 +212,22 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, error) {
-	var createdRecords []*DNSRecord
+	records, err := c.GetEndpoints()
+	if err != nil {
+		return nil, err
+	}
 
+	for _, record := range records {
+		if record.Key == endpoint.DNSName && record.RecordType == "CNAME" {
+			return nil, fmt.Errorf("CNAME record for '%s' already exists, remove it before adding a new one", endpoint.DNSName)
+		}
+	}
+
+	if endpoint.RecordType == "CNAME" && len(endpoint.Targets) > 1 {
+		return nil, fmt.Errorf("CNAME records can only contain 1 target. There is likely a misconfiguration with one or more of your resources.")
+	}
+
+	var createdRecords []*DNSRecord
 	for _, target := range endpoint.Targets {
 		record := DNSRecord{
 			Enabled:    true,

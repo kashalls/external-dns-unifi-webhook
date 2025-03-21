@@ -141,7 +141,7 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 		zap.Int("update_old", len(changes.UpdateOld)),
 		zap.Int("update_new", len(changes.UpdateNew)),
 		zap.Int("delete", len(changes.Delete)),
-	).Debug("requesting apply changes")
+	).Debug("executing plan changes")
 	if err := p.provider.ApplyChanges(ctx, &changes); err != nil {
 		requestLog(r).Error("error when applying changes", zap.Error(err))
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
@@ -175,7 +175,6 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Debug("webhook adjust endpoints count", zap.Int("endpoints", len(pve)))
 	pve, err := p.provider.AdjustEndpoints(pve)
 	if err != nil {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)

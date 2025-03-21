@@ -206,14 +206,17 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 		records[i].Port = nil
 	}
 
-	log.Debug("provider retrieved records", zap.Int("count", len(records)))
+	log.Debug("fetched records", zap.Int("count", len(records)))
 	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, error) {
-	var createdRecords []*DNSRecord
+	if endpoint.RecordType == "CNAME" && len(endpoint.Targets) > 1 {
+		return nil, fmt.Errorf("CNAME records can only contain 1 target. There is likely a misconfiguration with one or more of your resources.")
+	}
 
+	var createdRecords []*DNSRecord
 	for _, target := range endpoint.Targets {
 		record := DNSRecord{
 			Enabled:    true,
@@ -254,7 +257,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 		}
 
 		createdRecords = append(createdRecords, &createdRecord)
-		log.Debug("client created new record", zap.Any("record", &createdRecord))
+		log.Debug("created new record", zap.Any("key", createdRecord.Key), zap.String("type", createdRecord.RecordType), zap.String("target", createdRecord.Value))
 	}
 
 	return createdRecords, nil
@@ -280,7 +283,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 			if err != nil {
 				deleteErrors = append(deleteErrors, err)
 			} else {
-				log.Debug("Client deleted record", zap.Any("record", record))
+				log.Debug("client successfully removed record", zap.String("key", record.Key), zap.String("type", record.RecordType), zap.String("target", record.Value))
 			}
 		}
 	}

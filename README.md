@@ -17,7 +17,12 @@
 
 ## 🚫 Limitations
 
-- Wildcard CNAME Records are not supported by UniFi.
+*UniFi uses [dnsmasq](https://dnsmasq.org) as the backend of it's dns resolver and dhcp server.*
+*This project is subject to the limitations of dnsmasq. Please report any issues you encounter utilizing this provider.*
+
+- Wildcard and Duplicate CNAME Records are not supported by UniFi.
+    - *.example.com 0 IN CNAME internal.example.com
+    - deployment.example.com 0 IN CNAME external.example.com internal.example.com
 
 ## ⛵ Deployment
 

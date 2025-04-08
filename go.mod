@@ -7,7 +7,7 @@ toolchain go1.24.2
 require (
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/go-chi/chi/v5 v5.2.1
-	github.com/prometheus/client_golang v1.21.1
+	github.com/prometheus/client_golang v1.22.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.38.0
 	sigs.k8s.io/external-dns v0.16.1
@@ -40,7 +40,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/linki/instrumented_http v0.3.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

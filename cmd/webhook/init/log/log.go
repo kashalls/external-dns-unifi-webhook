@@ -45,12 +45,17 @@ func Init() {
 	defer logger.Sync()
 }
 
+
+func Debug(message string, fields ...zap.Field) {
+	logger.Debug(message, fields...)
+}
+
 func Info(message string, fields ...zap.Field) {
 	logger.Info(message, fields...)
 }
 
-func Debug(message string, fields ...zap.Field) {
-	logger.Debug(message, fields...)
+func Warn(message string, fields ...zap.Field) {
+	logger.Warn(message, fields...)
 }
 
 func Error(message string, fields ...zap.Field) {

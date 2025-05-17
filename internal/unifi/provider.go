@@ -73,6 +73,12 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
+	existingRecords, err := p.Records(ctx)
+	if err != nil {
+		log.Error("failed to get records while applying", zap.Error(err))
+		return err
+	}
+
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
 		if err := p.client.DeleteEndpoint(endpoint); err != nil {
 			log.Error("failed to delete endpoint", zap.Any("data", endpoint), zap.Error(err))
@@ -81,6 +87,22 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	}
 
 	for _, endpoint := range append(changes.Create, changes.UpdateNew...) {
+		if endpoint.RecordType == "CNAME" {
+			for _, record := range existingRecords {
+				if record.RecordType != "CNAME" {
+					continue
+				}
+
+				if record.DNSName != endpoint.DNSName {
+					continue
+				}
+
+				if err := p.client.DeleteEndpoint(record); err != nil {
+					log.Error("failed to delete conflicting CNAME", zap.Any("data", record), zap.Error(err))
+					return err
+				}
+			}
+		}
 		if _, err := p.client.CreateEndpoint(endpoint); err != nil {
 			log.Error("failed to create endpoint", zap.Any("data", endpoint), zap.Error(err))
 			return err

@@ -24,7 +24,7 @@ func Init(config configuration.Config) (provider.Provider, error) {
 		if config.RegexDomainExclusion != "" {
 			createMsg += fmt.Sprintf("with exclusion: '%s', ", config.RegexDomainExclusion)
 		}
-		domainFilter = endpoint.NewRegexDomainFilter(
+		domainFilter = *endpoint.NewRegexDomainFilter(
 			regexp.MustCompile(config.RegexDomainFilter),
 			regexp.MustCompile(config.RegexDomainExclusion),
 		)
@@ -35,7 +35,7 @@ func Init(config configuration.Config) (provider.Provider, error) {
 		if config.ExcludeDomains != nil && len(config.ExcludeDomains) > 0 {
 			createMsg += fmt.Sprintf("exclude domain filter: '%s', ", strings.Join(config.ExcludeDomains, ","))
 		}
-		domainFilter = endpoint.NewDomainFilterWithExclusions(config.DomainFilter, config.ExcludeDomains)
+		domainFilter = *endpoint.NewDomainFilterWithExclusions(config.DomainFilter, config.ExcludeDomains)
 	}
 
 	createMsg = strings.TrimSuffix(createMsg, ", ")

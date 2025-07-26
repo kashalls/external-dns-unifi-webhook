@@ -114,5 +114,5 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 // GetDomainFilter returns the domain filter for the provider.
 func (p *UnifiProvider) GetDomainFilter() endpoint.DomainFilterInterface {
-	return p.domainFilter
+	return &p.domainFilter
 }

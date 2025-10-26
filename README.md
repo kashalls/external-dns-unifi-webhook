@@ -26,19 +26,69 @@
 
 ## ⛵ Deployment
 
-### Gathering your credentials
+### Creating UniFi Credentials
+
+ExternalDNS Provider for UniFi supports 2 styles of authentication:
+
+* UniFi API Key
+* Username & Password (Deprecated)
+
+_Click the below headers to view the instructions_
+
 
 <details>
 <summary>UniFi Api Key - Network v9.0.0+</summary>
 <br>
 
-1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
+1. Open your UniFi controller/Console's admin page either via [unifi.ui.com](https://unifi.ui.com) or via the IP address of your controller
 
-2. Selecting your user to operate under. Whenever we modify the DNS Records, this user will show up under `System Log > Admin Activity`
+2. On the left navigation bar (that runs the length of the page) click the _people_ icon (`Admin & Users`)
 
-3. Go under `Control Plane API Key` and click `Create New`. You can set the name to whatever you want, and the expiration to whatever you feel like.
+3. Click `+ Create New` at the top of the page and fill it out using the below details
 
-4. Create a Kubernetes secret called `external-dns-unifi-secret` that will hold your `UNIFI_API_KEY` with their respected values from Step 3.
+| Field Name                    | Value                                   |
+|-------------------------------|-----------------------------------------|
+| First name                    | `External`                              |
+| Last name                     | `DNS`                                   |
+| Admin                         | :white_check_mark:                      |
+| Restrict to local access only | :white_check_mark:                      |
+| Username                      | `externaldns`                           |
+| Password                      | Make up a password, but make note of it |
+| Use a pre defined role        | :white_check_mark:                      |
+| Role                          | `Super Admin`                           |
+
+Your user should now look like the below
+
+![UniFi Creating super admin](md-assets/unifi-user-api-superadmin.png)
+
+
+4. Login to your console as the user you have just created. This will need to be done via the controller's IP address
+
+5. **Gear Icon** > **Control Plane** > **Integrations**
+
+Give the API key a name, something like `external-dns`
+
+Copy this Key, we will need it later. Your page should now look like the below
+
+![UniFi Creating API Key](md-assets/unifi-subuser-create-api-key.png)
+
+6. Remove elevated permissions from the user
+
+Log back in as your normal account, head over to where we created the External DNS account
+(On the left navigation bar (that runs the length of the page) click the _people_ icon (`Admin & Users`))
+
+Open that account, click the **Gear Icon** then match the below
+
+We have unselected **Use a Predefined Role** and changed the _ufo_ icon to `Site admin` and the _person_ to `None`
+
+![UniFi remove excess permissions](md-assets/change-superadmin-account-to-site-admin.png)
+
+You're probably thinking _wow, that was long_, and it's because only super admins can create API Keys, but they do not need
+those permissions the entire time to be able to _have_ API Key attached to that user. It's a ~bug~ feature in UniFi
+
+The `Site Admin` permissions are more than enough to allow that user to create and manage DNS records in our controller
+
+7. Create a Kubernetes secret called `external-dns-unifi-secret` that will hold your `UNIFI_API_KEY` with their respected values from Step 3.
 
 ```yaml
 ---
@@ -49,6 +99,10 @@ metadata:
 stringData:
   api-key: <your-api-key>
 ```
+
+You should now follow the [Installing the provider](#installing-the-provider) instructions
+
+
 </details>
 
 <details>

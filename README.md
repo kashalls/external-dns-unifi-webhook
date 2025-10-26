@@ -33,6 +33,8 @@ ExternalDNS Provider for UniFi supports 2 styles of authentication:
 * UniFi API Key
 * Username & Password (Deprecated)
 
+_Click the below headers to view the instructions_
+
 
 <details>
 <summary>UniFi Api Key - Network v9.0.0+</summary>

@@ -28,7 +28,7 @@
 
 ### Creating UniFi Credentials
 
-The DNS Webhook provider supports 2 styles of authenticating to UniFi
+ExternalDNS Provider for UniFi supports 2 styles of authentication:
 
 * UniFi API Key
 * Username & Password (Deprecated)

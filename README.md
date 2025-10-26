@@ -26,7 +26,7 @@
 
 ## ⛵ Deployment
 
-### Gathering your credentials
+### Creating UniFi Credentials
 
 The DNS Webhook provider supports 2 styles of authenticating to UniFi
 

@@ -30,8 +30,8 @@
 
 The DNS Webhook provider supports 2 styles of authenticating to UniFi
 
-* API Token under a specific user
-* Username and Password of specific user
+* UniFi API Key
+* Username & Password (Deprecated)
 
 
 <details>
@@ -68,7 +68,7 @@ Give the API key a name, something like `external-dns`
 
 Copy this Key, we will need it later. Your page should now look like the below
 
-![UniFi Creating API token](md-assets/unifi-subuser-create-api-token.png)
+![UniFi Creating API Key](md-assets/unifi-subuser-create-api-key.png)
 
 6. Remove elevated permissions from the user
 
@@ -81,8 +81,8 @@ We have unselected **Use a Predefined Role** and changed the _ufo_ icon to `Site
 
 ![UniFi remove excess permissions](md-assets/change-superadmin-account-to-site-admin.png)
 
-You're probably thinking _wow, that was long_, and it's because only super admins can create API tokens, but they do not need
-those permissions the entire time to be able to _have_ API token attached to that user. It's a ~bug~ feature in UniFi
+You're probably thinking _wow, that was long_, and it's because only super admins can create API Keys, but they do not need
+those permissions the entire time to be able to _have_ API Key attached to that user. It's a ~bug~ feature in UniFi
 
 The `Site Admin` permissions are more than enough to allow that user to create and manage DNS records in our controller
 

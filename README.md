@@ -77,7 +77,9 @@ Log back in as your normal account, head over to where we created the External D
 
 Open that account, click the **Gear Icon** then match the below
 
-![img.png](md-assets/change-superadmin-account-to-site-admin.png)
+We have unselected **Use a Predefined Role** and changed the _ufo_ icon to `Site admin` and the _person_ to `None`
+
+![Unifi remove excess permissions](md-assets/change-superadmin-account-to-site-admin.png)
 
 You're probably thinking _wow, that was long_, and it's because only super admins can create API tokens, but they do not need
 those permissions the entire time to be able to _have_ API token attached to that user. It's a ~bug~ feature in UniFi

@@ -60,6 +60,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		Config: config,
 		Client: &http.Client{
 			Transport: &http.Transport{
+				//nolint:gosec // InsecureSkipVerify is configurable via UNIFI_SKIP_TLS_VERIFY for self-signed certs
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipTLSVerify},
 			},
 			Jar: jar,

@@ -42,7 +42,7 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 
 	records, err := p.client.GetEndpoints()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to fetch DNS records")
 	}
 
 	// Count records by type for metrics

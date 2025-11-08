@@ -70,6 +70,22 @@ Fix auto-fixable issues:
 golangci-lint run --fix
 ```
 
+## Linting Documentation
+
+Check markdown documentation files:
+
+```bash
+npx markdownlint-cli2 "**/*.md"
+```
+
+Auto-fix markdown issues:
+
+```bash
+npx markdownlint-cli2 "**/*.md" --fix
+```
+
+Configuration is in `.markdownlint.yaml`.
+
 ## Building the Binary
 
 Build for your current platform:

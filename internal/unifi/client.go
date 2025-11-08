@@ -346,7 +346,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		if record.Key == endpoint.DNSName && record.RecordType == endpoint.RecordType {
 			deleteURL := FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site, record.ID)
 
-			_, err := c.doRequest(
+			resp, err := c.doRequest(
 				http.MethodDelete,
 				deleteURL,
 				nil,
@@ -354,6 +354,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 			if err != nil {
 				deleteErrors = append(deleteErrors, err)
 			} else {
+				_ = resp.Body.Close()
 				log.Debug("client successfully removed record", zap.String("key", record.Key), zap.String("type", record.RecordType), zap.String("target", record.Value))
 			}
 		}

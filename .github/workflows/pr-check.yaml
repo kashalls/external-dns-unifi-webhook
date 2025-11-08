@@ -41,6 +41,7 @@ jobs:
   lint:
     name: Lint Containerfile
     runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.changed_files, 'Containerfile')
     permissions:
       contents: read
     steps:

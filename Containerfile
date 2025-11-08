@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+FROM docker.io/library/golang:1.25-alpine AS builder
 ARG PKG=github.com/kashalls/external-dns-unifi-webhook
 ARG VERSION=dev
 ARG REVISION=dev

@@ -46,6 +46,8 @@ const (
 	recordTypeNS    = "NS"
 	recordTypeSRV   = "SRV"
 	recordTypeTXT   = "TXT"
+
+	errorBodyBufferSize = 512
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
@@ -82,7 +84,8 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
 
-	if err := client.login(); err != nil {
+	err = client.login()
+	if err != nil {
 		return nil, errors.Wrap(err, "initial login failed")
 	}
 
@@ -96,7 +99,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	resp, err := c.doRequest(
 		http.MethodGet,
-		FormatUrl(c.ClientURLs.Records, c.Host, c.Site),
+		FormatURL(c.ClientURLs.Records, c.Host, c.Site),
 		nil,
 	)
 
@@ -119,7 +122,8 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	}
 
 	var records []DNSRecord
-	if err = json.Unmarshal(bodyBytes, &records); err != nil {
+	err = json.Unmarshal(bodyBytes, &records)
+	if err != nil {
 		log.Error("Failed to decode response", zap.Error(err))
 		m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), err)
 
@@ -162,7 +166,7 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 		endpoint.Targets = endpoint.Targets[:1]
 	}
 
-	var createdRecords []*DNSRecord
+	createdRecords := make([]*DNSRecord, 0, len(endpoint.Targets))
 	for _, target := range endpoint.Targets {
 		record := DNSRecord{
 			Enabled:    true,
@@ -177,7 +181,8 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 			record.Weight = new(int)
 			record.Port = new(int)
 
-			if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
+			_, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value)
+			if err != nil {
 				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				duration := time.Since(start)
 				m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
@@ -196,7 +201,7 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 
 		resp, err := c.doRequest(
 			http.MethodPost,
-			FormatUrl(c.ClientURLs.Records, c.Host, c.Site),
+			FormatURL(c.ClientURLs.Records, c.Host, c.Site),
 			bytes.NewReader(jsonBody),
 		)
 		if err != nil {
@@ -205,11 +210,9 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 
 			return nil, errors.Wrap(err, "failed to create DNS record")
 		}
-		defer func() {
-			_ = resp.Body.Close()
-		}()
 
 		bodyBytes, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		if err != nil {
 			duration := time.Since(start)
 			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
@@ -218,7 +221,8 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 		}
 
 		var createdRecord DNSRecord
-		if err = json.Unmarshal(bodyBytes, &createdRecord); err != nil {
+		err = json.Unmarshal(bodyBytes, &createdRecord)
+		if err != nil {
 			duration := time.Since(start)
 			m.RecordUniFiAPICall("create_endpoint", duration, len(bodyBytes), err)
 
@@ -251,7 +255,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *externaldnsendpoint.Endpoint) erro
 	var deleteErrors []error
 	for _, record := range records {
 		if record.Key == endpoint.DNSName && record.RecordType == endpoint.RecordType {
-			deleteURL := FormatUrl(c.ClientURLs.Records, c.Host, c.Site, record.ID)
+			deleteURL := FormatURL(c.ClientURLs.Records, c.Host, c.Site, record.ID)
 
 			resp, err := c.doRequest(
 				http.MethodDelete,
@@ -296,7 +300,7 @@ func (c *httpClient) login() error {
 	// Perform the login request
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(c.ClientURLs.Login, c.Host),
+		FormatURL(c.ClientURLs.Login, c.Host),
 		bytes.NewBuffer(jsonBody),
 	)
 	if err != nil {
@@ -386,7 +390,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
 	if resp.StatusCode != http.StatusOK {
-		body, bodyErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		body, bodyErr := io.ReadAll(io.LimitReader(resp.Body, errorBodyBufferSize))
 		if bodyErr != nil {
 			return nil, NewDataError("read", "error response body", bodyErr)
 		}

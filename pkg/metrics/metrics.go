@@ -11,6 +11,8 @@ import (
 const (
 	namespace    = "externaldns_webhook"
 	ProviderName = "unifi"
+
+	histogramBucketCount = 8
 )
 
 // Metrics holds all Prometheus metrics for the webhook.
@@ -57,6 +59,8 @@ type Metrics struct {
 var instance *Metrics
 
 // New creates and registers all metrics.
+//
+//nolint:funlen // Metric registration is declarative and splitting would reduce readability
 func New(version string) *Metrics {
 	if instance != nil {
 		return instance
@@ -94,7 +98,7 @@ func New(version string) *Metrics {
 				Namespace: namespace,
 				Name:      "http_response_size_bytes",
 				Help:      "HTTP response size in bytes",
-				Buckets:   prometheus.ExponentialBuckets(100, 10, 8),
+				Buckets:   prometheus.ExponentialBuckets(100, 10, histogramBucketCount),
 			},
 			[]string{"provider", "method", "endpoint"},
 		),
@@ -119,8 +123,8 @@ func New(version string) *Metrics {
 		RecordsTotal: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
-				Name:      "records_total",
-				Help:      "Total number of DNS records by type",
+				Name:      "records",
+				Help:      "Current number of DNS records by type",
 			},
 			[]string{"provider", "record_type"},
 		),
@@ -247,7 +251,7 @@ func New(version string) *Metrics {
 				Namespace: namespace,
 				Name:      "unifi_response_size_bytes",
 				Help:      "UniFi API response size in bytes",
-				Buckets:   prometheus.ExponentialBuckets(100, 10, 8),
+				Buckets:   prometheus.ExponentialBuckets(100, 10, histogramBucketCount),
 			},
 			[]string{"operation"},
 		),

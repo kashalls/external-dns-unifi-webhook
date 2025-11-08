@@ -37,6 +37,7 @@ type DNSRecord struct {
 	Weight     *int         `json:"weight,omitempty"`
 }
 
+//nolint:revive // UnifiErrorResponse matches UniFi API naming conventions
 type UnifiErrorResponse struct {
 	Code      string         `json:"code"`
 	Details   map[string]any `json:"details"`

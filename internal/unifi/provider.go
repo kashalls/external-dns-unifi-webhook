@@ -13,6 +13,8 @@ import (
 )
 
 // UnifiProvider type for interfacing with UniFi.
+//
+//nolint:revive // UnifiProvider is the correct name for this provider, renaming would be a breaking change
 type UnifiProvider struct {
 	provider.BaseProvider
 
@@ -21,6 +23,8 @@ type UnifiProvider struct {
 }
 
 // NewUnifiProvider initializes a new DNSProvider.
+//
+//nolint:ireturn // Must return provider.Provider interface per external-dns contract
 func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
 	if err != nil {
@@ -136,7 +140,8 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 				}
 			}
 		}
-		if _, err := p.client.CreateEndpoint(endpoint); err != nil {
+		_, err := p.client.CreateEndpoint(endpoint)
+		if err != nil {
 			log.Error("failed to create endpoint", zap.Any("data", endpoint), zap.Error(err))
 
 			return errors.Wrapf(err, "failed to create endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
@@ -148,6 +153,8 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 }
 
 // GetDomainFilter returns the domain filter for the provider.
+//
+//nolint:ireturn // Must return DomainFilterInterface per external-dns contract
 func (p *UnifiProvider) GetDomainFilter() endpoint.DomainFilterInterface {
 	return &p.domainFilter
 }

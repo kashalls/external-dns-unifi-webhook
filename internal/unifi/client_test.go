@@ -19,6 +19,10 @@ func init() {
 	_ = metrics.Get()
 }
 
+const (
+	testDomain = "test.example.com"
+)
+
 // TestGetEndpoints tests the GetEndpoints method with mock HTTP server.
 func TestGetEndpoints(t *testing.T) {
 	tests := []struct {
@@ -53,9 +57,9 @@ func TestGetEndpoints(t *testing.T) {
 			expectedLen:    2,
 			expectedErr:    false,
 			validateResult: func(t *testing.T, records []DNSRecord) {
-			t.Helper()
-				if records[0].Key != "test.example.com" {
-					t.Errorf("First record Key = %q, want %q", records[0].Key, "test.example.com")
+				t.Helper()
+				if records[0].Key != testDomain {
+					t.Errorf("First record Key = %q, want %q", records[0].Key, testDomain)
 				}
 				if records[0].RecordType != recordTypeA {
 					t.Errorf("First record RecordType = %q, want A", records[0].RecordType)
@@ -288,6 +292,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseStatus: http.StatusOK,
 			expectedErr:    false,
 			validateReq: func(t *testing.T, bodyBytes []byte) {
+				t.Helper()
 				var record DNSRecord
 				err := json.Unmarshal(bodyBytes, &record)
 				if err != nil {
@@ -616,8 +621,8 @@ func TestSetHeaders(t *testing.T) {
 	}
 }
 
-// TestFormatUrl_ClientUsage tests FormatUrl in real client scenarios.
-func TestFormatUrl_ClientUsage(t *testing.T) {
+// TestFormatURL_ClientUsage tests FormatURL in real client scenarios.
+func TestFormatURL_ClientUsage(t *testing.T) {
 	tests := []struct {
 		name      string
 		urls      *ClientURLs
@@ -666,13 +671,13 @@ func TestFormatUrl_ClientUsage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var result string
 			if tt.recordID == "" {
-				result = FormatUrl(tt.urls.Records, tt.host, tt.site)
+				result = FormatURL(tt.urls.Records, tt.host, tt.site)
 			} else {
-				result = FormatUrl(tt.urls.Records, tt.host, tt.site, tt.recordID)
+				result = FormatURL(tt.urls.Records, tt.host, tt.site, tt.recordID)
 			}
 
 			if result != tt.expected {
-				t.Errorf("FormatUrl() = %q, want %q", result, tt.expected)
+				t.Errorf("FormatURL() = %q, want %q", result, tt.expected)
 			}
 		})
 	}

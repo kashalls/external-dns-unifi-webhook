@@ -16,7 +16,8 @@ import (
 
 type UnifiProviderFactory func(baseProvider *provider.BaseProvider, unifiConfig *unifi.Config) provider.Provider
 
-func Init(config configuration.Config) (provider.Provider, error) {
+//nolint:ireturn // Must return provider.Provider interface per external-dns contract
+func Init(config *configuration.Config) (provider.Provider, error) {
 	var domainFilter endpoint.DomainFilter
 	createMsg := "creating unifi provider with "
 
@@ -46,7 +47,8 @@ func Init(config configuration.Config) (provider.Provider, error) {
 	log.Info(createMsg)
 
 	unifiConfig := unifi.Config{}
-	if err := env.Parse(&unifiConfig); err != nil {
+	err := env.Parse(&unifiConfig)
+	if err != nil {
 		return nil, errors.Wrap(err, "reading unifi configuration failed")
 	}
 

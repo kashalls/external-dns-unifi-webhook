@@ -37,7 +37,8 @@ func New(provider externaldnsprovider.Provider) *Webhook {
 
 // Records handles the get request for records.
 func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
-	if err := p.acceptHeaderCheck(w, r); err != nil {
+	err := p.acceptHeaderCheck(w, r)
+	if err != nil {
 		requestLog(r).With(zap.Error(err)).Error("accept header check failed")
 
 		return
@@ -82,7 +83,8 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 
 		errMsg := "error decoding changes: " + err.Error()
-		if _, writeError := fmt.Fprint(w, errMsg); writeError != nil {
+		_, writeError := fmt.Fprint(w, errMsg)
+		if writeError != nil {
 			requestLog(r).With(zap.Error(writeError)).Fatal("error writing error message to response writer")
 		}
 		requestLog(r).With(zap.Error(err)).Info(errMsg)
@@ -112,33 +114,37 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 	m := metrics.Get()
 	m.AdjustEndpointsTotal.WithLabelValues(metrics.ProviderName).Inc()
 
-	if err := p.contentTypeHeaderCheck(w, r); err != nil {
+	err := p.contentTypeHeaderCheck(w, r)
+	if err != nil {
 		log.Error("content-type header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
 
 		return
 	}
-	if err := p.acceptHeaderCheck(w, r); err != nil {
+	err = p.acceptHeaderCheck(w, r)
+	if err != nil {
 		log.Error("accept header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
 
 		return
 	}
 
 	var pve []*endpoint.Endpoint
-	if err := json.NewDecoder(r.Body).Decode(&pve); err != nil {
+	err = json.NewDecoder(r.Body).Decode(&pve)
+	if err != nil {
 		m.HTTPJSONErrorsTotal.WithLabelValues(metrics.ProviderName, "/adjustendpoints").Inc()
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusBadRequest)
 
 		errMessage := fmt.Sprintf("failed to decode request body: %v", err)
 		requestLog(r).With(zap.Error(err)).Info("failed to decode request body")
-		if _, writeError := fmt.Fprint(w, errMessage); writeError != nil {
+		_, writeError := fmt.Fprint(w, errMessage)
+		if writeError != nil {
 			requestLog(r).With(zap.Error(writeError)).Fatal("error writing error message to response writer")
 		}
 
 		return
 	}
 
-	pve, err := p.provider.AdjustEndpoints(pve)
+	pve, err = p.provider.AdjustEndpoints(pve)
 	if err != nil {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -156,7 +162,8 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
 	w.Header().Set(varyHeader, contentTypeHeader)
-	if _, writeError := fmt.Fprint(w, string(out)); writeError != nil {
+	_, writeError := fmt.Fprint(w, string(out))
+	if writeError != nil {
 		requestLog(r).With(zap.Error(writeError)).Fatal("error writing response")
 	}
 }
@@ -165,7 +172,8 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 	m := metrics.Get()
 	m.NegotiateTotal.WithLabelValues(metrics.ProviderName).Inc()
 
-	if err := p.acceptHeaderCheck(w, r); err != nil {
+	err := p.acceptHeaderCheck(w, r)
+	if err != nil {
 		requestLog(r).With(zap.Error(err)).Error("accept header check failed")
 
 		return
@@ -180,7 +188,8 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
-	if _, writeError := w.Write(b); writeError != nil {
+	_, writeError := w.Write(b)
+	if writeError != nil {
 		requestLog(r).With(zap.Error(writeError)).Error("error writing response")
 		w.WriteHeader(http.StatusInternalServerError)
 
@@ -230,7 +239,8 @@ func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http
 	}
 
 	// as we support only one media type version, we can ignore the returned value
-	if _, err := checkAndGetMediaTypeHeaderValue(header); err != nil {
+	_, err := checkAndGetMediaTypeHeaderValue(header)
+	if err != nil {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 		m.HTTPValidationErrorsTotal.WithLabelValues(metrics.ProviderName, headerType).Inc()

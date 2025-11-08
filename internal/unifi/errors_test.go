@@ -8,6 +8,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	testOperationLogin = "login"
+)
+
 // TestAuthError tests AuthError type.
 func TestAuthError(t *testing.T) {
 	tests := []struct {
@@ -395,8 +399,8 @@ func TestNewAuthError(t *testing.T) {
 		t.Fatalf("NewAuthError returned %T, want *AuthError", err)
 	}
 
-	if authErr.Operation != "login" {
-		t.Errorf("Operation = %q, want %q", authErr.Operation, "login")
+	if authErr.Operation != testOperationLogin {
+		t.Errorf("Operation = %q, want %q", authErr.Operation, testOperationLogin)
 	}
 	if authErr.Status != 401 {
 		t.Errorf("Status = %d, want %d", authErr.Status, 401)

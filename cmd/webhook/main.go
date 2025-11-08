@@ -25,18 +25,17 @@ var (
 )
 
 func main() {
-	fmt.Printf(banner, Version, Gitsha)
-
 	log.Init()
+	log.Info(fmt.Sprintf(banner, Version, Gitsha))
 
 	metrics.New(Version)
 
 	config := configuration.Init()
-	provider, err := dnsprovider.Init(config)
+	provider, err := dnsprovider.Init(&config)
 	if err != nil {
 		log.Fatal("failed to initialize provider", zap.Error(err))
 	}
 
-	main, health := server.Init(config, webhook.New(provider))
+	main, health := server.Init(&config, webhook.New(provider))
 	server.ShutdownGracefully(main, health)
 }

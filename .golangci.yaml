@@ -27,6 +27,9 @@ linters:
         - opinionated
         - performance
         - style
+    funlen:
+      lines: 50
+      statements: 50
     gocyclo:
       min-complexity: 10
     mnd:
@@ -81,6 +84,7 @@ linters:
       - linters:
           - funlen
           - dupl
+          - gocognit
         path: _test\.go
 formatters:
   enable:

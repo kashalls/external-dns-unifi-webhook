@@ -20,10 +20,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	shutdownTimeout = 30 * time.Second
+)
+
 // HealthCheckHandler returns the status of the service.
 func HealthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("OK")); err != nil {
+	_, err := w.Write([]byte("OK"))
+	if err != nil {
 		log.Error("failed to write health check response", zap.Error(err))
 	}
 }
@@ -31,13 +36,14 @@ func HealthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 // ReadinessHandler returns whether the service is ready to accept requests.
 func ReadinessHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("OK")); err != nil {
+	_, err := w.Write([]byte("OK"))
+	if err != nil {
 		log.Error("failed to write readiness response", zap.Error(err))
 	}
 }
 
 // Init initializes the http server.
-func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
+func Init(config *configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
 	mainRouter := chi.NewRouter()
 	mainRouter.Use(metrics.HTTPMetricsMiddleware)
 	mainRouter.Get("/", p.Negotiate)
@@ -87,7 +93,7 @@ func ShutdownGracefully(mainServer, healthServer *http.Server) {
 	sig := <-sigCh
 
 	log.Info("shutting down servers due to received signal", zap.Any("signal", sig))
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	err := mainServer.Shutdown(ctx)

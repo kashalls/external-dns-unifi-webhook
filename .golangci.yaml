@@ -80,6 +80,7 @@ linters:
       - linters:
           - funlen
           - lll
+          - dupl
         path: _test\.go
 formatters:
   enable:

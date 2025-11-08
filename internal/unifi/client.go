@@ -67,7 +67,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		client.ClientURLs.Records = unifiRecordPathExternal
 	}
 
-	if client.ApiKey != "" {
+	if client.APIKey != "" {
 		return client, nil
 	}
 
@@ -149,7 +149,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	}
 
 	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
-	if c.ApiKey == "" {
+	if c.APIKey == "" {
 		m := metrics.Get()
 		if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {
 			if c.csrf != csrf {
@@ -396,8 +396,8 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
-	if c.ApiKey != "" {
-		req.Header.Set("X-Api-Key", c.ApiKey)
+	if c.APIKey != "" {
+		req.Header.Set("X-Api-Key", c.APIKey)
 	} else {
 		req.Header.Set("X-Csrf-Token", c.csrf)
 	}

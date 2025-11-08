@@ -55,7 +55,7 @@ func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http
 		headerType = "accept"
 	}
 
-	if len(header) == 0 {
+	if header == "" {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusNotAcceptable)
 		m.HTTPValidationErrorsTotal.WithLabelValues(metrics.ProviderName, headerType).Inc()

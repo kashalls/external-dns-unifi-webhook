@@ -170,7 +170,7 @@ func TestGetEndpoints(t *testing.T) {
 				Config: &Config{
 					Host:          server.URL,
 					Site:          "default",
-					ApiKey:        "test-key",
+					APIKey:        "test-key",
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
@@ -363,7 +363,7 @@ func TestCreateEndpoint(t *testing.T) {
 				Config: &Config{
 					Host:          server.URL,
 					Site:          "default",
-					ApiKey:        "test-key",
+					APIKey:        "test-key",
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
@@ -534,7 +534,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				Config: &Config{
 					Host:          server.URL,
 					Site:          "default",
-					ApiKey:        "test-key",
+					APIKey:        "test-key",
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
@@ -570,7 +570,7 @@ func TestSetHeaders(t *testing.T) {
 		{
 			name: "with API key",
 			config: &Config{
-				ApiKey: "test-api-key",
+				APIKey: "test-api-key",
 			},
 			csrf: "",
 			expectedHeaders: map[string]string{
@@ -582,7 +582,7 @@ func TestSetHeaders(t *testing.T) {
 		{
 			name: "with CSRF token",
 			config: &Config{
-				ApiKey: "",
+				APIKey: "",
 			},
 			csrf: "csrf-token-123",
 			expectedHeaders: map[string]string{

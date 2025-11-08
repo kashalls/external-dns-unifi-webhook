@@ -1,0 +1,3 @@
+# Ignore existing files that don't conform to markdownlint rules
+README.md
+.github/CODE_OF_CONDUCT.md

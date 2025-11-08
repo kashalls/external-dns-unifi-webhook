@@ -4,11 +4,6 @@ name: PR Check
 on:
   pull_request:
     branches: ["main"]
-    paths:
-      - "Containerfile"
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
 
 jobs:
   build-test:
@@ -16,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    if: |
+      contains(github.event.pull_request.changed_files, 'Containerfile') ||
+      contains(github.event.pull_request.changed_files, '.go') ||
+      contains(github.event.pull_request.changed_files, 'go.mod') ||
+      contains(github.event.pull_request.changed_files, 'go.sum')
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    if: contains(github.event.pull_request.changed_files, 'Containerfile')
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -52,3 +53,20 @@ jobs:
         with:
           dockerfile: Containerfile
           failure-threshold: error
+
+  lint-markdown:
+    name: Lint Markdown
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: |
+      contains(github.event.pull_request.changed_files, '.md') ||
+      contains(github.event.pull_request.changed_files, '.markdownlint.yaml')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@v18
+        with:
+          globs: "**/*.md"

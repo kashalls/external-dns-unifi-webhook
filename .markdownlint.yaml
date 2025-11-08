@@ -1,0 +1,7 @@
+# Markdownlint configuration
+---
+# MD013 - Line length
+MD013: false
+
+# MD029 - Ordered list item prefix
+MD029: false

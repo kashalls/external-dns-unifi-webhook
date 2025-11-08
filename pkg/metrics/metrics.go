@@ -273,12 +273,12 @@ func New(version string) *Metrics {
 				Name:      "info",
 				Help:      "Information about the webhook instance",
 			},
-			[]string{"version"},
+			[]string{"version", "provider"},
 		),
 	}
 
 	// Set info metric
-	m.Info.WithLabelValues(version).Set(1)
+	m.Info.WithLabelValues(version, "unifi").Set(1)
 
 	instance = m
 	return m

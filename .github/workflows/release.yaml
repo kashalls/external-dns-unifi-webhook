@@ -3,6 +3,11 @@ name: Release
 
 on:
   pull_request:
+    paths:
+      - "Containerfile"
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
   push:
     branches: ["main"]
   release:

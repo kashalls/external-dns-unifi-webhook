@@ -15,6 +15,7 @@ jobs:
     outputs:
       container: ${{ steps.filter.outputs.container }}
       markdown: ${{ steps.filter.outputs.markdown }}
+      go: ${{ steps.filter.outputs.go }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -32,6 +33,10 @@ jobs:
             markdown:
               - '**/*.md'
               - '.markdownlint.yaml'
+            go:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
 
   build-test:
     name: Build Container Image
@@ -94,3 +99,26 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@v18
         with:
           globs: "**/*.md"
+
+  test-go:
+    name: Run Go Tests
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests with coverage
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Display coverage summary
+        run: go tool cover -func=coverage.out | tail -1

@@ -11,6 +11,7 @@ linters:
     - wsl_v5
     - testpackage
     - paralleltest # TODO: enable back and add t.Parallel() to all tests
+    - lll
   settings:
     dupl:
       threshold: 100
@@ -79,7 +80,6 @@ linters:
     rules:
       - linters:
           - funlen
-          - lll
           - dupl
         path: _test\.go
 formatters:

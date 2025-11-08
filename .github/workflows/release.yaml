@@ -2,7 +2,6 @@
 name: Release
 
 on:
-  pull_request:
   push:
     branches: ["main"]
   release:
@@ -10,7 +9,6 @@ on:
 
 jobs:
   build-image:
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,7 +28,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},prefix=v
             type=semver,pattern={{major}},prefix=v
             type=ref,event=branch
-            type=ref,event=pr
           flavor: |
             latest=auto
 

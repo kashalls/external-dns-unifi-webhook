@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
@@ -41,24 +42,29 @@ func (p *Webhook) acceptHeaderCheck(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http.Request) error {
+	m := metrics.Get()
 	var header string
+	var headerType string
 	if isContentType {
 		header = r.Header.Get(contentTypeHeader)
+		headerType = "content-type"
 	} else {
 		header = r.Header.Get(acceptHeader)
+		headerType = "accept"
 	}
 
 	if len(header) == 0 {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusNotAcceptable)
+		m.HTTPValidationErrorsTotal.WithLabelValues(headerType).Inc()
 
-		msg := "client must provide "
+		var msg string
 		if isContentType {
-			msg += "a content type"
+			msg = "client must provide a content type"
 		} else {
-			msg += "an accept header"
+			msg = "client must provide an accept header"
 		}
-		err := fmt.Errorf(msg)
+		err := fmt.Errorf("%s", msg)
 
 		_, writeErr := fmt.Fprint(w, err.Error())
 		if writeErr != nil {
@@ -71,6 +77,7 @@ func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http
 	if _, err := checkAndGetMediaTypeHeaderValue(header); err != nil {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusUnsupportedMediaType)
+		m.HTTPValidationErrorsTotal.WithLabelValues(headerType).Inc()
 
 		msg := "client must provide a valid versioned media type in the "
 		if isContentType {
@@ -117,6 +124,7 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 
 // ApplyChanges handles the post request for record changes
 func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
+	m := metrics.Get()
 	if err := p.contentTypeHeaderCheck(w, r); err != nil {
 		requestLog(r).With(zap.Error(err)).Error("content type header check failed")
 		return
@@ -125,6 +133,7 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 	var changes plan.Changes
 	ctx := r.Context()
 	if err := json.NewDecoder(r.Body).Decode(&changes); err != nil {
+		m.HTTPJSONErrorsTotal.WithLabelValues("/records").Inc()
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusBadRequest)
 
@@ -153,6 +162,9 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 
 // AdjustEndpoints handles the post request for adjusting endpoints
 func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
+	m := metrics.Get()
+	m.AdjustEndpointsTotal.Inc()
+
 	if err := p.contentTypeHeaderCheck(w, r); err != nil {
 		log.Error("content-type header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
 		return
@@ -164,6 +176,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	var pve []*endpoint.Endpoint
 	if err := json.NewDecoder(r.Body).Decode(&pve); err != nil {
+		m.HTTPJSONErrorsTotal.WithLabelValues("/adjustendpoints").Inc()
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusBadRequest)
 
@@ -191,6 +204,9 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
+	m := metrics.Get()
+	m.NegotiateTotal.Inc()
+
 	if err := p.acceptHeaderCheck(w, r); err != nil {
 		requestLog(r).With(zap.Error(err)).Error("accept header check failed")
 		return

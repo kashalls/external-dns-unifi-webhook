@@ -8,8 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 	"golang.org/x/net/publicsuffix"
 	"sigs.k8s.io/external-dns/endpoint"
 
@@ -78,6 +81,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // login performs a login request to the UniFi controller.
 func (c *httpClient) login() error {
+	m := metrics.Get()
 	jsonBody, err := json.Marshal(Login{
 		Username: c.Config.User,
 		Password: c.Config.Password,
@@ -94,21 +98,31 @@ func (c *httpClient) login() error {
 		bytes.NewBuffer(jsonBody),
 	)
 	if err != nil {
+		m.UniFiLoginTotal.WithLabelValues("failure").Inc()
+		m.UniFiConnected.Set(0)
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
+		m.UniFiLoginTotal.WithLabelValues("failure").Inc()
+		m.UniFiConnected.Set(0)
 		respBody, _ := io.ReadAll(resp.Body)
 		log.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
-		return fmt.Errorf("login failed: %s", resp.Status)
+		return errors.Newf("login failed: %s", resp.Status)
 	}
+
+	m.UniFiLoginTotal.WithLabelValues("success").Inc()
+	m.UniFiConnected.Set(1)
 
 	// Retrieve CSRF token from the response headers
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")
+		m.UniFiCSRFRefreshesTotal.Inc()
 	}
 	return nil
 }
@@ -128,11 +142,16 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
 	if c.Config.ApiKey == "" {
+		m := metrics.Get()
 		if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
+			if c.csrf != csrf {
+				m.UniFiCSRFRefreshesTotal.Inc()
+			}
 			c.csrf = csrf
 		}
 		// If the status code is 401, re-login and retry the request
 		if resp.StatusCode == http.StatusUnauthorized {
+			m.UniFiReloginTotal.Inc()
 			log.Debug("received 401 unauthorized, attempting to re-login")
 			if err := c.login(); err != nil {
 				log.Error("re-login failed", zap.Error(err))
@@ -161,10 +180,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 		var apiError UnifiErrorResponse
 		if err := json.Unmarshal(body, &apiError); err != nil {
-			return nil, fmt.Errorf("failed to decode json: %w", err)
+			return nil, errors.Wrap(err, "failed to decode json")
 		}
 
-		return nil, fmt.Errorf("%s request to %s returned %d: %s", method, path, resp.StatusCode, apiError.Message)
+		return nil, errors.Newf("%s request to %s returned %d: %s", method, path, resp.StatusCode, apiError.Message)
 	}
 
 	return resp, nil
@@ -172,21 +191,39 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
+	m := metrics.Get()
+	start := time.Now()
+
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
 		nil,
 	)
+
+	duration := time.Since(start)
+
 	if err != nil {
+		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
+		return nil, errors.Wrap(err, "failed to read response body")
+	}
 
 	var records []DNSRecord
-	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
+	if err = json.Unmarshal(bodyBytes, &records); err != nil {
 		log.Error("Failed to decode response", zap.Error(err))
-		return nil, err
+		m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), err)
+		return nil, errors.Wrap(err, "failed to unmarshal DNS records")
 	}
+
+	m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), nil)
 
 	// Loop through records to modify SRV type
 	for i, record := range records {
@@ -212,7 +249,11 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, error) {
+	m := metrics.Get()
+	start := time.Now()
+
 	if endpoint.RecordType == "CNAME" && len(endpoint.Targets) > 1 {
+		m.IgnoredCNAMETargetsTotal.Inc()
 		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", zap.String("key", endpoint.DNSName), zap.Strings("ignored_targets", endpoint.Targets[1:]))
 		endpoint.Targets = endpoint.Targets[:1]
 	}
@@ -233,12 +274,17 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 			record.Port = new(int)
 
 			if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
+				m.SRVParsingErrorsTotal.Inc()
+				duration := time.Since(start)
+				m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
 				return nil, err
 			}
 		}
 
 		jsonBody, err := json.Marshal(record)
 		if err != nil {
+			duration := time.Since(start)
+			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
 			return nil, err
 		}
 
@@ -248,26 +294,46 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 			bytes.NewReader(jsonBody),
 		)
 		if err != nil {
+			duration := time.Since(start)
+			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			duration := time.Since(start)
+			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
+			return nil, errors.Wrap(err, "failed to read create endpoint response body")
+		}
 
 		var createdRecord DNSRecord
-		if err = json.NewDecoder(resp.Body).Decode(&createdRecord); err != nil {
-			return nil, err
+		if err = json.Unmarshal(bodyBytes, &createdRecord); err != nil {
+			duration := time.Since(start)
+			m.RecordUniFiAPICall("create_endpoint", duration, len(bodyBytes), err)
+			return nil, errors.Wrap(err, "failed to unmarshal created DNS record")
 		}
 
 		createdRecords = append(createdRecords, &createdRecord)
 		log.Debug("created new record", zap.Any("key", createdRecord.Key), zap.String("type", createdRecord.RecordType), zap.String("target", createdRecord.Value))
 	}
 
+	duration := time.Since(start)
+	m.RecordUniFiAPICall("create_endpoint", duration, 0, nil)
 	return createdRecords, nil
 }
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
+	m := metrics.Get()
+	start := time.Now()
+
 	records, err := c.GetEndpoints()
 	if err != nil {
+		duration := time.Since(start)
+		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
 		return err
 	}
 
@@ -289,9 +355,13 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 		}
 	}
 
+	duration := time.Since(start)
 	if len(deleteErrors) > 0 {
-		return fmt.Errorf("failed to delete some records: %v", deleteErrors)
+		err := errors.Newf("failed to delete %d records: %v", len(deleteErrors), deleteErrors)
+		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
+		return err
 	}
+	m.RecordUniFiAPICall("delete_endpoint", duration, 0, nil)
 	return nil
 }
 

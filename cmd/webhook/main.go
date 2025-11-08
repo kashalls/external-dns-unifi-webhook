@@ -7,6 +7,7 @@ import (
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/dnsprovider"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/server"
+	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/webhook"
 
 	"go.uber.org/zap"
@@ -27,6 +28,9 @@ func main() {
 	fmt.Printf(banner, Version, Gitsha)
 
 	log.Init()
+
+	// Initialize metrics
+	metrics.New(Version)
 
 	config := configuration.Init()
 	provider, err := dnsprovider.Init(config)

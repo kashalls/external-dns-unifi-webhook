@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/cockroachdb/errors"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-unifi-webhook/internal/unifi"
@@ -46,8 +47,13 @@ func Init(config configuration.Config) (provider.Provider, error) {
 
 	unifiConfig := unifi.Config{}
 	if err := env.Parse(&unifiConfig); err != nil {
-		return nil, fmt.Errorf("reading unifi configuration failed: %v", err)
+		return nil, errors.Wrap(err, "reading unifi configuration failed")
 	}
 
-	return unifi.NewUnifiProvider(domainFilter, &unifiConfig)
+	p, err := unifi.NewUnifiProvider(domainFilter, &unifiConfig)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create UniFi provider")
+	}
+
+	return p, nil
 }

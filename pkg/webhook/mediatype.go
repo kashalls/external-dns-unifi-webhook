@@ -1,14 +1,17 @@
 package webhook
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 const (
 	mediaTypeFormat        = "application/external.dns.webhook+json;"
 	supportedMediaVersions = "1"
 )
+
+var errUnsupportedMediaType = errors.New("unsupported media type version")
 
 var mediaTypeVersion1 = mediaTypeVersion("1")
 
@@ -37,5 +40,5 @@ func checkAndGetMediaTypeHeaderValue(value string) (string, error) {
 		}
 		supportedMediaTypesString += string(mediaTypeVersion(v)) + sep
 	}
-	return "", fmt.Errorf("unsupported media type version: '%s'. supported media types are: '%s'", value, supportedMediaTypesString)
+	return "", errors.Wrapf(errUnsupportedMediaType, "received '%s', supported media types are: '%s'", value, supportedMediaTypesString)
 }

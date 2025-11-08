@@ -3,10 +3,13 @@ package metrics
 import (
 	"net/http"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 type responseWriter struct {
 	http.ResponseWriter
+
 	statusCode int
 	written    int
 }
@@ -26,7 +29,10 @@ func (rw *responseWriter) WriteHeader(code int) {
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	n, err := rw.ResponseWriter.Write(b)
 	rw.written += n
-	return n, err
+	if err != nil {
+		return n, errors.Wrap(err, "failed to write response")
+	}
+	return n, nil
 }
 
 // HTTPMetricsMiddleware is a middleware that records HTTP metrics

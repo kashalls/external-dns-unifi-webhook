@@ -42,7 +42,9 @@ func Init() {
 	}
 
 	// Ensure we flush any buffered log entries
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 }
 
 

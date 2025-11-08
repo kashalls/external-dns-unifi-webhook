@@ -1,9 +1,10 @@
 package metrics
 
 import (
-	"errors"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/errors"
 )
 
 func TestMetrics(t *testing.T) {
@@ -40,7 +41,8 @@ func TestMetrics(t *testing.T) {
 		m.RecordUniFiAPICall("test_operation", time.Millisecond*50, 512, nil)
 
 		// Test failed call
-		m.RecordUniFiAPICall("test_operation", time.Millisecond*50, 0, errors.New("test error"))
+		testErr := errors.New("test error")
+		m.RecordUniFiAPICall("test_operation", time.Millisecond*50, 0, testErr)
 
 		if m.UniFiAPIDuration == nil {
 			t.Error("UniFiAPIDuration should not be nil")

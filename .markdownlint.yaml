@@ -1,0 +1,10 @@
+# Markdownlint configuration
+---
+# MD013 - Line length (disabled for technical documentation)
+MD013: false
+
+# MD029 - Ordered list item prefix (disabled for flexibility)
+MD029: false
+
+# MD033 - Inline HTML (allow for GitHub features like <details>, <div>)
+MD033: false

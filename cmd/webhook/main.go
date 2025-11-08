@@ -29,7 +29,6 @@ func main() {
 
 	log.Init()
 
-	// Initialize metrics
 	metrics.New(Version)
 
 	config := configuration.Init()

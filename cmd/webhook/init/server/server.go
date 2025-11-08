@@ -21,7 +21,7 @@ import (
 )
 
 // HealthCheckHandler returns the status of the service.
-func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+func HealthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
 		log.Error("failed to write health check response", zap.Error(err))
@@ -29,7 +29,7 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // ReadinessHandler returns whether the service is ready to accept requests.
-func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
+func ReadinessHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
 		log.Error("failed to write readiness response", zap.Error(err))

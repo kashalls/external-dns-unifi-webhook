@@ -53,6 +53,7 @@ func TestGetEndpoints(t *testing.T) {
 			expectedLen:    2,
 			expectedErr:    false,
 			validateResult: func(t *testing.T, records []DNSRecord) {
+			t.Helper()
 				if records[0].Key != "test.example.com" {
 					t.Errorf("First record Key = %q, want %q", records[0].Key, "test.example.com")
 				}
@@ -80,6 +81,7 @@ func TestGetEndpoints(t *testing.T) {
 			expectedLen:    1,
 			expectedErr:    false,
 			validateResult: func(t *testing.T, records []DNSRecord) {
+				t.Helper()
 				expected := "10 20 8080 target.example.com"
 				if records[0].Value != expected {
 					t.Errorf("SRV Value = %q, want %q", records[0].Value, expected)
@@ -152,7 +154,7 @@ func TestGetEndpoints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.responseStatus)
 				if tt.responseStatus == http.StatusOK {
 					if strBody, ok := tt.responseBody.(string); ok {
@@ -228,6 +230,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseStatus: http.StatusOK,
 			expectedErr:    false,
 			validateReq: func(t *testing.T, bodyBytes []byte) {
+				t.Helper()
 				var record DNSRecord
 				err := json.Unmarshal(bodyBytes, &record)
 				if err != nil {

@@ -349,6 +349,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	}
 
 	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
+	//nolint:godox // This TODO is intentional and will remain until the deprecated auth method is removed
 	if c.APIKey == "" {
 		m := metrics.Get()
 		if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {

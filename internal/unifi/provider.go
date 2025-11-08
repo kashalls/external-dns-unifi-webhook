@@ -2,9 +2,10 @@ package unifi
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/cockroachdb/errors"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 	"go.uber.org/zap"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
@@ -24,7 +25,7 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provi
 	c, err := newUnifiClient(config)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the unifi client: %w", err)
+		return nil, errors.Wrap(err, "failed to create the unifi client")
 	}
 
 	p := &UnifiProvider{
@@ -37,9 +38,24 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provi
 
 // Records returns the list of records in the DNS provider.
 func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
+	m := metrics.Get()
+
 	records, err := p.client.GetEndpoints()
 	if err != nil {
 		return nil, err
+	}
+
+	// Count records by type for metrics
+	recordsByType := make(map[string]int)
+	for _, r := range records {
+		if provider.SupportedRecordType(r.RecordType) {
+			recordsByType[r.RecordType]++
+		}
+	}
+
+	// Update metrics for each record type
+	for recordType, count := range recordsByType {
+		m.UpdateRecordsByType(recordType, count)
 	}
 
 	groups := make(map[string][]DNSRecord)
@@ -73,20 +89,32 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
+	m := metrics.Get()
+
 	existingRecords, err := p.Records(ctx)
 	if err != nil {
 		log.Error("failed to get records while applying", zap.Error(err))
-		return err
+		return errors.Wrap(err, "failed to get existing records before applying changes")
 	}
 
+	// Record batch sizes
+	m.BatchSize.WithLabelValues("create").Observe(float64(len(changes.Create)))
+	m.BatchSize.WithLabelValues("update").Observe(float64(len(changes.UpdateNew)))
+	m.BatchSize.WithLabelValues("delete").Observe(float64(len(changes.Delete)))
+
+	// Process deletions and updates (delete old)
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
 		if err := p.client.DeleteEndpoint(endpoint); err != nil {
 			log.Error("failed to delete endpoint", zap.Any("data", endpoint), zap.Error(err))
-			return err
+			return errors.Wrapf(err, "failed to delete endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
 		}
+		m.RecordChange("delete", endpoint.RecordType)
 	}
 
+	// Process creates and updates (create new)
 	for _, endpoint := range append(changes.Create, changes.UpdateNew...) {
+		operation := "create"
+		// Check for CNAME conflicts
 		if endpoint.RecordType == "CNAME" {
 			for _, record := range existingRecords {
 				if record.RecordType != "CNAME" {
@@ -97,16 +125,18 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 					continue
 				}
 
+				m.CNAMEConflictsTotal.Inc()
 				if err := p.client.DeleteEndpoint(record); err != nil {
 					log.Error("failed to delete conflicting CNAME", zap.Any("data", record), zap.Error(err))
-					return err
+					return errors.Wrapf(err, "failed to delete conflicting CNAME %s", record.DNSName)
 				}
 			}
 		}
 		if _, err := p.client.CreateEndpoint(endpoint); err != nil {
 			log.Error("failed to create endpoint", zap.Any("data", endpoint), zap.Error(err))
-			return err
+			return errors.Wrapf(err, "failed to create endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
 		}
+		m.RecordChange(operation, endpoint.RecordType)
 	}
 
 	return nil

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/webhook"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -34,6 +35,7 @@ func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 // Init initializes the http server
 func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
 	mainRouter := chi.NewRouter()
+	mainRouter.Use(metrics.HTTPMetricsMiddleware)
 	mainRouter.Get("/", p.Negotiate)
 	mainRouter.Get("/records", p.Records)
 	mainRouter.Post("/records", p.ApplyChanges)

@@ -11,7 +11,7 @@ import (
 
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
-	"sigs.k8s.io/external-dns/provider"
+	externaldnsprovider "sigs.k8s.io/external-dns/provider"
 
 	"go.uber.org/zap"
 )
@@ -25,80 +25,14 @@ const (
 
 // Webhook for external dns provider.
 type Webhook struct {
-	provider provider.Provider
+	provider externaldnsprovider.Provider
 }
 
 // New creates a new instance of the Webhook.
-func New(provider provider.Provider) *Webhook {
+func New(provider externaldnsprovider.Provider) *Webhook {
 	p := Webhook{provider: provider}
 
 	return &p
-}
-
-func (p *Webhook) contentTypeHeaderCheck(w http.ResponseWriter, r *http.Request) error {
-	return p.headerCheck(true, w, r)
-}
-
-func (p *Webhook) acceptHeaderCheck(w http.ResponseWriter, r *http.Request) error {
-	return p.headerCheck(false, w, r)
-}
-
-func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http.Request) error {
-	m := metrics.Get()
-	var header string
-	var headerType string
-	if isContentType {
-		header = r.Header.Get(contentTypeHeader)
-		headerType = "content-type"
-	} else {
-		header = r.Header.Get(acceptHeader)
-		headerType = "accept"
-	}
-
-	if header == "" {
-		w.Header().Set(contentTypeHeader, contentTypePlaintext)
-		w.WriteHeader(http.StatusNotAcceptable)
-		m.HTTPValidationErrorsTotal.WithLabelValues(metrics.ProviderName, headerType).Inc()
-
-		var msg string
-		if isContentType {
-			msg = "client must provide a content type"
-		} else {
-			msg = "client must provide an accept header"
-		}
-		err := errors.New(msg)
-
-		_, writeErr := fmt.Fprint(w, err.Error())
-		if writeErr != nil {
-			requestLog(r).With(zap.Error(writeErr)).Fatal("error writing error message to response writer")
-		}
-
-		return err
-	}
-
-	// as we support only one media type version, we can ignore the returned value
-	if _, err := checkAndGetMediaTypeHeaderValue(header); err != nil {
-		w.Header().Set(contentTypeHeader, contentTypePlaintext)
-		w.WriteHeader(http.StatusUnsupportedMediaType)
-		m.HTTPValidationErrorsTotal.WithLabelValues(metrics.ProviderName, headerType).Inc()
-
-		msg := "client must provide a valid versioned media type in the "
-		if isContentType {
-			msg += "content type"
-		} else {
-			msg += "accept header"
-		}
-
-		err := errors.Wrap(err, msg)
-		_, writeErr := fmt.Fprint(w, err.Error())
-		if writeErr != nil {
-			requestLog(r).With(zap.Error(writeErr)).Fatal("error writing error message to response writer")
-		}
-
-		return err
-	}
-
-	return nil
 }
 
 // Records handles the get request for records.
@@ -252,6 +186,72 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+}
+
+func (p *Webhook) contentTypeHeaderCheck(w http.ResponseWriter, r *http.Request) error {
+	return p.headerCheck(true, w, r)
+}
+
+func (p *Webhook) acceptHeaderCheck(w http.ResponseWriter, r *http.Request) error {
+	return p.headerCheck(false, w, r)
+}
+
+func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http.Request) error {
+	m := metrics.Get()
+	var header string
+	var headerType string
+	if isContentType {
+		header = r.Header.Get(contentTypeHeader)
+		headerType = "content-type"
+	} else {
+		header = r.Header.Get(acceptHeader)
+		headerType = "accept"
+	}
+
+	if header == "" {
+		w.Header().Set(contentTypeHeader, contentTypePlaintext)
+		w.WriteHeader(http.StatusNotAcceptable)
+		m.HTTPValidationErrorsTotal.WithLabelValues(metrics.ProviderName, headerType).Inc()
+
+		var msg string
+		if isContentType {
+			msg = "client must provide a content type"
+		} else {
+			msg = "client must provide an accept header"
+		}
+		err := errors.New(msg)
+
+		_, writeErr := fmt.Fprint(w, err.Error())
+		if writeErr != nil {
+			requestLog(r).With(zap.Error(writeErr)).Fatal("error writing error message to response writer")
+		}
+
+		return err
+	}
+
+	// as we support only one media type version, we can ignore the returned value
+	if _, err := checkAndGetMediaTypeHeaderValue(header); err != nil {
+		w.Header().Set(contentTypeHeader, contentTypePlaintext)
+		w.WriteHeader(http.StatusUnsupportedMediaType)
+		m.HTTPValidationErrorsTotal.WithLabelValues(metrics.ProviderName, headerType).Inc()
+
+		msg := "client must provide a valid versioned media type in the "
+		if isContentType {
+			msg += "content type"
+		} else {
+			msg += "accept header"
+		}
+
+		err := errors.Wrap(err, msg)
+		_, writeErr := fmt.Fprint(w, err.Error())
+		if writeErr != nil {
+			requestLog(r).With(zap.Error(writeErr)).Fatal("error writing error message to response writer")
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 func requestLog(r *http.Request) *zap.Logger {

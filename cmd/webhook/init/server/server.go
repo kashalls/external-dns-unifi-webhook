@@ -81,7 +81,7 @@ func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout 
 }
 
 // ShutdownGracefully gracefully shutdown the http server.
-func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
+func ShutdownGracefully(mainServer, healthServer *http.Server) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh

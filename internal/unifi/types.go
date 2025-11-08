@@ -23,6 +23,8 @@ type Login struct {
 }
 
 // DNSRecord represents a DNS record in the UniFi API.
+//
+//nolint:tagliatelle // UniFi API field names cannot be changed
 type DNSRecord struct {
 	ID         string       `json:"_id,omitempty"`
 	Enabled    bool         `json:"enabled,omitempty"`

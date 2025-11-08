@@ -40,11 +40,6 @@ func Init() {
 	if err != nil {
 		panic(err)
 	}
-
-	// Ensure we flush any buffered log entries
-	defer func() {
-		_ = logger.Sync()
-	}()
 }
 
 func Debug(message string, fields ...zap.Field) {

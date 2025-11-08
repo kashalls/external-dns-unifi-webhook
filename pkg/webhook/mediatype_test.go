@@ -230,12 +230,10 @@ func TestCheckAndGetMediaTypeHeaderValue(t *testing.T) {
 				if !errors.Is(err, errUnsupportedMediaType) {
 					t.Errorf("checkAndGetMediaTypeHeaderValue(%q) error should wrap errUnsupportedMediaType", tt.value)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("checkAndGetMediaTypeHeaderValue(%q) unexpected error = %v", tt.value, err)
+			} else if err != nil {
+				t.Errorf("checkAndGetMediaTypeHeaderValue(%q) unexpected error = %v", tt.value, err)
 
-					return
-				}
+				return
 			}
 
 			if version != tt.wantVersion {

@@ -52,7 +52,7 @@ jobs:
             REVISION=${{ github.event.pull_request.head.sha }}
 
       - name: Comment on PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             github.rest.issues.createComment({
@@ -63,7 +63,7 @@ jobs:
             })
 
       - name: Remove build-container label
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             github.rest.issues.removeLabel({
@@ -80,7 +80,7 @@ jobs:
       packages: write
     steps:
       - name: Delete PR container image
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const prNumber = context.payload.pull_request.number;

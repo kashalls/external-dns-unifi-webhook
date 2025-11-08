@@ -12,6 +12,7 @@ linters:
     - testpackage
     - paralleltest # TODO: enable back and add t.Parallel() to all tests
     - lll
+    - funcorder # Helper functions placement is a stylistic choice
   settings:
     dupl:
       threshold: 100
@@ -28,10 +29,12 @@ linters:
         - performance
         - style
     funlen:
-      lines: 50
-      statements: 50
+      lines: 60
+      statements: 60
     gocyclo:
-      min-complexity: 10
+      min-complexity: 15
+    cyclop:
+      max-complexity: 15
     mnd:
       ignored-numbers:
         - "10"

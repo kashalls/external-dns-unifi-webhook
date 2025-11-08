@@ -185,7 +185,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 			}
 		}
 
-		createdRecord, err := c.createSingleDNSRecord(ctx, record)
+		createdRecord, err := c.createSingleDNSRecord(ctx, &record)
 		if err != nil {
 			m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
 
@@ -227,7 +227,7 @@ func parseSRVTarget(record *DNSRecord, target string) error {
 }
 
 // createSingleDNSRecord sends a create request for a single DNS record and returns the created record.
-func (c *httpClient) createSingleDNSRecord(ctx context.Context, record DNSRecord) (*DNSRecord, error) {
+func (c *httpClient) createSingleDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
 	jsonBody, err := json.Marshal(record)
 	if err != nil {
 		return nil, NewDataError("marshal", "DNS record", err)

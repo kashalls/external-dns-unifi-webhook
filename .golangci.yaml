@@ -85,6 +85,8 @@ linters:
           - funlen
           - dupl
           - gocognit
+          - gocyclo
+          - cyclop
         path: _test\.go
 formatters:
   enable:

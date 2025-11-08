@@ -43,7 +43,7 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provi
 func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 	m := metrics.Get()
 
-	records, err := p.client.GetEndpoints()
+	records, err := p.client.GetEndpoints(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch DNS records")
 	}
@@ -108,7 +108,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 	// Process deletions and updates (delete old)
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
-		err := p.client.DeleteEndpoint(endpoint)
+		err := p.client.DeleteEndpoint(ctx, endpoint)
 		if err != nil {
 			log.Error("failed to delete endpoint", zap.Any("data", endpoint), zap.Error(err))
 
@@ -132,7 +132,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 				}
 
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				err := p.client.DeleteEndpoint(record)
+				err := p.client.DeleteEndpoint(ctx, record)
 				if err != nil {
 					log.Error("failed to delete conflicting CNAME", zap.Any("data", record), zap.Error(err))
 
@@ -140,7 +140,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 				}
 			}
 		}
-		_, err := p.client.CreateEndpoint(endpoint)
+		_, err := p.client.CreateEndpoint(ctx, endpoint)
 		if err != nil {
 			log.Error("failed to create endpoint", zap.Any("data", endpoint), zap.Error(err))
 

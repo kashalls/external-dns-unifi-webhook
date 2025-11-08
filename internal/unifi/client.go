@@ -2,6 +2,7 @@ package unifi
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -84,7 +85,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
 
-	err = client.login()
+	err = client.login(context.Background())
 	if err != nil {
 		return nil, errors.Wrap(err, "initial login failed")
 	}
@@ -93,11 +94,12 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 }
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
-func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
+func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 	m := metrics.Get()
 	start := time.Now()
 
 	resp, err := c.doRequest(
+		ctx,
 		http.MethodGet,
 		FormatURL(c.ClientURLs.Records, c.Host, c.Site),
 		nil,
@@ -156,7 +158,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
-func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*DNSRecord, error) {
+func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) ([]*DNSRecord, error) {
 	m := metrics.Get()
 	start := time.Now()
 
@@ -200,6 +202,7 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 		}
 
 		resp, err := c.doRequest(
+			ctx,
 			http.MethodPost,
 			FormatURL(c.ClientURLs.Records, c.Host, c.Site),
 			bytes.NewReader(jsonBody),
@@ -240,11 +243,11 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 }
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
-func (c *httpClient) DeleteEndpoint(endpoint *externaldnsendpoint.Endpoint) error {
+func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) error {
 	m := metrics.Get()
 	start := time.Now()
 
-	records, err := c.GetEndpoints()
+	records, err := c.GetEndpoints(ctx)
 	if err != nil {
 		duration := time.Since(start)
 		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
@@ -258,6 +261,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *externaldnsendpoint.Endpoint) erro
 			deleteURL := FormatURL(c.ClientURLs.Records, c.Host, c.Site, record.ID)
 
 			resp, err := c.doRequest(
+				ctx,
 				http.MethodDelete,
 				deleteURL,
 				nil,
@@ -286,7 +290,7 @@ func (c *httpClient) DeleteEndpoint(endpoint *externaldnsendpoint.Endpoint) erro
 	return nil
 }
 
-func (c *httpClient) login() error {
+func (c *httpClient) login(ctx context.Context) error {
 	m := metrics.Get()
 	jsonBody, err := json.Marshal(Login{
 		Username: c.User,
@@ -299,6 +303,7 @@ func (c *httpClient) login() error {
 
 	// Perform the login request
 	resp, err := c.doRequest(
+		ctx,
 		http.MethodPost,
 		FormatURL(c.ClientURLs.Login, c.Host),
 		bytes.NewBuffer(jsonBody),
@@ -340,8 +345,8 @@ func (c *httpClient) login() error {
 	return nil
 }
 
-func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, path, body)
+func (c *httpClient) doRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, path, body)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create HTTP request")
 	}
@@ -367,7 +372,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		if resp.StatusCode == http.StatusUnauthorized {
 			m.UniFiReloginTotal.WithLabelValues(metrics.ProviderName).Inc()
 			log.Debug("received 401 unauthorized, attempting to re-login")
-			err := c.login()
+			err := c.login(ctx)
 			if err != nil {
 				log.Error("re-login failed", zap.Error(err))
 

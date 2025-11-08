@@ -43,15 +43,15 @@ func ReadinessHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // Init initializes the http server.
-func Init(config *configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
+func Init(config *configuration.Config, whk *webhook.Webhook) (mainServer, healthServer *http.Server) {
 	mainRouter := chi.NewRouter()
 	mainRouter.Use(metrics.HTTPMetricsMiddleware)
-	mainRouter.Get("/", p.Negotiate)
-	mainRouter.Get("/records", p.Records)
-	mainRouter.Post("/records", p.ApplyChanges)
-	mainRouter.Post("/adjustendpoints", p.AdjustEndpoints)
+	mainRouter.Get("/", whk.Negotiate)
+	mainRouter.Get("/records", whk.Records)
+	mainRouter.Post("/records", whk.ApplyChanges)
+	mainRouter.Post("/adjustendpoints", whk.AdjustEndpoints)
 
-	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	mainServer = createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
 		log.Info("starting webhook server", zap.String("address", mainServer.Addr))
 		err := mainServer.ListenAndServe()
@@ -65,7 +65,7 @@ func Init(config *configuration.Config, p *webhook.Webhook) (*http.Server, *http
 	healthRouter.Get("/healthz", HealthCheckHandler)
 	healthRouter.Get("/readyz", ReadinessHandler)
 
-	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	healthServer = createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
 		log.Info("starting health server", zap.String("address", healthServer.Addr))
 		err := healthServer.ListenAndServe()

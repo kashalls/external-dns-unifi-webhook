@@ -1,6 +1,7 @@
 package unifi
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -185,7 +186,7 @@ func TestGetEndpoints(t *testing.T) {
 				},
 			}
 
-			records, err := client.GetEndpoints()
+			records, err := client.GetEndpoints(context.Background())
 
 			if tt.expectedErr && err == nil {
 				t.Error("GetEndpoints() expected error, got nil")
@@ -380,7 +381,7 @@ func TestCreateEndpoint(t *testing.T) {
 				},
 			}
 
-			records, err := client.CreateEndpoint(tt.endpoint)
+			records, err := client.CreateEndpoint(context.Background(), tt.endpoint)
 
 			if tt.expectedErr && err == nil {
 				t.Error("CreateEndpoint() expected error, got nil")
@@ -551,7 +552,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				},
 			}
 
-			err := client.DeleteEndpoint(tt.endpoint)
+			err := client.DeleteEndpoint(context.Background(), tt.endpoint)
 
 			if tt.expectedErr && err == nil {
 				t.Error("DeleteEndpoint() expected error, got nil")
@@ -608,7 +609,7 @@ func TestSetHeaders(t *testing.T) {
 				csrf:   tt.csrf,
 			}
 
-			req, _ := http.NewRequest(http.MethodGet, "http://example.com", http.NoBody)
+			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", http.NoBody)
 			client.setHeaders(req)
 
 			for key, expectedValue := range tt.expectedHeaders {

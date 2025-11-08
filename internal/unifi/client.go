@@ -62,12 +62,12 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		},
 	}
 
-	if client.Config.ExternalController {
+	if client.ExternalController {
 		client.ClientURLs.Login = unifiLoginPathExternal
 		client.ClientURLs.Records = unifiRecordPathExternal
 	}
 
-	if client.Config.ApiKey != "" {
+	if client.ApiKey != "" {
 		return client, nil
 	}
 
@@ -84,8 +84,8 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 func (c *httpClient) login() error {
 	m := metrics.Get()
 	jsonBody, err := json.Marshal(Login{
-		Username: c.Config.User,
-		Password: c.Config.Password,
+		Username: c.User,
+		Password: c.Password,
 		Remember: true,
 	})
 	if err != nil {
@@ -95,12 +95,13 @@ func (c *httpClient) login() error {
 	// Perform the login request
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(c.ClientURLs.Login, c.Config.Host),
+		FormatUrl(c.ClientURLs.Login, c.Host),
 		bytes.NewBuffer(jsonBody),
 	)
 	if err != nil {
 		m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "failure").Inc()
 		m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(0)
+
 		return err
 	}
 
@@ -118,6 +119,7 @@ func (c *httpClient) login() error {
 			responseMsg = string(respBody)
 		}
 		log.Error("login failed", zap.String("status", resp.Status), zap.String("response", responseMsg))
+
 		return NewAuthError("login", resp.StatusCode, resp.Status, nil)
 	}
 
@@ -129,6 +131,7 @@ func (c *httpClient) login() error {
 		c.csrf = resp.Header.Get("X-Csrf-Token")
 		m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
 	}
+
 	return nil
 }
 
@@ -140,13 +143,13 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 
 	c.setHeaders(req)
 
-	resp, err := c.Client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, NewNetworkError(method, path, err)
 	}
 
 	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
-	if c.Config.ApiKey == "" {
+	if c.ApiKey == "" {
 		m := metrics.Get()
 		if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {
 			if c.csrf != csrf {
@@ -158,8 +161,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		if resp.StatusCode == http.StatusUnauthorized {
 			m.UniFiReloginTotal.WithLabelValues(metrics.ProviderName).Inc()
 			log.Debug("received 401 unauthorized, attempting to re-login")
-			if err := c.login(); err != nil {
+			err := c.login()
+			if err != nil {
 				log.Error("re-login failed", zap.Error(err))
+
 				return nil, errors.Wrap(err, "re-login after 401 failed")
 			}
 			// Update the headers with new CSRF token
@@ -168,9 +173,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 			// Retry the request
 			log.Debug("retrying request after re-login")
 
-			resp, err = c.Client.Do(req)
+			resp, err = c.Do(req)
 			if err != nil {
 				log.Error("Retry request failed", zap.Error(err))
+
 				return nil, NewNetworkError(method+" (retry)", path, err)
 			}
 		}
@@ -184,7 +190,8 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		}
 
 		var apiError UnifiErrorResponse
-		if err := json.Unmarshal(body, &apiError); err != nil {
+		err := json.Unmarshal(body, &apiError)
+		if err != nil {
 			return nil, NewDataError("unmarshal", "API error response", err)
 		}
 
@@ -201,7 +208,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	resp, err := c.doRequest(
 		http.MethodGet,
-		FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
+		FormatUrl(c.ClientURLs.Records, c.Host, c.Site),
 		nil,
 	)
 
@@ -209,6 +216,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	if err != nil {
 		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
+
 		return nil, errors.Wrap(err, "failed to fetch DNS records from UniFi")
 	}
 	defer func() {
@@ -218,6 +226,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
+
 		return nil, NewDataError("read", "get endpoints response body", err)
 	}
 
@@ -225,6 +234,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	if err = json.Unmarshal(bodyBytes, &records); err != nil {
 		log.Error("Failed to decode response", zap.Error(err))
 		m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), err)
+
 		return nil, NewDataError("unmarshal", "DNS records", err)
 	}
 
@@ -249,6 +259,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 	}
 
 	log.Debug("fetched records", zap.Int("count", len(records)))
+
 	return records, nil
 }
 
@@ -282,6 +293,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				duration := time.Since(start)
 				m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
+
 				return nil, NewDataError("parse", "SRV record target", err)
 			}
 		}
@@ -290,17 +302,19 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 		if err != nil {
 			duration := time.Since(start)
 			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
+
 			return nil, NewDataError("marshal", "DNS record", err)
 		}
 
 		resp, err := c.doRequest(
 			http.MethodPost,
-			FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site),
+			FormatUrl(c.ClientURLs.Records, c.Host, c.Site),
 			bytes.NewReader(jsonBody),
 		)
 		if err != nil {
 			duration := time.Since(start)
 			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
+
 			return nil, errors.Wrap(err, "failed to create DNS record")
 		}
 		defer func() {
@@ -311,6 +325,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 		if err != nil {
 			duration := time.Since(start)
 			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
+
 			return nil, NewDataError("read", "create endpoint response body", err)
 		}
 
@@ -318,6 +333,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 		if err = json.Unmarshal(bodyBytes, &createdRecord); err != nil {
 			duration := time.Since(start)
 			m.RecordUniFiAPICall("create_endpoint", duration, len(bodyBytes), err)
+
 			return nil, NewDataError("unmarshal", "created DNS record", err)
 		}
 
@@ -327,6 +343,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 
 	duration := time.Since(start)
 	m.RecordUniFiAPICall("create_endpoint", duration, 0, nil)
+
 	return createdRecords, nil
 }
 
@@ -339,13 +356,14 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 	if err != nil {
 		duration := time.Since(start)
 		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
+
 		return errors.Wrap(err, "failed to fetch records before deletion")
 	}
 
 	var deleteErrors []error
 	for _, record := range records {
 		if record.Key == endpoint.DNSName && record.RecordType == endpoint.RecordType {
-			deleteURL := FormatUrl(c.ClientURLs.Records, c.Config.Host, c.Config.Site, record.ID)
+			deleteURL := FormatUrl(c.ClientURLs.Records, c.Host, c.Site, record.ID)
 
 			resp, err := c.doRequest(
 				http.MethodDelete,
@@ -368,16 +386,18 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 			err = errors.Wrap(deleteErr, err.Error())
 		}
 		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
+
 		return err
 	}
 	m.RecordUniFiAPICall("delete_endpoint", duration, 0, nil)
+
 	return nil
 }
 
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
-	if c.Config.ApiKey != "" {
-		req.Header.Set("X-Api-Key", c.Config.ApiKey)
+	if c.ApiKey != "" {
+		req.Header.Set("X-Api-Key", c.ApiKey)
 	} else {
 		req.Header.Set("X-Csrf-Token", c.csrf)
 	}

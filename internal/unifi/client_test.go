@@ -19,11 +19,11 @@ func init() {
 	_ = metrics.Get()
 }
 
-// TestGetEndpoints tests the GetEndpoints method with mock HTTP server
+// TestGetEndpoints tests the GetEndpoints method with mock HTTP server.
 func TestGetEndpoints(t *testing.T) {
 	tests := []struct {
 		name           string
-		responseBody   interface{}
+		responseBody   any
 		responseStatus int
 		expectedLen    int
 		expectedErr    bool
@@ -168,9 +168,9 @@ func TestGetEndpoints(t *testing.T) {
 
 			client := &httpClient{
 				Config: &Config{
-					Host:     server.URL,
-					Site:     "default",
-					ApiKey:   "test-key",
+					Host:          server.URL,
+					Site:          "default",
+					ApiKey:        "test-key",
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
@@ -199,12 +199,12 @@ func TestGetEndpoints(t *testing.T) {
 	}
 }
 
-// TestCreateEndpoint tests the CreateEndpoint method
+// TestCreateEndpoint tests the CreateEndpoint method.
 func TestCreateEndpoint(t *testing.T) {
 	tests := []struct {
 		name           string
 		endpoint       *endpoint.Endpoint
-		responseBody   interface{}
+		responseBody   any
 		responseStatus int
 		expectedErr    bool
 		validateReq    func(*testing.T, []byte)
@@ -229,7 +229,8 @@ func TestCreateEndpoint(t *testing.T) {
 			expectedErr:    false,
 			validateReq: func(t *testing.T, bodyBytes []byte) {
 				var record DNSRecord
-				if err := json.Unmarshal(bodyBytes, &record); err != nil {
+				err := json.Unmarshal(bodyBytes, &record)
+				if err != nil {
 					t.Fatalf("Failed to decode request body: %v", err)
 				}
 				if record.Key != "test.example.com" {
@@ -285,7 +286,8 @@ func TestCreateEndpoint(t *testing.T) {
 			expectedErr:    false,
 			validateReq: func(t *testing.T, bodyBytes []byte) {
 				var record DNSRecord
-				if err := json.Unmarshal(bodyBytes, &record); err != nil {
+				err := json.Unmarshal(bodyBytes, &record)
+				if err != nil {
 					t.Fatalf("Failed to decode request body: %v", err)
 				}
 				if record.Priority == nil || *record.Priority != 10 {
@@ -390,7 +392,7 @@ func TestCreateEndpoint(t *testing.T) {
 	}
 }
 
-// TestDeleteEndpoint tests the DeleteEndpoint method
+// TestDeleteEndpoint tests the DeleteEndpoint method.
 func TestDeleteEndpoint(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -509,11 +511,12 @@ func TestDeleteEndpoint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deleteCount := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == http.MethodGet {
+				switch r.Method {
+				case http.MethodGet:
 					// GetEndpoints call
 					w.WriteHeader(http.StatusOK)
 					_ = json.NewEncoder(w).Encode(tt.existingRecords)
-				} else if r.Method == http.MethodDelete {
+				case http.MethodDelete:
 					// Delete call
 					deleteCount++
 					w.WriteHeader(tt.responseStatus)
@@ -556,7 +559,7 @@ func TestDeleteEndpoint(t *testing.T) {
 	}
 }
 
-// TestSetHeaders tests header setting logic
+// TestSetHeaders tests header setting logic.
 func TestSetHeaders(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -597,7 +600,7 @@ func TestSetHeaders(t *testing.T) {
 				csrf:   tt.csrf,
 			}
 
-			req, _ := http.NewRequest(http.MethodGet, "http://example.com", nil)
+			req, _ := http.NewRequest(http.MethodGet, "http://example.com", http.NoBody)
 			client.setHeaders(req)
 
 			for key, expectedValue := range tt.expectedHeaders {
@@ -610,16 +613,16 @@ func TestSetHeaders(t *testing.T) {
 	}
 }
 
-// TestFormatUrl_ClientUsage tests FormatUrl in real client scenarios
+// TestFormatUrl_ClientUsage tests FormatUrl in real client scenarios.
 func TestFormatUrl_ClientUsage(t *testing.T) {
 	tests := []struct {
-		name       string
-		urls       *ClientURLs
-		host       string
-		site       string
-		recordID   string
-		operation  string
-		expected   string
+		name      string
+		urls      *ClientURLs
+		host      string
+		site      string
+		recordID  string
+		operation string
+		expected  string
 	}{
 		{
 			name: "internal controller - list records",
@@ -672,7 +675,7 @@ func TestFormatUrl_ClientUsage(t *testing.T) {
 	}
 }
 
-// Helper function for tests
+// Helper function for tests.
 func intPtr(i int) *int {
 	return &i
 }

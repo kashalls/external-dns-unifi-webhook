@@ -30,10 +30,10 @@ func Init(config configuration.Config) (provider.Provider, error) {
 			regexp.MustCompile(config.RegexDomainExclusion),
 		)
 	} else {
-		if config.DomainFilter != nil && len(config.DomainFilter) > 0 {
+		if len(config.DomainFilter) > 0 {
 			createMsg += fmt.Sprintf("domain filter: '%s', ", strings.Join(config.DomainFilter, ","))
 		}
-		if config.ExcludeDomains != nil && len(config.ExcludeDomains) > 0 {
+		if len(config.ExcludeDomains) > 0 {
 			createMsg += fmt.Sprintf("exclude domain filter: '%s', ", strings.Join(config.ExcludeDomains, ","))
 		}
 		domainFilter = *endpoint.NewDomainFilterWithExclusions(config.DomainFilter, config.ExcludeDomains)

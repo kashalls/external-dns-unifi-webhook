@@ -13,50 +13,50 @@ const (
 	ProviderName = "unifi"
 )
 
-// Metrics holds all Prometheus metrics for the webhook
+// Metrics holds all Prometheus metrics for the webhook.
 type Metrics struct {
 	// HTTP metrics
-	HTTPRequestsTotal          *prometheus.CounterVec
-	HTTPRequestDuration        *prometheus.HistogramVec
-	HTTPRequestsInFlight       *prometheus.GaugeVec
-	HTTPResponseSizeBytes      *prometheus.HistogramVec
-	HTTPValidationErrorsTotal  *prometheus.CounterVec
-	HTTPJSONErrorsTotal        *prometheus.CounterVec
+	HTTPRequestsTotal         *prometheus.CounterVec
+	HTTPRequestDuration       *prometheus.HistogramVec
+	HTTPRequestsInFlight      *prometheus.GaugeVec
+	HTTPResponseSizeBytes     *prometheus.HistogramVec
+	HTTPValidationErrorsTotal *prometheus.CounterVec
+	HTTPJSONErrorsTotal       *prometheus.CounterVec
 
 	// Business metrics - DNS records
-	RecordsTotal               *prometheus.GaugeVec
-	ChangesTotal               *prometheus.CounterVec
-	ChangesByTypeTotal         *prometheus.CounterVec
-	CNAMEConflictsTotal        *prometheus.CounterVec
-	IgnoredCNAMETargetsTotal   *prometheus.CounterVec
-	SRVParsingErrorsTotal      *prometheus.CounterVec
-	BatchSize                  *prometheus.HistogramVec
+	RecordsTotal             *prometheus.GaugeVec
+	ChangesTotal             *prometheus.CounterVec
+	ChangesByTypeTotal       *prometheus.CounterVec
+	CNAMEConflictsTotal      *prometheus.CounterVec
+	IgnoredCNAMETargetsTotal *prometheus.CounterVec
+	SRVParsingErrorsTotal    *prometheus.CounterVec
+	BatchSize                *prometheus.HistogramVec
 
 	// Endpoint operations
-	AdjustEndpointsTotal       *prometheus.CounterVec
-	NegotiateTotal             *prometheus.CounterVec
+	AdjustEndpointsTotal *prometheus.CounterVec
+	NegotiateTotal       *prometheus.CounterVec
 
 	// UniFi API metrics
-	UniFiAPIErrorsTotal        *prometheus.CounterVec
-	UniFiAPIDuration           *prometheus.HistogramVec
-	UniFiLoginTotal            *prometheus.CounterVec
-	UniFiReloginTotal          *prometheus.CounterVec
-	UniFiCSRFRefreshesTotal    *prometheus.CounterVec
-	UniFiConnected             *prometheus.GaugeVec
-	UniFiResponseSizeBytes     *prometheus.HistogramVec
+	UniFiAPIErrorsTotal     *prometheus.CounterVec
+	UniFiAPIDuration        *prometheus.HistogramVec
+	UniFiLoginTotal         *prometheus.CounterVec
+	UniFiReloginTotal       *prometheus.CounterVec
+	UniFiCSRFRefreshesTotal *prometheus.CounterVec
+	UniFiConnected          *prometheus.GaugeVec
+	UniFiResponseSizeBytes  *prometheus.HistogramVec
 
 	// Quality metrics
-	ConsecutiveErrors          *prometheus.GaugeVec
-	LastSuccessTimestamp       *prometheus.GaugeVec
-	OperationSuccessRate       *prometheus.GaugeVec
+	ConsecutiveErrors    *prometheus.GaugeVec
+	LastSuccessTimestamp *prometheus.GaugeVec
+	OperationSuccessRate *prometheus.GaugeVec
 
 	// Info metric
-	Info                       *prometheus.GaugeVec
+	Info *prometheus.GaugeVec
 }
 
 var instance *Metrics
 
-// New creates and registers all metrics
+// New creates and registers all metrics.
 func New(version string) *Metrics {
 	if instance != nil {
 		return instance
@@ -293,18 +293,20 @@ func New(version string) *Metrics {
 	m.Info.WithLabelValues(version, ProviderName).Set(1)
 
 	instance = m
+
 	return m
 }
 
-// Get returns the singleton metrics instance
+// Get returns the singleton metrics instance.
 func Get() *Metrics {
 	if instance == nil {
 		return New("unknown")
 	}
+
 	return instance
 }
 
-// RecordHTTPRequest records HTTP request metrics
+// RecordHTTPRequest records HTTP request metrics.
 func (m *Metrics) RecordHTTPRequest(method, endpoint string, statusCode int, duration time.Duration, responseSize int) {
 	m.HTTPRequestsTotal.WithLabelValues(ProviderName, method, endpoint, strconv.Itoa(statusCode)).Inc()
 	m.HTTPRequestDuration.WithLabelValues(ProviderName, method, endpoint).Observe(duration.Seconds())
@@ -313,7 +315,7 @@ func (m *Metrics) RecordHTTPRequest(method, endpoint string, statusCode int, dur
 	}
 }
 
-// RecordUniFiAPICall records UniFi API call metrics
+// RecordUniFiAPICall records UniFi API call metrics.
 func (m *Metrics) RecordUniFiAPICall(operation string, duration time.Duration, responseSize int, err error) {
 	m.UniFiAPIDuration.WithLabelValues(ProviderName, operation).Observe(duration.Seconds())
 	if responseSize > 0 {
@@ -328,12 +330,12 @@ func (m *Metrics) RecordUniFiAPICall(operation string, duration time.Duration, r
 	}
 }
 
-// UpdateRecordsByType updates the records count by type
+// UpdateRecordsByType updates the records count by type.
 func (m *Metrics) UpdateRecordsByType(recordType string, count int) {
 	m.RecordsTotal.WithLabelValues(ProviderName, recordType).Set(float64(count))
 }
 
-// RecordChange records a DNS change operation
+// RecordChange records a DNS change operation.
 func (m *Metrics) RecordChange(operation, recordType string) {
 	m.ChangesTotal.WithLabelValues(ProviderName, operation).Inc()
 	m.ChangesByTypeTotal.WithLabelValues(ProviderName, operation, recordType).Inc()

@@ -47,7 +47,6 @@ func Init() {
 	}()
 }
 
-
 func Debug(message string, fields ...zap.Field) {
 	logger.Debug(message, fields...)
 }

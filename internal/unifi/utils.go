@@ -12,5 +12,6 @@ func FormatUrl(path string, params ...string) string {
 			segments[i] += param
 		}
 	}
+
 	return strings.Join(segments, "")
 }

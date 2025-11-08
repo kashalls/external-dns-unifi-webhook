@@ -1,14 +1,14 @@
 package unifi
 
 import (
-	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
 )
 
-// TestAuthError tests AuthError type
+// TestAuthError tests AuthError type.
 func TestAuthError(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -23,7 +23,7 @@ func TestAuthError(t *testing.T) {
 			operation:  "login",
 			status:     401,
 			message:    "invalid credentials",
-			wrappedErr: fmt.Errorf("connection timeout"),
+			wrappedErr: errors.New("connection timeout"),
 			expectedContain: []string{
 				"authentication failed during login",
 				"status 401",
@@ -98,7 +98,7 @@ func TestAuthError(t *testing.T) {
 
 			// Test Unwrap
 			unwrapped := authErr.Unwrap()
-			if unwrapped != tt.wrappedErr {
+			if !errors.Is(unwrapped, tt.wrappedErr) {
 				t.Errorf("AuthError.Unwrap() = %v, want %v", unwrapped, tt.wrappedErr)
 			}
 
@@ -112,7 +112,7 @@ func TestAuthError(t *testing.T) {
 	}
 }
 
-// TestNetworkError tests NetworkError type
+// TestNetworkError tests NetworkError type.
 func TestNetworkError(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -125,7 +125,7 @@ func TestNetworkError(t *testing.T) {
 			name:       "network error with connection timeout",
 			operation:  "GET",
 			url:        "https://unifi.example.com/api/login",
-			wrappedErr: fmt.Errorf("dial tcp: connection timeout"),
+			wrappedErr: errors.New("dial tcp: connection timeout"),
 			expectedContain: []string{
 				"network error during GET",
 				"https://unifi.example.com/api/login",
@@ -136,7 +136,7 @@ func TestNetworkError(t *testing.T) {
 			name:       "network error with DNS failure",
 			operation:  "POST",
 			url:        "https://invalid.local/api",
-			wrappedErr: fmt.Errorf("no such host"),
+			wrappedErr: errors.New("no such host"),
 			expectedContain: []string{
 				"network error during POST",
 				"https://invalid.local/api",
@@ -147,7 +147,7 @@ func TestNetworkError(t *testing.T) {
 			name:       "network error with empty URL",
 			operation:  "DELETE",
 			url:        "",
-			wrappedErr: fmt.Errorf("empty URL"),
+			wrappedErr: errors.New("empty URL"),
 			expectedContain: []string{
 				"network error during DELETE",
 				"empty URL",
@@ -157,7 +157,7 @@ func TestNetworkError(t *testing.T) {
 			name:       "network error with special characters in URL",
 			operation:  "PUT",
 			url:        "https://unifi.local/api?param=value&key=секрет",
-			wrappedErr: fmt.Errorf("invalid character"),
+			wrappedErr: errors.New("invalid character"),
 			expectedContain: []string{
 				"network error during PUT",
 				"https://unifi.local/api?param=value&key=секрет",
@@ -183,7 +183,7 @@ func TestNetworkError(t *testing.T) {
 
 			// Test Unwrap
 			unwrapped := netErr.Unwrap()
-			if unwrapped != tt.wrappedErr {
+			if !errors.Is(unwrapped, tt.wrappedErr) {
 				t.Errorf("NetworkError.Unwrap() = %v, want %v", unwrapped, tt.wrappedErr)
 			}
 
@@ -195,7 +195,7 @@ func TestNetworkError(t *testing.T) {
 	}
 }
 
-// TestAPIError tests APIError type
+// TestAPIError tests APIError type.
 func TestAPIError(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -286,7 +286,7 @@ func TestAPIError(t *testing.T) {
 	}
 }
 
-// TestDataError tests DataError type
+// TestDataError tests DataError type.
 func TestDataError(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -299,7 +299,7 @@ func TestDataError(t *testing.T) {
 			name:       "data error marshaling JSON",
 			operation:  "marshal",
 			dataType:   "DNS record",
-			wrappedErr: fmt.Errorf("json: unsupported type"),
+			wrappedErr: errors.New("json: unsupported type"),
 			expectedContain: []string{
 				"data error during marshal",
 				"DNS record",
@@ -310,7 +310,7 @@ func TestDataError(t *testing.T) {
 			name:       "data error unmarshaling JSON",
 			operation:  "unmarshal",
 			dataType:   "API response",
-			wrappedErr: fmt.Errorf("json: cannot unmarshal"),
+			wrappedErr: errors.New("json: cannot unmarshal"),
 			expectedContain: []string{
 				"data error during unmarshal",
 				"API response",
@@ -321,7 +321,7 @@ func TestDataError(t *testing.T) {
 			name:       "data error reading body",
 			operation:  "read",
 			dataType:   "response body",
-			wrappedErr: fmt.Errorf("unexpected EOF"),
+			wrappedErr: errors.New("unexpected EOF"),
 			expectedContain: []string{
 				"data error during read",
 				"response body",
@@ -332,7 +332,7 @@ func TestDataError(t *testing.T) {
 			name:       "data error parsing SRV record",
 			operation:  "parse",
 			dataType:   "SRV record target",
-			wrappedErr: fmt.Errorf("invalid format"),
+			wrappedErr: errors.New("invalid format"),
 			expectedContain: []string{
 				"data error during parse",
 				"SRV record target",
@@ -343,7 +343,7 @@ func TestDataError(t *testing.T) {
 			name:       "data error with empty dataType",
 			operation:  "validate",
 			dataType:   "",
-			wrappedErr: fmt.Errorf("validation failed"),
+			wrappedErr: errors.New("validation failed"),
 			expectedContain: []string{
 				"data error during validate",
 				"validation failed",
@@ -368,7 +368,7 @@ func TestDataError(t *testing.T) {
 
 			// Test Unwrap
 			unwrapped := dataErr.Unwrap()
-			if unwrapped != tt.wrappedErr {
+			if !errors.Is(unwrapped, tt.wrappedErr) {
 				t.Errorf("DataError.Unwrap() = %v, want %v", unwrapped, tt.wrappedErr)
 			}
 
@@ -380,16 +380,17 @@ func TestDataError(t *testing.T) {
 	}
 }
 
-// TestNewAuthError tests NewAuthError helper
+// TestNewAuthError tests NewAuthError helper.
 func TestNewAuthError(t *testing.T) {
-	wrappedErr := fmt.Errorf("underlying error")
+	wrappedErr := errors.New("underlying error")
 	err := NewAuthError("login", 401, "unauthorized", wrappedErr)
 
 	if err == nil {
 		t.Fatal("NewAuthError returned nil")
 	}
 
-	authErr, ok := err.(*AuthError)
+	authErr := &AuthError{}
+	ok := errors.As(err, &authErr)
 	if !ok {
 		t.Fatalf("NewAuthError returned %T, want *AuthError", err)
 	}
@@ -403,21 +404,22 @@ func TestNewAuthError(t *testing.T) {
 	if authErr.Message != "unauthorized" {
 		t.Errorf("Message = %q, want %q", authErr.Message, "unauthorized")
 	}
-	if authErr.Err != wrappedErr {
+	if !errors.Is(authErr.Err, wrappedErr) {
 		t.Errorf("Err = %v, want %v", authErr.Err, wrappedErr)
 	}
 }
 
-// TestNewNetworkError tests NewNetworkError helper
+// TestNewNetworkError tests NewNetworkError helper.
 func TestNewNetworkError(t *testing.T) {
-	wrappedErr := fmt.Errorf("connection refused")
+	wrappedErr := errors.New("connection refused")
 	err := NewNetworkError("POST", "https://example.com", wrappedErr)
 
 	if err == nil {
 		t.Fatal("NewNetworkError returned nil")
 	}
 
-	netErr, ok := err.(*NetworkError)
+	netErr := &NetworkError{}
+	ok := errors.As(err, &netErr)
 	if !ok {
 		t.Fatalf("NewNetworkError returned %T, want *NetworkError", err)
 	}
@@ -428,12 +430,12 @@ func TestNewNetworkError(t *testing.T) {
 	if netErr.URL != "https://example.com" {
 		t.Errorf("URL = %q, want %q", netErr.URL, "https://example.com")
 	}
-	if netErr.Err != wrappedErr {
+	if !errors.Is(netErr.Err, wrappedErr) {
 		t.Errorf("Err = %v, want %v", netErr.Err, wrappedErr)
 	}
 }
 
-// TestNewAPIError tests NewAPIError helper
+// TestNewAPIError tests NewAPIError helper.
 func TestNewAPIError(t *testing.T) {
 	err := NewAPIError("GET", "https://api.example.com", 404, "not found")
 
@@ -441,7 +443,8 @@ func TestNewAPIError(t *testing.T) {
 		t.Fatal("NewAPIError returned nil")
 	}
 
-	apiErr, ok := err.(*APIError)
+	apiErr := &APIError{}
+	ok := errors.As(err, &apiErr)
 	if !ok {
 		t.Fatalf("NewAPIError returned %T, want *APIError", err)
 	}
@@ -452,7 +455,7 @@ func TestNewAPIError(t *testing.T) {
 	if apiErr.URL != "https://api.example.com" {
 		t.Errorf("URL = %q, want %q", apiErr.URL, "https://api.example.com")
 	}
-	if apiErr.StatusCode != 404 {
+	if apiErr.StatusCode != http.StatusNotFound {
 		t.Errorf("StatusCode = %d, want %d", apiErr.StatusCode, 404)
 	}
 	if apiErr.Message != "not found" {
@@ -460,16 +463,17 @@ func TestNewAPIError(t *testing.T) {
 	}
 }
 
-// TestNewDataError tests NewDataError helper
+// TestNewDataError tests NewDataError helper.
 func TestNewDataError(t *testing.T) {
-	wrappedErr := fmt.Errorf("json error")
+	wrappedErr := errors.New("json error")
 	err := NewDataError("marshal", "user data", wrappedErr)
 
 	if err == nil {
 		t.Fatal("NewDataError returned nil")
 	}
 
-	dataErr, ok := err.(*DataError)
+	dataErr := &DataError{}
+	ok := errors.As(err, &dataErr)
 	if !ok {
 		t.Fatalf("NewDataError returned %T, want *DataError", err)
 	}
@@ -480,12 +484,12 @@ func TestNewDataError(t *testing.T) {
 	if dataErr.DataType != "user data" {
 		t.Errorf("DataType = %q, want %q", dataErr.DataType, "user data")
 	}
-	if dataErr.Err != wrappedErr {
+	if !errors.Is(dataErr.Err, wrappedErr) {
 		t.Errorf("Err = %v, want %v", dataErr.Err, wrappedErr)
 	}
 }
 
-// TestIsAuthError tests IsAuthError helper
+// TestIsAuthError tests IsAuthError helper.
 func TestIsAuthError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -504,12 +508,12 @@ func TestIsAuthError(t *testing.T) {
 		},
 		{
 			name:     "NetworkError",
-			err:      NewNetworkError("GET", "url", fmt.Errorf("error")),
+			err:      NewNetworkError("GET", "url", errors.New("error")),
 			expected: false,
 		},
 		{
 			name:     "generic error",
-			err:      fmt.Errorf("some error"),
+			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
@@ -529,7 +533,7 @@ func TestIsAuthError(t *testing.T) {
 	}
 }
 
-// TestIsNetworkError tests IsNetworkError helper
+// TestIsNetworkError tests IsNetworkError helper.
 func TestIsNetworkError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -538,12 +542,12 @@ func TestIsNetworkError(t *testing.T) {
 	}{
 		{
 			name:     "actual NetworkError",
-			err:      NewNetworkError("GET", "url", fmt.Errorf("error")),
+			err:      NewNetworkError("GET", "url", errors.New("error")),
 			expected: true,
 		},
 		{
 			name:     "wrapped NetworkError",
-			err:      errors.Wrap(NewNetworkError("GET", "url", fmt.Errorf("error")), "context"),
+			err:      errors.Wrap(NewNetworkError("GET", "url", errors.New("error")), "context"),
 			expected: true,
 		},
 		{
@@ -553,7 +557,7 @@ func TestIsNetworkError(t *testing.T) {
 		},
 		{
 			name:     "generic error",
-			err:      fmt.Errorf("some error"),
+			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
@@ -573,7 +577,7 @@ func TestIsNetworkError(t *testing.T) {
 	}
 }
 
-// TestIsAPIError tests IsAPIError helper
+// TestIsAPIError tests IsAPIError helper.
 func TestIsAPIError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -597,7 +601,7 @@ func TestIsAPIError(t *testing.T) {
 		},
 		{
 			name:     "generic error",
-			err:      fmt.Errorf("some error"),
+			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
@@ -617,7 +621,7 @@ func TestIsAPIError(t *testing.T) {
 	}
 }
 
-// TestIsDataError tests IsDataError helper
+// TestIsDataError tests IsDataError helper.
 func TestIsDataError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -626,12 +630,12 @@ func TestIsDataError(t *testing.T) {
 	}{
 		{
 			name:     "actual DataError",
-			err:      NewDataError("marshal", "data", fmt.Errorf("error")),
+			err:      NewDataError("marshal", "data", errors.New("error")),
 			expected: true,
 		},
 		{
 			name:     "wrapped DataError",
-			err:      errors.Wrap(NewDataError("marshal", "data", fmt.Errorf("error")), "context"),
+			err:      errors.Wrap(NewDataError("marshal", "data", errors.New("error")), "context"),
 			expected: true,
 		},
 		{
@@ -641,7 +645,7 @@ func TestIsDataError(t *testing.T) {
 		},
 		{
 			name:     "generic error",
-			err:      fmt.Errorf("some error"),
+			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
@@ -661,9 +665,9 @@ func TestIsDataError(t *testing.T) {
 	}
 }
 
-// TestErrorChaining tests error chaining with multiple wraps
+// TestErrorChaining tests error chaining with multiple wraps.
 func TestErrorChaining(t *testing.T) {
-	baseErr := fmt.Errorf("root cause")
+	baseErr := errors.New("root cause")
 	dataErr := NewDataError("parse", "config", baseErr)
 	wrappedOnce := errors.Wrap(dataErr, "first wrap")
 	wrappedTwice := errors.Wrap(wrappedOnce, "second wrap")
@@ -685,7 +689,7 @@ func TestErrorChaining(t *testing.T) {
 	}
 }
 
-// TestErrorAs tests errors.As with custom error types
+// TestErrorAs tests errors.As with custom error types.
 func TestErrorAs(t *testing.T) {
 	authErr := NewAuthError("login", 401, "unauthorized", nil)
 	wrappedErr := errors.Wrap(authErr, "wrapped")

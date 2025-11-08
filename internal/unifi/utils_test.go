@@ -179,7 +179,7 @@ func TestFormatUrl(t *testing.T) {
 	}
 }
 
-// TestFormatUrlRealWorldUsage tests actual usage patterns from the codebase
+// TestFormatUrlRealWorldUsage tests actual usage patterns from the codebase.
 func TestFormatUrlRealWorldUsage(t *testing.T) {
 	const (
 		host                    = "https://unifi.local"
@@ -257,7 +257,7 @@ func TestFormatUrlRealWorldUsage(t *testing.T) {
 	}
 }
 
-// TestFormatUrlEdgeCases tests boundary conditions
+// TestFormatUrlEdgeCases tests boundary conditions.
 func TestFormatUrlEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -307,7 +307,7 @@ func TestFormatUrlEdgeCases(t *testing.T) {
 	}
 }
 
-// TestFormatUrlPanic tests that function panics when params exceed segments
+// TestFormatUrlPanic tests that function panics when params exceed segments.
 func TestFormatUrlPanic(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -23,14 +23,15 @@ const (
 	varyHeader           = "Vary"
 )
 
-// Webhook for external dns provider
+// Webhook for external dns provider.
 type Webhook struct {
 	provider provider.Provider
 }
 
-// New creates a new instance of the Webhook
+// New creates a new instance of the Webhook.
 func New(provider provider.Provider) *Webhook {
 	p := Webhook{provider: provider}
+
 	return &p
 }
 
@@ -71,6 +72,7 @@ func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http
 		if writeErr != nil {
 			requestLog(r).With(zap.Error(writeErr)).Fatal("error writing error message to response writer")
 		}
+
 		return err
 	}
 
@@ -92,16 +94,18 @@ func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http
 		if writeErr != nil {
 			requestLog(r).With(zap.Error(writeErr)).Fatal("error writing error message to response writer")
 		}
+
 		return err
 	}
 
 	return nil
 }
 
-// Records handles the get request for records
+// Records handles the get request for records.
 func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 	if err := p.acceptHeaderCheck(w, r); err != nil {
 		requestLog(r).With(zap.Error(err)).Error("accept header check failed")
+
 		return
 	}
 
@@ -110,6 +114,7 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		requestLog(r).With(zap.Error(err)).Error("error getting records")
 		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 
@@ -119,30 +124,35 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		requestLog(r).With(zap.Error(err)).Error("error encoding records")
 		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 }
 
-// ApplyChanges handles the post request for record changes
+// ApplyChanges handles the post request for record changes.
 func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 	m := metrics.Get()
-	if err := p.contentTypeHeaderCheck(w, r); err != nil {
+	err := p.contentTypeHeaderCheck(w, r)
+	if err != nil {
 		requestLog(r).With(zap.Error(err)).Error("content type header check failed")
+
 		return
 	}
 
 	var changes plan.Changes
 	ctx := r.Context()
-	if err := json.NewDecoder(r.Body).Decode(&changes); err != nil {
+	err = json.NewDecoder(r.Body).Decode(&changes)
+	if err != nil {
 		m.HTTPJSONErrorsTotal.WithLabelValues(metrics.ProviderName, "/records").Inc()
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusBadRequest)
 
-		errMsg := fmt.Sprintf("error decoding changes: %s", err.Error())
+		errMsg := "error decoding changes: " + err.Error()
 		if _, writeError := fmt.Fprint(w, errMsg); writeError != nil {
 			requestLog(r).With(zap.Error(writeError)).Fatal("error writing error message to response writer")
 		}
 		requestLog(r).With(zap.Error(err)).Info(errMsg)
+
 		return
 	}
 
@@ -152,26 +162,30 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 		zap.Int("update_new", len(changes.UpdateNew)),
 		zap.Int("delete", len(changes.Delete)),
 	).Debug("executing plan changes")
-	if err := p.provider.ApplyChanges(ctx, &changes); err != nil {
+	err = p.provider.ApplyChanges(ctx, &changes)
+	if err != nil {
 		requestLog(r).Error("error when applying changes", zap.Error(err))
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// AdjustEndpoints handles the post request for adjusting endpoints
+// AdjustEndpoints handles the post request for adjusting endpoints.
 func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 	m := metrics.Get()
 	m.AdjustEndpointsTotal.WithLabelValues(metrics.ProviderName).Inc()
 
 	if err := p.contentTypeHeaderCheck(w, r); err != nil {
 		log.Error("content-type header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
+
 		return
 	}
 	if err := p.acceptHeaderCheck(w, r); err != nil {
 		log.Error("accept header check failed", zap.String("req_method", r.Method), zap.String("req_path", r.URL.Path))
+
 		return
 	}
 
@@ -186,6 +200,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		if _, writeError := fmt.Fprint(w, errMessage); writeError != nil {
 			requestLog(r).With(zap.Error(writeError)).Fatal("error writing error message to response writer")
 		}
+
 		return
 	}
 
@@ -193,6 +208,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 	out, err := json.Marshal(&pve)
@@ -200,6 +216,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusInternalServerError)
 		requestLog(r).With(zap.Error(err)).Error("failed to marshal endpoints")
+
 		return
 	}
 
@@ -216,6 +233,7 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 
 	if err := p.acceptHeaderCheck(w, r); err != nil {
 		requestLog(r).With(zap.Error(err)).Error("accept header check failed")
+
 		return
 	}
 
@@ -223,6 +241,7 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		requestLog(r).Error("failed to marshal domain filter")
 		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 
@@ -230,6 +249,7 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 	if _, writeError := w.Write(b); writeError != nil {
 		requestLog(r).With(zap.Error(writeError)).Error("error writing response")
 		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 }

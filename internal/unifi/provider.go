@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/external-dns/provider"
 )
 
-// UnifiProvider type for interfacing with UniFi
+// UnifiProvider type for interfacing with UniFi.
 type UnifiProvider struct {
 	provider.BaseProvider
 
@@ -23,7 +23,6 @@ type UnifiProvider struct {
 // NewUnifiProvider initializes a new DNSProvider.
 func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
-
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the unifi client")
 	}
@@ -78,7 +77,7 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 		}
 
 		if ep := endpoint.NewEndpointWithTTL(
-			records[0].Key, records[0].RecordType, endpoint.TTL(records[0].TTL), targets...,
+			records[0].Key, records[0].RecordType, records[0].TTL, targets...,
 		); ep != nil {
 			endpoints = append(endpoints, ep)
 		}
@@ -94,6 +93,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	existingRecords, err := p.Records(ctx)
 	if err != nil {
 		log.Error("failed to get records while applying", zap.Error(err))
+
 		return errors.Wrap(err, "failed to get existing records before applying changes")
 	}
 
@@ -104,8 +104,10 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 	// Process deletions and updates (delete old)
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
-		if err := p.client.DeleteEndpoint(endpoint); err != nil {
+		err := p.client.DeleteEndpoint(endpoint)
+		if err != nil {
 			log.Error("failed to delete endpoint", zap.Any("data", endpoint), zap.Error(err))
+
 			return errors.Wrapf(err, "failed to delete endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
 		}
 		m.RecordChange("delete", endpoint.RecordType)
@@ -126,14 +128,17 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 				}
 
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				if err := p.client.DeleteEndpoint(record); err != nil {
+				err := p.client.DeleteEndpoint(record)
+				if err != nil {
 					log.Error("failed to delete conflicting CNAME", zap.Any("data", record), zap.Error(err))
+
 					return errors.Wrapf(err, "failed to delete conflicting CNAME %s", record.DNSName)
 				}
 			}
 		}
 		if _, err := p.client.CreateEndpoint(endpoint); err != nil {
 			log.Error("failed to create endpoint", zap.Any("data", endpoint), zap.Error(err))
+
 			return errors.Wrapf(err, "failed to create endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
 		}
 		m.RecordChange(operation, endpoint.RecordType)

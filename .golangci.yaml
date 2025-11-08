@@ -1,0 +1,94 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - depguard
+    - exhaustruct
+    - gochecknoglobals
+    - gochecknoinits
+    - nonamedreturns
+    - wsl
+    - wsl_v5
+    - testpackage
+    - paralleltest # TODO: enable back and add t.Parallel() to all tests
+  settings:
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - dupImport
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 10
+    mnd:
+      ignored-numbers:
+        - "10"
+        - "100"
+        - "2"
+        - "64"
+    nolintlint:
+      require-explanation: false
+      require-specific: false
+      allow-unused: false
+    varnamelen:
+      max-distance: 5
+      min-name-length: 3
+      check-receiver: false
+      check-return: false
+      ignore-type-assert-ok: false
+      ignore-map-index-ok: false
+      ignore-chan-recv-ok: false
+      ignore-decls:
+        - wg sync.WaitGroup
+        - wg *sync.WaitGroup
+        - mu sync.Mutex
+        - ok bool
+      ignore-names:
+        - i
+        - w
+        - r
+        - b
+        - c
+        - m
+        - n
+        - tt
+        - rw
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      - linters:
+          - funlen
+          - lll
+        path: _test\.go
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

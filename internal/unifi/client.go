@@ -361,55 +361,82 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body io
 	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
 	//nolint:godox // This TODO is intentional and will remain until the deprecated auth method is removed
 	if c.APIKey == "" {
-		m := metrics.Get()
-		if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {
-			if c.csrf != csrf {
-				m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
-			}
-			c.csrf = csrf
-		}
+		c.handleCSRFToken(resp)
+
 		// If the status code is 401, re-login and retry the request
 		if resp.StatusCode == http.StatusUnauthorized {
-			m.UniFiReloginTotal.WithLabelValues(metrics.ProviderName).Inc()
-			log.Debug("received 401 unauthorized, attempting to re-login")
-			err := c.login(ctx)
+			resp, err = c.handleUnauthorized(ctx, req, method, path)
 			if err != nil {
-				log.Error("re-login failed", zap.Error(err))
-
-				return nil, errors.Wrap(err, "re-login after 401 failed")
-			}
-			// Update the headers with new CSRF token
-			c.setHeaders(req)
-
-			// Retry the request
-			log.Debug("retrying request after re-login")
-
-			resp, err = c.Do(req)
-			if err != nil {
-				log.Error("Retry request failed", zap.Error(err))
-
-				return nil, NewNetworkError(method+" (retry)", path, err)
+				return nil, err
 			}
 		}
 	}
 
 	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
 	if resp.StatusCode != http.StatusOK {
-		body, bodyErr := io.ReadAll(io.LimitReader(resp.Body, errorBodyBufferSize))
-		if bodyErr != nil {
-			return nil, NewDataError("read", "error response body", bodyErr)
-		}
-
-		var apiError UnifiErrorResponse
-		err := json.Unmarshal(body, &apiError)
-		if err != nil {
-			return nil, NewDataError("unmarshal", "API error response", err)
-		}
-
-		return nil, NewAPIError(method, path, resp.StatusCode, apiError.Message)
+		return nil, c.handleErrorResponse(resp, method, path)
 	}
 
 	return resp, nil
+}
+
+// handleCSRFToken updates the CSRF token from response headers.
+func (c *httpClient) handleCSRFToken(resp *http.Response) {
+	csrf := resp.Header.Get("X-Csrf-Token")
+	if csrf == "" {
+		return
+	}
+
+	if c.csrf != csrf {
+		metrics.Get().UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
+	}
+	c.csrf = csrf
+}
+
+// handleUnauthorized handles 401 responses by re-logging in and retrying the request.
+func (c *httpClient) handleUnauthorized(ctx context.Context, req *http.Request, method, path string) (*http.Response, error) {
+	met := metrics.Get()
+	met.UniFiReloginTotal.WithLabelValues(metrics.ProviderName).Inc()
+
+	log.Debug("received 401 unauthorized, attempting to re-login")
+
+	err := c.login(ctx)
+	if err != nil {
+		log.Error("re-login failed", zap.Error(err))
+
+		return nil, errors.Wrap(err, "re-login after 401 failed")
+	}
+
+	// Update the headers with new CSRF token
+	c.setHeaders(req)
+
+	// Retry the request
+	log.Debug("retrying request after re-login")
+
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Error("Retry request failed", zap.Error(err))
+
+		return nil, NewNetworkError(method+" (retry)", path, err)
+	}
+
+	return resp, nil
+}
+
+// handleErrorResponse processes non-200 status codes and returns appropriate errors.
+func (c *httpClient) handleErrorResponse(resp *http.Response, method, path string) error {
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, errorBodyBufferSize))
+	if err != nil {
+		return NewDataError("read", "error response body", err)
+	}
+
+	var apiError UnifiErrorResponse
+	err = json.Unmarshal(bodyBytes, &apiError)
+	if err != nil {
+		return NewDataError("unmarshal", "API error response", err)
+	}
+
+	return NewAPIError(method, path, resp.StatusCode, apiError.Message)
 }
 
 // setHeaders sets the headers for the HTTP request.

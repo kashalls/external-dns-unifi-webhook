@@ -1,0 +1,118 @@
+---
+name: PR Container Build
+
+on:
+  pull_request:
+    types: [labeled, closed]
+
+jobs:
+  build-pr-image:
+    if: github.event.label.name == 'build-container'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push PR Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}
+            org.opencontainers.image.description=PR #${{ github.event.pull_request.number }} test image
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
+            org.opencontainers.image.version=pr-${{ github.event.pull_request.number }}
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
+            REVISION=${{ github.event.pull_request.head.sha }}
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `✅ Container image built and pushed successfully!\n\n**Image:** \`ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}\`\n\n**Platforms:** linux/amd64, linux/arm64\n\n**Pull command:**\n\`\`\`bash\ndocker pull ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}\n\`\`\``
+            })
+
+      - name: Remove build-container label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.removeLabel({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'build-container'
+            })
+
+  cleanup-pr-image:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete PR container image
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const packageName = context.repo.repo;
+            const owner = context.repo.owner;
+
+            try {
+              // Get all versions of the package
+              const versions = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
+                package_type: 'container',
+                package_name: packageName,
+                username: owner
+              });
+
+              // Find version with tag pr-{number}
+              const prTag = `pr-${prNumber}`;
+              const versionToDelete = versions.data.find(v =>
+                v.metadata?.container?.tags?.includes(prTag)
+              );
+
+              if (versionToDelete) {
+                await github.rest.packages.deletePackageVersionForUser({
+                  package_type: 'container',
+                  package_name: packageName,
+                  username: owner,
+                  package_version_id: versionToDelete.id
+                });
+                console.log(`Deleted container image: ${prTag}`);
+              } else {
+                console.log(`No container image found for ${prTag}`);
+              }
+            } catch (error) {
+              console.log(`Failed to delete image: ${error.message}`);
+              // Don't fail the workflow if image doesn't exist
+            }

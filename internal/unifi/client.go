@@ -28,6 +28,7 @@ type ClientURLs struct {
 type httpClient struct {
 	*Config
 	*http.Client
+
 	csrf       string
 	ClientURLs *ClientURLs
 }
@@ -124,8 +125,8 @@ func (c *httpClient) login() error {
 	m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(1)
 
 	// Retrieve CSRF token from the response headers
-	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
-		c.csrf = resp.Header.Get("x-csrf-token")
+	if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {
+		c.csrf = resp.Header.Get("X-Csrf-Token")
 		m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
 	}
 	return nil
@@ -147,7 +148,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
 	if c.Config.ApiKey == "" {
 		m := metrics.Get()
-		if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
+		if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {
 			if c.csrf != csrf {
 				m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
 			}
@@ -362,7 +363,10 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 
 	duration := time.Since(start)
 	if len(deleteErrors) > 0 {
-		err := errors.Newf("failed to delete %d records: %v", len(deleteErrors), deleteErrors)
+		err := errors.Newf("failed to delete %d records", len(deleteErrors))
+		for _, deleteErr := range deleteErrors {
+			err = errors.Wrap(deleteErr, err.Error())
+		}
 		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
 		return err
 	}
@@ -373,9 +377,9 @@ func (c *httpClient) DeleteEndpoint(endpoint *endpoint.Endpoint) error {
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
 	if c.Config.ApiKey != "" {
-		req.Header.Set("X-API-KEY", c.Config.ApiKey)
+		req.Header.Set("X-Api-Key", c.Config.ApiKey)
 	} else {
-		req.Header.Set("X-CSRF-Token", c.csrf)
+		req.Header.Set("X-Csrf-Token", c.csrf)
 	}
 
 	req.Header.Add("Accept", "application/json")

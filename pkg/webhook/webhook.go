@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/cockroachdb/errors"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 
@@ -64,7 +65,7 @@ func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http
 		} else {
 			msg = "client must provide an accept header"
 		}
-		err := fmt.Errorf("%s", msg)
+		err := errors.New(msg)
 
 		_, writeErr := fmt.Fprint(w, err.Error())
 		if writeErr != nil {
@@ -86,7 +87,7 @@ func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http
 			msg += "accept header"
 		}
 
-		err := fmt.Errorf(msg+": %s", err.Error())
+		err := errors.Wrap(err, msg)
 		_, writeErr := fmt.Fprint(w, err.Error())
 		if writeErr != nil {
 			requestLog(r).With(zap.Error(writeErr)).Fatal("error writing error message to response writer")
@@ -194,7 +195,13 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	out, _ := json.Marshal(&pve)
+	out, err := json.Marshal(&pve)
+	if err != nil {
+		w.Header().Set(contentTypeHeader, contentTypePlaintext)
+		w.WriteHeader(http.StatusInternalServerError)
+		requestLog(r).With(zap.Error(err)).Error("failed to marshal endpoints")
+		return
+	}
 
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
 	w.Header().Set(varyHeader, contentTypeHeader)

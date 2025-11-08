@@ -23,13 +23,17 @@ import (
 // HealthCheckHandler returns the status of the service
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	if _, err := w.Write([]byte("OK")); err != nil {
+		log.Error("failed to write health check response", zap.Error(err))
+	}
 }
 
 // ReadinessHandler returns whether the service is ready to accept requests
 func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	if _, err := w.Write([]byte("OK")); err != nil {
+		log.Error("failed to write readiness response", zap.Error(err))
+	}
 }
 
 // Init initializes the http server

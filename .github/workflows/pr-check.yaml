@@ -6,16 +6,40 @@ on:
     branches: ["main"]
 
 jobs:
-  build-test:
-    name: Build Container Image
+  changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: |
-      contains(github.event.pull_request.changed_files, 'Containerfile') ||
-      contains(github.event.pull_request.changed_files, '.go') ||
-      contains(github.event.pull_request.changed_files, 'go.mod') ||
-      contains(github.event.pull_request.changed_files, 'go.sum')
+      pull-requests: read
+    outputs:
+      container: ${{ steps.filter.outputs.container }}
+      markdown: ${{ steps.filter.outputs.markdown }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Check for file changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            container:
+              - 'Containerfile'
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+            markdown:
+              - '**/*.md'
+              - '.markdownlint.yaml'
+
+  build-test:
+    name: Build Container Image
+    needs: changes
+    if: needs.changes.outputs.container == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -40,10 +64,11 @@ jobs:
 
   lint:
     name: Lint Containerfile
+    needs: changes
+    if: needs.changes.outputs.container == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: contains(github.event.pull_request.changed_files, 'Containerfile')
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -56,12 +81,11 @@ jobs:
 
   lint-markdown:
     name: Lint Markdown
+    needs: changes
+    if: needs.changes.outputs.markdown == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: |
-      contains(github.event.pull_request.changed_files, '.md') ||
-      contains(github.event.pull_request.changed_files, '.markdownlint.yaml')
     steps:
       - name: Checkout
         uses: actions/checkout@v5

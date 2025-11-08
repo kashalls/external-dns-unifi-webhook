@@ -35,8 +35,8 @@ func HTTPMetricsMiddleware(next http.Handler) http.Handler {
 		m := Get()
 
 		// Increment in-flight requests
-		m.HTTPRequestsInFlight.Inc()
-		defer m.HTTPRequestsInFlight.Dec()
+		m.HTTPRequestsInFlight.WithLabelValues(ProviderName).Inc()
+		defer m.HTTPRequestsInFlight.WithLabelValues(ProviderName).Dec()
 
 		// Wrap the response writer to capture status code and size
 		rw := newResponseWriter(w)

@@ -98,8 +98,8 @@ func (c *httpClient) login() error {
 		bytes.NewBuffer(jsonBody),
 	)
 	if err != nil {
-		m.UniFiLoginTotal.WithLabelValues("failure").Inc()
-		m.UniFiConnected.Set(0)
+		m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "failure").Inc()
+		m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(0)
 		return err
 	}
 
@@ -109,20 +109,20 @@ func (c *httpClient) login() error {
 
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
-		m.UniFiLoginTotal.WithLabelValues("failure").Inc()
-		m.UniFiConnected.Set(0)
+		m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "failure").Inc()
+		m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(0)
 		respBody, _ := io.ReadAll(resp.Body)
 		log.Error("login failed", zap.String("status", resp.Status), zap.String("response", string(respBody)))
 		return errors.Newf("login failed: %s", resp.Status)
 	}
 
-	m.UniFiLoginTotal.WithLabelValues("success").Inc()
-	m.UniFiConnected.Set(1)
+	m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "success").Inc()
+	m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(1)
 
 	// Retrieve CSRF token from the response headers
 	if csrf := resp.Header.Get("x-csrf-token"); csrf != "" {
 		c.csrf = resp.Header.Get("x-csrf-token")
-		m.UniFiCSRFRefreshesTotal.Inc()
+		m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
 	}
 	return nil
 }
@@ -145,13 +145,13 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		m := metrics.Get()
 		if csrf := resp.Header.Get("X-CSRF-Token"); csrf != "" {
 			if c.csrf != csrf {
-				m.UniFiCSRFRefreshesTotal.Inc()
+				m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
 			}
 			c.csrf = csrf
 		}
 		// If the status code is 401, re-login and retry the request
 		if resp.StatusCode == http.StatusUnauthorized {
-			m.UniFiReloginTotal.Inc()
+			m.UniFiReloginTotal.WithLabelValues(metrics.ProviderName).Inc()
 			log.Debug("received 401 unauthorized, attempting to re-login")
 			if err := c.login(); err != nil {
 				log.Error("re-login failed", zap.Error(err))
@@ -253,7 +253,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 	start := time.Now()
 
 	if endpoint.RecordType == "CNAME" && len(endpoint.Targets) > 1 {
-		m.IgnoredCNAMETargetsTotal.Inc()
+		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
 		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", zap.String("key", endpoint.DNSName), zap.Strings("ignored_targets", endpoint.Targets[1:]))
 		endpoint.Targets = endpoint.Targets[:1]
 	}
@@ -274,7 +274,7 @@ func (c *httpClient) CreateEndpoint(endpoint *endpoint.Endpoint) ([]*DNSRecord, 
 			record.Port = new(int)
 
 			if _, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value); err != nil {
-				m.SRVParsingErrorsTotal.Inc()
+				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				duration := time.Since(start)
 				m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
 				return nil, err

@@ -98,9 +98,9 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	}
 
 	// Record batch sizes
-	m.BatchSize.WithLabelValues("create").Observe(float64(len(changes.Create)))
-	m.BatchSize.WithLabelValues("update").Observe(float64(len(changes.UpdateNew)))
-	m.BatchSize.WithLabelValues("delete").Observe(float64(len(changes.Delete)))
+	m.BatchSize.WithLabelValues(metrics.ProviderName, "create").Observe(float64(len(changes.Create)))
+	m.BatchSize.WithLabelValues(metrics.ProviderName, "update").Observe(float64(len(changes.UpdateNew)))
+	m.BatchSize.WithLabelValues(metrics.ProviderName, "delete").Observe(float64(len(changes.Delete)))
 
 	// Process deletions and updates (delete old)
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
@@ -125,7 +125,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 					continue
 				}
 
-				m.CNAMEConflictsTotal.Inc()
+				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				if err := p.client.DeleteEndpoint(record); err != nil {
 					log.Error("failed to delete conflicting CNAME", zap.Any("data", record), zap.Error(err))
 					return errors.Wrapf(err, "failed to delete conflicting CNAME %s", record.DNSName)

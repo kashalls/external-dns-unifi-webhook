@@ -35,7 +35,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "test.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,
@@ -43,7 +43,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "record2",
 					Key:        "test2.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.2",
 					TTL:        600,
 					Enabled:    true,
@@ -56,7 +56,7 @@ func TestGetEndpoints(t *testing.T) {
 				if records[0].Key != "test.example.com" {
 					t.Errorf("First record Key = %q, want %q", records[0].Key, "test.example.com")
 				}
-				if records[0].RecordType != "A" {
+				if records[0].RecordType != recordTypeA {
 					t.Errorf("First record RecordType = %q, want A", records[0].RecordType)
 				}
 			},
@@ -67,7 +67,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "srv1",
 					Key:        "_service._tcp.example.com",
-					RecordType: "SRV",
+					RecordType: recordTypeSRV,
 					Value:      "target.example.com",
 					TTL:        300,
 					Priority:   intPtr(10),
@@ -122,7 +122,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "a1",
 					Key:        "a.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "1.2.3.4",
 					TTL:        300,
 					Enabled:    true,
@@ -130,7 +130,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "cname1",
 					Key:        "cname.example.com",
-					RecordType: "CNAME",
+					RecordType: recordTypeCNAME,
 					Value:      "target.example.com",
 					TTL:        300,
 					Enabled:    true,
@@ -138,7 +138,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "txt1",
 					Key:        "txt.example.com",
-					RecordType: "TXT",
+					RecordType: recordTypeTXT,
 					Value:      "v=spf1 include:example.com ~all",
 					TTL:        300,
 					Enabled:    true,
@@ -220,7 +220,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-record-1",
 				Key:        "test.example.com",
-				RecordType: "A",
+				RecordType: recordTypeA,
 				Value:      "192.168.1.1",
 				TTL:        300,
 				Enabled:    true,
@@ -236,7 +236,7 @@ func TestCreateEndpoint(t *testing.T) {
 				if record.Key != "test.example.com" {
 					t.Errorf("Request Key = %q, want test.example.com", record.Key)
 				}
-				if record.RecordType != "A" {
+				if record.RecordType != recordTypeA {
 					t.Errorf("Request RecordType = %q, want A", record.RecordType)
 				}
 				if record.Value != "192.168.1.1" {
@@ -255,7 +255,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-cname-1",
 				Key:        "alias.example.com",
-				RecordType: "CNAME",
+				RecordType: recordTypeCNAME,
 				Value:      "target.example.com",
 				TTL:        600,
 				Enabled:    true,
@@ -274,7 +274,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-srv-1",
 				Key:        "_service._tcp.example.com",
-				RecordType: "SRV",
+				RecordType: recordTypeSRV,
 				Value:      "target.example.com",
 				TTL:        300,
 				Priority:   intPtr(10),
@@ -313,7 +313,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-record",
 				Key:        "multi.example.com",
-				RecordType: "CNAME",
+				RecordType: recordTypeCNAME,
 				Value:      "target1.example.com",
 				TTL:        300,
 				Enabled:    true,
@@ -413,7 +413,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "test.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,
@@ -433,7 +433,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "multi.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,
@@ -441,7 +441,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record2",
 					Key:        "multi.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.2",
 					TTL:        300,
 					Enabled:    true,
@@ -474,7 +474,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "cname1",
 					Key:        "alias.example.com",
-					RecordType: "CNAME",
+					RecordType: recordTypeCNAME,
 					Value:      "target.example.com",
 					TTL:        300,
 					Enabled:    true,
@@ -495,7 +495,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "test.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,

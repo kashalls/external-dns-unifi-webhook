@@ -38,6 +38,14 @@ const (
 	unifiLoginPathExternal  = "%s/api/login"
 	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 	unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
+
+	recordTypeA     = "A"
+	recordTypeAAAA  = "AAAA"
+	recordTypeCNAME = "CNAME"
+	recordTypeMX    = "MX"
+	recordTypeNS    = "NS"
+	recordTypeSRV   = "SRV"
+	recordTypeTXT   = "TXT"
 )
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
@@ -121,7 +129,7 @@ func (c *httpClient) GetEndpoints() ([]DNSRecord, error) {
 
 	// Loop through records to modify SRV type
 	for i, record := range records {
-		if record.RecordType != "SRV" {
+		if record.RecordType != recordTypeSRV {
 			continue
 		}
 
@@ -147,7 +155,7 @@ func (c *httpClient) CreateEndpoint(endpoint *externaldnsendpoint.Endpoint) ([]*
 	m := metrics.Get()
 	start := time.Now()
 
-	if endpoint.RecordType == "CNAME" && len(endpoint.Targets) > 1 {
+	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
 		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
 		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", zap.String("key", endpoint.DNSName), zap.Strings("ignored_targets", endpoint.Targets[1:]))
 		endpoint.Targets = endpoint.Targets[:1]

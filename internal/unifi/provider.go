@@ -117,9 +117,9 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	for _, endpoint := range append(changes.Create, changes.UpdateNew...) {
 		operation := "create"
 		// Check for CNAME conflicts
-		if endpoint.RecordType == "CNAME" {
+		if endpoint.RecordType == recordTypeCNAME {
 			for _, record := range existingRecords {
-				if record.RecordType != "CNAME" {
+				if record.RecordType != recordTypeCNAME {
 					continue
 				}
 

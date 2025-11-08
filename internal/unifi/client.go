@@ -162,6 +162,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 	m := metrics.Get()
 	start := time.Now()
 
+	// CNAME records can only have one target
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
 		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
 		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", zap.String("key", endpoint.DNSName), zap.Strings("ignored_targets", endpoint.Targets[1:]))
@@ -169,77 +170,92 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 	}
 
 	createdRecords := make([]*DNSRecord, 0, len(endpoint.Targets))
+
 	for _, target := range endpoint.Targets {
-		record := DNSRecord{
-			Enabled:    true,
-			Key:        endpoint.DNSName,
-			RecordType: endpoint.RecordType,
-			TTL:        endpoint.RecordTTL,
-			Value:      target,
-		}
+		record := prepareDNSRecord(endpoint, target)
 
-		if endpoint.RecordType == "SRV" {
-			record.Priority = new(int)
-			record.Weight = new(int)
-			record.Port = new(int)
-
-			_, err := fmt.Sscanf(endpoint.Targets[0], "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value)
+		// SRV records need special parsing
+		if endpoint.RecordType == recordTypeSRV {
+			err := parseSRVTarget(&record, endpoint.Targets[0])
 			if err != nil {
 				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				duration := time.Since(start)
-				m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
+				m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
 
-				return nil, NewDataError("parse", "SRV record target", err)
+				return nil, err
 			}
 		}
 
-		jsonBody, err := json.Marshal(record)
+		createdRecord, err := c.createSingleDNSRecord(ctx, record)
 		if err != nil {
-			duration := time.Since(start)
-			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
+			m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
 
-			return nil, NewDataError("marshal", "DNS record", err)
+			return nil, err
 		}
 
-		resp, err := c.doRequest(
-			ctx,
-			http.MethodPost,
-			FormatURL(c.ClientURLs.Records, c.Host, c.Site),
-			bytes.NewReader(jsonBody),
-		)
-		if err != nil {
-			duration := time.Since(start)
-			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
-
-			return nil, errors.Wrap(err, "failed to create DNS record")
-		}
-
-		bodyBytes, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			duration := time.Since(start)
-			m.RecordUniFiAPICall("create_endpoint", duration, 0, err)
-
-			return nil, NewDataError("read", "create endpoint response body", err)
-		}
-
-		var createdRecord DNSRecord
-		err = json.Unmarshal(bodyBytes, &createdRecord)
-		if err != nil {
-			duration := time.Since(start)
-			m.RecordUniFiAPICall("create_endpoint", duration, len(bodyBytes), err)
-
-			return nil, NewDataError("unmarshal", "created DNS record", err)
-		}
-
-		createdRecords = append(createdRecords, &createdRecord)
+		createdRecords = append(createdRecords, createdRecord)
 		log.Debug("created new record", zap.Any("key", createdRecord.Key), zap.String("type", createdRecord.RecordType), zap.String("target", createdRecord.Value))
 	}
 
-	duration := time.Since(start)
-	m.RecordUniFiAPICall("create_endpoint", duration, 0, nil)
+	m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, nil)
 
 	return createdRecords, nil
+}
+
+// prepareDNSRecord creates a DNSRecord from endpoint and target value.
+func prepareDNSRecord(endpoint *externaldnsendpoint.Endpoint, target string) DNSRecord {
+	return DNSRecord{
+		Enabled:    true,
+		Key:        endpoint.DNSName,
+		RecordType: endpoint.RecordType,
+		TTL:        endpoint.RecordTTL,
+		Value:      target,
+	}
+}
+
+// parseSRVTarget parses SRV record format and populates Priority, Weight, Port fields.
+func parseSRVTarget(record *DNSRecord, target string) error {
+	record.Priority = new(int)
+	record.Weight = new(int)
+	record.Port = new(int)
+
+	_, err := fmt.Sscanf(target, "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value)
+	if err != nil {
+		return NewDataError("parse", "SRV record target", err)
+	}
+
+	return nil
+}
+
+// createSingleDNSRecord sends a create request for a single DNS record and returns the created record.
+func (c *httpClient) createSingleDNSRecord(ctx context.Context, record DNSRecord) (*DNSRecord, error) {
+	jsonBody, err := json.Marshal(record)
+	if err != nil {
+		return nil, NewDataError("marshal", "DNS record", err)
+	}
+
+	resp, err := c.doRequest(
+		ctx,
+		http.MethodPost,
+		FormatURL(c.ClientURLs.Records, c.Host, c.Site),
+		bytes.NewReader(jsonBody),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create DNS record")
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return nil, NewDataError("read", "create endpoint response body", err)
+	}
+
+	var createdRecord DNSRecord
+	err = json.Unmarshal(bodyBytes, &createdRecord)
+	if err != nil {
+		return nil, NewDataError("unmarshal", "created DNS record", err)
+	}
+
+	return &createdRecord, nil
 }
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.

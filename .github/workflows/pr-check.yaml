@@ -28,7 +28,6 @@ jobs:
             container:
               - 'Containerfile'
               - 'Containerfile.pr'
-              - 'vendor/**'
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
@@ -61,7 +60,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Containerfile
+          file: ./Containerfile.pr
           platforms: linux/amd64,linux/arm64
           push: false
           tags: test:pr-${{ github.event.pull_request.number }}

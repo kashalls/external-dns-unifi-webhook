@@ -1,7 +1,0 @@
-# markdownlint-cli2 configuration
-# See: https://github.com/DavidAnson/markdownlint-cli2
-
-# Ignore patterns
-ignores:
-  - "vendor/**"
-  - "node_modules/**"

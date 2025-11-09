@@ -27,6 +27,8 @@ jobs:
           filters: |
             container:
               - 'Containerfile'
+              - 'Containerfile.pr'
+              - 'vendor/**'
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'

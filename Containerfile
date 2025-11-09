@@ -17,6 +17,6 @@ COPY --from=builder /tmp/passwd /etc/passwd
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder --chmod=555 /build/webhook /external-dns-unifi-webhook
 
-USER nobody
+USER 65534
 EXPOSE 8888/tcp
 ENTRYPOINT ["/external-dns-unifi-webhook"]

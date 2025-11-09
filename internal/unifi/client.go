@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
-	"golang.org/x/net/publicsuffix"
 	externaldnsendpoint "sigs.k8s.io/external-dns/endpoint"
 
 	"go.uber.org/zap"
@@ -53,7 +52,7 @@ const (
 
 // newUnifiClient creates a new DNS provider client and logs in to store cookies.
 func newUnifiClient(config *Config) (*httpClient, error) {
-	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create cookie jar")
 	}

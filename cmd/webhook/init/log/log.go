@@ -1,67 +1,67 @@
 package log
 
 import (
+	"log/slog"
 	"os"
-
-	"go.uber.org/zap"
 )
 
-var logger *zap.Logger
+var logger *slog.Logger
 
 func Init() {
-	config := zap.NewProductionConfig()
+	// Set the log level
+	var level slog.Level
+	switch os.Getenv("LOG_LEVEL") {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
 
 	// Set the log format
+	var handler slog.Handler
+	opts := &slog.HandlerOptions{
+		AddSource: true,
+		Level:     level,
+	}
+
 	format := os.Getenv("LOG_FORMAT")
 	if format == "test" {
-		config.Encoding = "console"
+		handler = slog.NewTextHandler(os.Stdout, opts)
 	} else {
-		config.Encoding = "json"
+		handler = slog.NewJSONHandler(os.Stdout, opts)
 	}
 
-	// Set the log level
-	level := os.Getenv("LOG_LEVEL")
-	switch level {
-	case "debug":
-		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-	case "info":
-		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	case "warn":
-		config.Level = zap.NewAtomicLevelAt(zap.WarnLevel)
-	case "error":
-		config.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
-	default:
-		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	}
-
-	// Build the logger
-	var err error
-	logger, err = config.Build(zap.AddCallerSkip(1))
-	if err != nil {
-		panic(err)
-	}
+	logger = slog.New(handler)
+	slog.SetDefault(logger)
 }
 
-func Debug(message string, fields ...zap.Field) {
-	logger.Debug(message, fields...)
+func Debug(message string, args ...any) {
+	logger.Debug(message, args...)
 }
 
-func Info(message string, fields ...zap.Field) {
-	logger.Info(message, fields...)
+func Info(message string, args ...any) {
+	logger.Info(message, args...)
 }
 
-func Warn(message string, fields ...zap.Field) {
-	logger.Warn(message, fields...)
+func Warn(message string, args ...any) {
+	logger.Warn(message, args...)
 }
 
-func Error(message string, fields ...zap.Field) {
-	logger.Error(message, fields...)
+func Error(message string, args ...any) {
+	logger.Error(message, args...)
 }
 
-func Fatal(message string, fields ...zap.Field) {
-	logger.Fatal(message, fields...)
+func Fatal(message string, args ...any) {
+	logger.Error(message, args...)
+	os.Exit(1)
 }
 
-func With(fields ...zap.Field) *zap.Logger {
-	return logger.With(fields...)
+func With(args ...any) *slog.Logger {
+	return logger.With(args...)
 }

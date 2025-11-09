@@ -6,7 +6,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
-	"go.uber.org/zap"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
@@ -24,7 +23,7 @@ type UnifiProvider struct {
 
 // NewUnifiProvider initializes a new DNSProvider.
 //
-//nolint:ireturn // Must return provider.Provider interface per external-dns contract
+
 func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
 	if err != nil {
@@ -96,7 +95,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 	existingRecords, err := p.Records(ctx)
 	if err != nil {
-		log.Error("failed to get records while applying", zap.Error(err))
+		log.Error("failed to get records while applying", "error", err)
 
 		return errors.Wrap(err, "failed to get existing records before applying changes")
 	}
@@ -110,7 +109,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
 		err := p.client.DeleteEndpoint(ctx, endpoint)
 		if err != nil {
-			log.Error("failed to delete endpoint", zap.Any("data", endpoint), zap.Error(err))
+			log.Error("failed to delete endpoint", "data", endpoint, "error", err)
 
 			return errors.Wrapf(err, "failed to delete endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
 		}
@@ -134,7 +133,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				err := p.client.DeleteEndpoint(ctx, record)
 				if err != nil {
-					log.Error("failed to delete conflicting CNAME", zap.Any("data", record), zap.Error(err))
+					log.Error("failed to delete conflicting CNAME", "data", record, "error", err)
 
 					return errors.Wrapf(err, "failed to delete conflicting CNAME %s", record.DNSName)
 				}
@@ -142,7 +141,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 		}
 		_, err := p.client.CreateEndpoint(ctx, endpoint)
 		if err != nil {
-			log.Error("failed to create endpoint", zap.Any("data", endpoint), zap.Error(err))
+			log.Error("failed to create endpoint", "data", endpoint, "error", err)
 
 			return errors.Wrapf(err, "failed to create endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
 		}
@@ -154,7 +153,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 // GetDomainFilter returns the domain filter for the provider.
 //
-//nolint:ireturn // Must return DomainFilterInterface per external-dns contract
+
 func (p *UnifiProvider) GetDomainFilter() endpoint.DomainFilterInterface {
 	return &p.domainFilter
 }

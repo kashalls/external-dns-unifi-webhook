@@ -15,8 +15,6 @@ import (
 	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 	externaldnsendpoint "sigs.k8s.io/external-dns/endpoint"
-
-	"go.uber.org/zap"
 )
 
 type ClientURLs struct {
@@ -125,7 +123,7 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 	var records []DNSRecord
 	err = json.Unmarshal(bodyBytes, &records)
 	if err != nil {
-		log.Error("Failed to decode response", zap.Error(err))
+		log.Error("Failed to decode response", "error", err)
 		m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), err)
 
 		return nil, NewDataError("unmarshal", "DNS records", err)
@@ -151,7 +149,7 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 		records[i].Port = nil
 	}
 
-	log.Debug("fetched records", zap.Int("count", len(records)))
+	log.Debug("fetched records", "count", len(records))
 
 	return records, nil
 }
@@ -164,7 +162,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 	// CNAME records can only have one target
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
 		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
-		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", zap.String("key", endpoint.DNSName), zap.Strings("ignored_targets", endpoint.Targets[1:]))
+		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", "key", endpoint.DNSName, "ignored_targets", endpoint.Targets[1:])
 		endpoint.Targets = endpoint.Targets[:1]
 	}
 
@@ -192,7 +190,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 		}
 
 		createdRecords = append(createdRecords, createdRecord)
-		log.Debug("created new record", zap.Any("key", createdRecord.Key), zap.String("type", createdRecord.RecordType), zap.String("target", createdRecord.Value))
+		log.Debug("created new record", "key", createdRecord.Key, "type", createdRecord.RecordType, "target", createdRecord.Value)
 	}
 
 	m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, nil)
@@ -285,7 +283,7 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 				deleteErrors = append(deleteErrors, err)
 			} else {
 				_ = resp.Body.Close()
-				log.Debug("client successfully removed record", zap.String("key", record.Key), zap.String("type", record.RecordType), zap.String("target", record.Value))
+				log.Debug("client successfully removed record", "key", record.Key, "type", record.RecordType, "target", record.Value)
 			}
 		}
 	}
@@ -343,7 +341,7 @@ func (c *httpClient) login(ctx context.Context) error {
 		if readErr == nil {
 			responseMsg = string(respBody)
 		}
-		log.Error("login failed", zap.String("status", resp.Status), zap.String("response", responseMsg))
+		log.Error("login failed", "status", resp.Status, "response", responseMsg)
 
 		return NewAuthError("login", resp.StatusCode, resp.Status, nil)
 	}
@@ -417,7 +415,7 @@ func (c *httpClient) handleUnauthorized(ctx context.Context, req *http.Request, 
 
 	err := c.login(ctx)
 	if err != nil {
-		log.Error("re-login failed", zap.Error(err))
+		log.Error("re-login failed", "error", err)
 
 		return nil, errors.Wrap(err, "re-login after 401 failed")
 	}
@@ -430,7 +428,7 @@ func (c *httpClient) handleUnauthorized(ctx context.Context, req *http.Request, 
 
 	resp, err := c.Do(req)
 	if err != nil {
-		log.Error("Retry request failed", zap.Error(err))
+		log.Error("Retry request failed", "error", err)
 
 		return nil, NewNetworkError(method+" (retry)", path, err)
 	}

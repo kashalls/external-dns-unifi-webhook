@@ -23,7 +23,7 @@ type UnifiProvider struct {
 
 // NewUnifiProvider initializes a new DNSProvider.
 //
-
+//nolint:ireturn // Must return provider.Provider interface as required by external-dns API
 func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
 	if err != nil {
@@ -153,7 +153,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 // GetDomainFilter returns the domain filter for the provider.
 //
-
+//nolint:ireturn // Must return endpoint.DomainFilterInterface as required by external-dns API
 func (p *UnifiProvider) GetDomainFilter() endpoint.DomainFilterInterface {
 	return &p.domainFilter
 }

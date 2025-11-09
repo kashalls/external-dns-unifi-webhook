@@ -220,6 +220,7 @@ func TestCheckAndGetMediaTypeHeaderValue(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("checkAndGetMediaTypeHeaderValue(%q) error = nil, wantErr %v", tt.value, tt.wantErr)
+
 					return
 				}
 				if !strings.Contains(err.Error(), tt.errContains) {
@@ -229,11 +230,10 @@ func TestCheckAndGetMediaTypeHeaderValue(t *testing.T) {
 				if !errors.Is(err, errUnsupportedMediaType) {
 					t.Errorf("checkAndGetMediaTypeHeaderValue(%q) error should wrap errUnsupportedMediaType", tt.value)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("checkAndGetMediaTypeHeaderValue(%q) unexpected error = %v", tt.value, err)
-					return
-				}
+			} else if err != nil {
+				t.Errorf("checkAndGetMediaTypeHeaderValue(%q) unexpected error = %v", tt.value, err)
+
+				return
 			}
 
 			if version != tt.wantVersion {
@@ -261,7 +261,7 @@ func TestErrUnsupportedMediaType(t *testing.T) {
 	}
 }
 
-// TestCheckAndGetMediaTypeHeaderValueErrorMessage verifies error message format
+// TestCheckAndGetMediaTypeHeaderValueErrorMessage verifies error message format.
 func TestCheckAndGetMediaTypeHeaderValueErrorMessage(t *testing.T) {
 	value := "application/json"
 	_, err := checkAndGetMediaTypeHeaderValue(value)

@@ -26,19 +26,22 @@ func (m mediaType) Is(headerValue string) bool {
 }
 
 func checkAndGetMediaTypeHeaderValue(value string) (string, error) {
-	for _, v := range strings.Split(supportedMediaVersions, ",") {
+	for v := range strings.SplitSeq(supportedMediaVersions, ",") {
 		if mediaTypeVersion(v).Is(value) {
 			return v, nil
 		}
 	}
 
 	supportedMediaTypesString := ""
+	var supportedMediaTypesStringSb36 strings.Builder
 	for i, v := range strings.Split(supportedMediaVersions, ",") {
 		sep := ""
 		if i < len(supportedMediaVersions)-1 {
 			sep = ", "
 		}
-		supportedMediaTypesString += string(mediaTypeVersion(v)) + sep
+		supportedMediaTypesStringSb36.WriteString(string(mediaTypeVersion(v)) + sep)
 	}
+	supportedMediaTypesString += supportedMediaTypesStringSb36.String()
+
 	return "", errors.Wrapf(errUnsupportedMediaType, "received '%s', supported media types are: '%s'", value, supportedMediaTypesString)
 }

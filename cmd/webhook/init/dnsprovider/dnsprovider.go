@@ -16,7 +16,8 @@ import (
 
 type UnifiProviderFactory func(baseProvider *provider.BaseProvider, unifiConfig *unifi.Config) provider.Provider
 
-func Init(config configuration.Config) (provider.Provider, error) {
+//nolint:ireturn // Must return provider.Provider interface per external-dns contract
+func Init(config *configuration.Config) (provider.Provider, error) {
 	var domainFilter endpoint.DomainFilter
 	createMsg := "creating unifi provider with "
 
@@ -30,10 +31,10 @@ func Init(config configuration.Config) (provider.Provider, error) {
 			regexp.MustCompile(config.RegexDomainExclusion),
 		)
 	} else {
-		if config.DomainFilter != nil && len(config.DomainFilter) > 0 {
+		if len(config.DomainFilter) > 0 {
 			createMsg += fmt.Sprintf("domain filter: '%s', ", strings.Join(config.DomainFilter, ","))
 		}
-		if config.ExcludeDomains != nil && len(config.ExcludeDomains) > 0 {
+		if len(config.ExcludeDomains) > 0 {
 			createMsg += fmt.Sprintf("exclude domain filter: '%s', ", strings.Join(config.ExcludeDomains, ","))
 		}
 		domainFilter = *endpoint.NewDomainFilterWithExclusions(config.DomainFilter, config.ExcludeDomains)
@@ -46,7 +47,8 @@ func Init(config configuration.Config) (provider.Provider, error) {
 	log.Info(createMsg)
 
 	unifiConfig := unifi.Config{}
-	if err := env.Parse(&unifiConfig); err != nil {
+	err := env.Parse(&unifiConfig)
+	if err != nil {
 		return nil, errors.Wrap(err, "reading unifi configuration failed")
 	}
 

@@ -1,6 +1,7 @@
 package unifi
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -19,11 +20,15 @@ func init() {
 	_ = metrics.Get()
 }
 
-// TestGetEndpoints tests the GetEndpoints method with mock HTTP server
+const (
+	testDomain = "test.example.com"
+)
+
+// TestGetEndpoints tests the GetEndpoints method with mock HTTP server.
 func TestGetEndpoints(t *testing.T) {
 	tests := []struct {
 		name           string
-		responseBody   interface{}
+		responseBody   any
 		responseStatus int
 		expectedLen    int
 		expectedErr    bool
@@ -35,7 +40,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "test.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,
@@ -43,7 +48,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "record2",
 					Key:        "test2.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.2",
 					TTL:        600,
 					Enabled:    true,
@@ -53,10 +58,11 @@ func TestGetEndpoints(t *testing.T) {
 			expectedLen:    2,
 			expectedErr:    false,
 			validateResult: func(t *testing.T, records []DNSRecord) {
-				if records[0].Key != "test.example.com" {
-					t.Errorf("First record Key = %q, want %q", records[0].Key, "test.example.com")
+				t.Helper()
+				if records[0].Key != testDomain {
+					t.Errorf("First record Key = %q, want %q", records[0].Key, testDomain)
 				}
-				if records[0].RecordType != "A" {
+				if records[0].RecordType != recordTypeA {
 					t.Errorf("First record RecordType = %q, want A", records[0].RecordType)
 				}
 			},
@@ -67,7 +73,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "srv1",
 					Key:        "_service._tcp.example.com",
-					RecordType: "SRV",
+					RecordType: recordTypeSRV,
 					Value:      "target.example.com",
 					TTL:        300,
 					Priority:   intPtr(10),
@@ -80,6 +86,7 @@ func TestGetEndpoints(t *testing.T) {
 			expectedLen:    1,
 			expectedErr:    false,
 			validateResult: func(t *testing.T, records []DNSRecord) {
+				t.Helper()
 				expected := "10 20 8080 target.example.com"
 				if records[0].Value != expected {
 					t.Errorf("SRV Value = %q, want %q", records[0].Value, expected)
@@ -122,7 +129,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "a1",
 					Key:        "a.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "1.2.3.4",
 					TTL:        300,
 					Enabled:    true,
@@ -130,7 +137,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "cname1",
 					Key:        "cname.example.com",
-					RecordType: "CNAME",
+					RecordType: recordTypeCNAME,
 					Value:      "target.example.com",
 					TTL:        300,
 					Enabled:    true,
@@ -138,7 +145,7 @@ func TestGetEndpoints(t *testing.T) {
 				{
 					ID:         "txt1",
 					Key:        "txt.example.com",
-					RecordType: "TXT",
+					RecordType: recordTypeTXT,
 					Value:      "v=spf1 include:example.com ~all",
 					TTL:        300,
 					Enabled:    true,
@@ -152,7 +159,7 @@ func TestGetEndpoints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.responseStatus)
 				if tt.responseStatus == http.StatusOK {
 					if strBody, ok := tt.responseBody.(string); ok {
@@ -168,9 +175,9 @@ func TestGetEndpoints(t *testing.T) {
 
 			client := &httpClient{
 				Config: &Config{
-					Host:     server.URL,
-					Site:     "default",
-					ApiKey:   "test-key",
+					Host:          server.URL,
+					Site:          "default",
+					APIKey:        "test-key",
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
@@ -179,7 +186,7 @@ func TestGetEndpoints(t *testing.T) {
 				},
 			}
 
-			records, err := client.GetEndpoints()
+			records, err := client.GetEndpoints(context.Background())
 
 			if tt.expectedErr && err == nil {
 				t.Error("GetEndpoints() expected error, got nil")
@@ -199,12 +206,12 @@ func TestGetEndpoints(t *testing.T) {
 	}
 }
 
-// TestCreateEndpoint tests the CreateEndpoint method
+// TestCreateEndpoint tests the CreateEndpoint method.
 func TestCreateEndpoint(t *testing.T) {
 	tests := []struct {
 		name           string
 		endpoint       *endpoint.Endpoint
-		responseBody   interface{}
+		responseBody   any
 		responseStatus int
 		expectedErr    bool
 		validateReq    func(*testing.T, []byte)
@@ -220,7 +227,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-record-1",
 				Key:        "test.example.com",
-				RecordType: "A",
+				RecordType: recordTypeA,
 				Value:      "192.168.1.1",
 				TTL:        300,
 				Enabled:    true,
@@ -228,14 +235,16 @@ func TestCreateEndpoint(t *testing.T) {
 			responseStatus: http.StatusOK,
 			expectedErr:    false,
 			validateReq: func(t *testing.T, bodyBytes []byte) {
+				t.Helper()
 				var record DNSRecord
-				if err := json.Unmarshal(bodyBytes, &record); err != nil {
+				err := json.Unmarshal(bodyBytes, &record)
+				if err != nil {
 					t.Fatalf("Failed to decode request body: %v", err)
 				}
 				if record.Key != "test.example.com" {
 					t.Errorf("Request Key = %q, want test.example.com", record.Key)
 				}
-				if record.RecordType != "A" {
+				if record.RecordType != recordTypeA {
 					t.Errorf("Request RecordType = %q, want A", record.RecordType)
 				}
 				if record.Value != "192.168.1.1" {
@@ -254,7 +263,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-cname-1",
 				Key:        "alias.example.com",
-				RecordType: "CNAME",
+				RecordType: recordTypeCNAME,
 				Value:      "target.example.com",
 				TTL:        600,
 				Enabled:    true,
@@ -273,7 +282,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-srv-1",
 				Key:        "_service._tcp.example.com",
-				RecordType: "SRV",
+				RecordType: recordTypeSRV,
 				Value:      "target.example.com",
 				TTL:        300,
 				Priority:   intPtr(10),
@@ -284,8 +293,10 @@ func TestCreateEndpoint(t *testing.T) {
 			responseStatus: http.StatusOK,
 			expectedErr:    false,
 			validateReq: func(t *testing.T, bodyBytes []byte) {
+				t.Helper()
 				var record DNSRecord
-				if err := json.Unmarshal(bodyBytes, &record); err != nil {
+				err := json.Unmarshal(bodyBytes, &record)
+				if err != nil {
 					t.Fatalf("Failed to decode request body: %v", err)
 				}
 				if record.Priority == nil || *record.Priority != 10 {
@@ -311,7 +322,7 @@ func TestCreateEndpoint(t *testing.T) {
 			responseBody: DNSRecord{
 				ID:         "new-record",
 				Key:        "multi.example.com",
-				RecordType: "CNAME",
+				RecordType: recordTypeCNAME,
 				Value:      "target1.example.com",
 				TTL:        300,
 				Enabled:    true,
@@ -361,7 +372,7 @@ func TestCreateEndpoint(t *testing.T) {
 				Config: &Config{
 					Host:          server.URL,
 					Site:          "default",
-					ApiKey:        "test-key",
+					APIKey:        "test-key",
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
@@ -370,7 +381,7 @@ func TestCreateEndpoint(t *testing.T) {
 				},
 			}
 
-			records, err := client.CreateEndpoint(tt.endpoint)
+			records, err := client.CreateEndpoint(context.Background(), tt.endpoint)
 
 			if tt.expectedErr && err == nil {
 				t.Error("CreateEndpoint() expected error, got nil")
@@ -390,7 +401,7 @@ func TestCreateEndpoint(t *testing.T) {
 	}
 }
 
-// TestDeleteEndpoint tests the DeleteEndpoint method
+// TestDeleteEndpoint tests the DeleteEndpoint method.
 func TestDeleteEndpoint(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -411,7 +422,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "test.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,
@@ -431,7 +442,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "multi.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,
@@ -439,7 +450,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record2",
 					Key:        "multi.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.2",
 					TTL:        300,
 					Enabled:    true,
@@ -472,7 +483,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "cname1",
 					Key:        "alias.example.com",
-					RecordType: "CNAME",
+					RecordType: recordTypeCNAME,
 					Value:      "target.example.com",
 					TTL:        300,
 					Enabled:    true,
@@ -493,7 +504,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				{
 					ID:         "record1",
 					Key:        "test.example.com",
-					RecordType: "A",
+					RecordType: recordTypeA,
 					Value:      "192.168.1.1",
 					TTL:        300,
 					Enabled:    true,
@@ -509,11 +520,12 @@ func TestDeleteEndpoint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deleteCount := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == http.MethodGet {
+				switch r.Method {
+				case http.MethodGet:
 					// GetEndpoints call
 					w.WriteHeader(http.StatusOK)
 					_ = json.NewEncoder(w).Encode(tt.existingRecords)
-				} else if r.Method == http.MethodDelete {
+				case http.MethodDelete:
 					// Delete call
 					deleteCount++
 					w.WriteHeader(tt.responseStatus)
@@ -531,7 +543,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				Config: &Config{
 					Host:          server.URL,
 					Site:          "default",
-					ApiKey:        "test-key",
+					APIKey:        "test-key",
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
@@ -540,7 +552,7 @@ func TestDeleteEndpoint(t *testing.T) {
 				},
 			}
 
-			err := client.DeleteEndpoint(tt.endpoint)
+			err := client.DeleteEndpoint(context.Background(), tt.endpoint)
 
 			if tt.expectedErr && err == nil {
 				t.Error("DeleteEndpoint() expected error, got nil")
@@ -556,7 +568,7 @@ func TestDeleteEndpoint(t *testing.T) {
 	}
 }
 
-// TestSetHeaders tests header setting logic
+// TestSetHeaders tests header setting logic.
 func TestSetHeaders(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -567,7 +579,7 @@ func TestSetHeaders(t *testing.T) {
 		{
 			name: "with API key",
 			config: &Config{
-				ApiKey: "test-api-key",
+				APIKey: "test-api-key",
 			},
 			csrf: "",
 			expectedHeaders: map[string]string{
@@ -579,7 +591,7 @@ func TestSetHeaders(t *testing.T) {
 		{
 			name: "with CSRF token",
 			config: &Config{
-				ApiKey: "",
+				APIKey: "",
 			},
 			csrf: "csrf-token-123",
 			expectedHeaders: map[string]string{
@@ -597,7 +609,7 @@ func TestSetHeaders(t *testing.T) {
 				csrf:   tt.csrf,
 			}
 
-			req, _ := http.NewRequest(http.MethodGet, "http://example.com", nil)
+			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", http.NoBody)
 			client.setHeaders(req)
 
 			for key, expectedValue := range tt.expectedHeaders {
@@ -610,16 +622,16 @@ func TestSetHeaders(t *testing.T) {
 	}
 }
 
-// TestFormatUrl_ClientUsage tests FormatUrl in real client scenarios
-func TestFormatUrl_ClientUsage(t *testing.T) {
+// TestFormatURL_ClientUsage tests FormatURL in real client scenarios.
+func TestFormatURL_ClientUsage(t *testing.T) {
 	tests := []struct {
-		name       string
-		urls       *ClientURLs
-		host       string
-		site       string
-		recordID   string
-		operation  string
-		expected   string
+		name      string
+		urls      *ClientURLs
+		host      string
+		site      string
+		recordID  string
+		operation string
+		expected  string
 	}{
 		{
 			name: "internal controller - list records",
@@ -660,19 +672,19 @@ func TestFormatUrl_ClientUsage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var result string
 			if tt.recordID == "" {
-				result = FormatUrl(tt.urls.Records, tt.host, tt.site)
+				result = FormatURL(tt.urls.Records, tt.host, tt.site)
 			} else {
-				result = FormatUrl(tt.urls.Records, tt.host, tt.site, tt.recordID)
+				result = FormatURL(tt.urls.Records, tt.host, tt.site, tt.recordID)
 			}
 
 			if result != tt.expected {
-				t.Errorf("FormatUrl() = %q, want %q", result, tt.expected)
+				t.Errorf("FormatURL() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
-// Helper function for tests
+// Helper function for tests.
 func intPtr(i int) *int {
 	return &i
 }

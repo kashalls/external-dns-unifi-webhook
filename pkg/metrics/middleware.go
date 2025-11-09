@@ -32,10 +32,11 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	if err != nil {
 		return n, errors.Wrap(err, "failed to write response")
 	}
+
 	return n, nil
 }
 
-// HTTPMetricsMiddleware is a middleware that records HTTP metrics
+// HTTPMetricsMiddleware is a middleware that records HTTP metrics.
 func HTTPMetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m := Get()

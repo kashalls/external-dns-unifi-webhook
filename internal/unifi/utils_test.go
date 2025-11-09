@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestFormatUrl(t *testing.T) {
+func TestFormatURL(t *testing.T) {
 	tests := []struct {
 		name     string
 		path     string
@@ -171,16 +171,16 @@ func TestFormatUrl(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatUrl(tt.path, tt.params...)
+			result := FormatURL(tt.path, tt.params...)
 			if result != tt.expected {
-				t.Errorf("FormatUrl(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
+				t.Errorf("FormatURL(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
 			}
 		})
 	}
 }
 
-// TestFormatUrlRealWorldUsage tests actual usage patterns from the codebase
-func TestFormatUrlRealWorldUsage(t *testing.T) {
+// TestFormatURLRealWorldUsage tests actual usage patterns from the codebase.
+func TestFormatURLRealWorldUsage(t *testing.T) {
 	const (
 		host                    = "https://unifi.local"
 		site                    = "default"
@@ -249,16 +249,16 @@ func TestFormatUrlRealWorldUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatUrl(tt.path, tt.params...)
+			result := FormatURL(tt.path, tt.params...)
 			if result != tt.expected {
-				t.Errorf("FormatUrl() = %q, want %q", result, tt.expected)
+				t.Errorf("FormatURL() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
-// TestFormatUrlEdgeCases tests boundary conditions
-func TestFormatUrlEdgeCases(t *testing.T) {
+// TestFormatURLEdgeCases tests boundary conditions.
+func TestFormatURLEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		path     string
@@ -299,16 +299,16 @@ func TestFormatUrlEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatUrl(tt.path, tt.params...)
+			result := FormatURL(tt.path, tt.params...)
 			if result != tt.expected {
-				t.Errorf("FormatUrl() = %q, want %q", result, tt.expected)
+				t.Errorf("FormatURL() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
-// TestFormatUrlPanic tests that function panics when params exceed segments
-func TestFormatUrlPanic(t *testing.T) {
+// TestFormatURLPanic tests that function panics when params exceed segments.
+func TestFormatURLPanic(t *testing.T) {
 	tests := []struct {
 		name   string
 		path   string
@@ -330,10 +330,10 @@ func TestFormatUrlPanic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			defer func() {
 				if r := recover(); r == nil {
-					t.Errorf("FormatUrl(%q, %v) did not panic", tt.path, tt.params)
+					t.Errorf("FormatURL(%q, %v) did not panic", tt.path, tt.params)
 				}
 			}()
-			_ = FormatUrl(tt.path, tt.params...)
+			_ = FormatURL(tt.path, tt.params...)
 		})
 	}
 }

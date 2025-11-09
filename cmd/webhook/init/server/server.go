@@ -20,35 +20,42 @@ import (
 	"go.uber.org/zap"
 )
 
-// HealthCheckHandler returns the status of the service
-func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+const (
+	shutdownTimeout = 30 * time.Second
+)
+
+// HealthCheckHandler returns the status of the service.
+func HealthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("OK")); err != nil {
+	_, err := w.Write([]byte("OK"))
+	if err != nil {
 		log.Error("failed to write health check response", zap.Error(err))
 	}
 }
 
-// ReadinessHandler returns whether the service is ready to accept requests
-func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
+// ReadinessHandler returns whether the service is ready to accept requests.
+func ReadinessHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("OK")); err != nil {
+	_, err := w.Write([]byte("OK"))
+	if err != nil {
 		log.Error("failed to write readiness response", zap.Error(err))
 	}
 }
 
-// Init initializes the http server
-func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.Server) {
+// Init initializes the http server.
+func Init(config *configuration.Config, whk *webhook.Webhook) (mainServer, healthServer *http.Server) {
 	mainRouter := chi.NewRouter()
 	mainRouter.Use(metrics.HTTPMetricsMiddleware)
-	mainRouter.Get("/", p.Negotiate)
-	mainRouter.Get("/records", p.Records)
-	mainRouter.Post("/records", p.ApplyChanges)
-	mainRouter.Post("/adjustendpoints", p.AdjustEndpoints)
+	mainRouter.Get("/", whk.Negotiate)
+	mainRouter.Get("/records", whk.Records)
+	mainRouter.Post("/records", whk.ApplyChanges)
+	mainRouter.Post("/adjustendpoints", whk.AdjustEndpoints)
 
-	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	mainServer = createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
 		log.Info("starting webhook server", zap.String("address", mainServer.Addr))
-		if err := mainServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		err := mainServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("unable to start webhook server", zap.String("address", mainServer.Addr), zap.Error(err))
 		}
 	}()
@@ -58,10 +65,11 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 	healthRouter.Get("/healthz", HealthCheckHandler)
 	healthRouter.Get("/readyz", ReadinessHandler)
 
-	healthServer := createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	healthServer = createHTTPServer("0.0.0.0:8080", healthRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
 		log.Info("starting health server", zap.String("address", healthServer.Addr))
-		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		err := healthServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("unable to start health server", zap.String("address", healthServer.Addr), zap.Error(err))
 		}
 	}()
@@ -78,21 +86,23 @@ func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout 
 	}
 }
 
-// ShutdownGracefully gracefully shutdown the http server
-func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
+// ShutdownGracefully gracefully shutdown the http server.
+func ShutdownGracefully(mainServer, healthServer *http.Server) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
 
 	log.Info("shutting down servers due to received signal", zap.Any("signal", sig))
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	if err := mainServer.Shutdown(ctx); err != nil {
+	err := mainServer.Shutdown(ctx)
+	if err != nil {
 		log.Error("error shutting down main server", zap.Error(err))
 	}
 
-	if err := healthServer.Shutdown(ctx); err != nil {
+	err = healthServer.Shutdown(ctx)
+	if err != nil {
 		log.Error("error shutting down health server", zap.Error(err))
 	}
 }

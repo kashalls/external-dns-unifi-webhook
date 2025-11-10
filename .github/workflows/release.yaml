@@ -130,7 +130,8 @@ jobs:
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
+          IMAGE_TAG=$(echo "$DOCKER_METADATA_OUTPUT_JSON" | jq -r '.tags[0]')
+          docker buildx imagetools inspect "${IMAGE_TAG}"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3

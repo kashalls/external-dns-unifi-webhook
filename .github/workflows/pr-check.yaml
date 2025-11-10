@@ -39,8 +39,8 @@ jobs:
               - 'go.sum'
 
   build-test:
-    needs: changes
-    if: needs.changes.outputs.container == 'true'
+    # needs: changes
+    # if: needs.changes.outputs.container == 'true'
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read

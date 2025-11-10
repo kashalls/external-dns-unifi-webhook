@@ -36,8 +36,8 @@ jobs:
       - name: Prepare platform identifier
         id: platform
         run: |
-          platform=${{ matrix.platform }}
-          echo "pair=${platform//\//-}" >> $GITHUB_OUTPUT
+          platform="${{ matrix.platform }}"
+          echo "pair=${platform//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -124,8 +124,15 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/${{ github.repository }}@sha256:%s ' *)
+          set -euo pipefail
+          readarray -t tag_args < <(jq -r '.tags[] | "-t " + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          readarray -t digest_files < <(find . -type f)
+          declare -a images
+          for file in "${digest_files[@]}"; do
+            digest=$(basename "$file")
+            images+=("ghcr.io/${{ github.repository }}@sha256:${digest}")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "${images[@]}"
 
       - name: Inspect image
         run: |

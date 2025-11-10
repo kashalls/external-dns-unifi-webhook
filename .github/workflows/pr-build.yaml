@@ -8,45 +8,8 @@ on:
     types: [labeled, closed]
 
 jobs:
-  # Build and test image without pushing (safe for fork PRs)
-  build-test:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout PR
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Image (no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Containerfile
-          platforms: linux/amd64
-          push: false
-          tags: ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.title=${{ github.event.repository.name }}
-            org.opencontainers.image.description=PR #${{ github.event.pull_request.number }} test image
-            org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
-            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
-            org.opencontainers.image.version=pr-${{ github.event.pull_request.number }}
-          build-args: |
-            VERSION=pr-${{ github.event.pull_request.number }}
-            REVISION=${{ github.event.pull_request.head.sha }}
-
   # Build and push image (requires approval, maintainer only)
   build-and-push:
-    name: Build and Push (${{ matrix.platform }})
     if: |
       github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' &&

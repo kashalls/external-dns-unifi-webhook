@@ -39,7 +39,6 @@ jobs:
               - 'go.sum'
 
   build-test:
-    name: Build Container Image (${{ matrix.platform }})
     needs: changes
     if: needs.changes.outputs.container == 'true'
     runs-on: ${{ matrix.runner }}

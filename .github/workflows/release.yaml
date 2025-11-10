@@ -9,6 +9,7 @@ on:
 
 jobs:
   build-image:
+    name: Build Image (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read

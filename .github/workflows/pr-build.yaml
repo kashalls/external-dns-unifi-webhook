@@ -46,6 +46,7 @@ jobs:
 
   # Build and push image (requires approval, maintainer only)
   build-and-push:
+    name: Build and Push (${{ matrix.platform }})
     if: |
       github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' &&

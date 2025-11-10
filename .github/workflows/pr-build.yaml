@@ -2,72 +2,42 @@
 name: PR Container Build
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   pull_request_target:
-    types: [labeled, closed]
+    types: [labeled]
 
 jobs:
-  # Build and test image without pushing (safe for fork PRs)
-  build-test:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout PR
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Image (no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Containerfile.pr
-          platforms: linux/amd64,linux/arm64
-          push: false
-          tags: ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.title=${{ github.event.repository.name }}
-            org.opencontainers.image.description=PR #${{ github.event.pull_request.number }} test image
-            org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
-            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
-            org.opencontainers.image.version=pr-${{ github.event.pull_request.number }}
-          build-args: |
-            VERSION=pr-${{ github.event.pull_request.number }}
-            REVISION=${{ github.event.pull_request.head.sha }}
-
   # Build and push image (requires approval, maintainer only)
   build-and-push:
     if: |
       github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' &&
       github.event.label.name == 'build-container'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     environment:
       name: Pull Request Build
     permissions:
       contents: read
       packages: write
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout PR
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Prepare platform identifier
+        id: platform
+        run: |
+          platform="${{ matrix.platform }}"
+          echo "pair=${platform//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -79,26 +49,94 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push PR Image
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: pr-${{ github.event.pull_request.number }}
+
+      - name: Build and Push by Digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Containerfile.pr
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.title=${{ github.event.repository.name }}
-            org.opencontainers.image.description=PR #${{ github.event.pull_request.number }} test image
-            org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
-            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
-            org.opencontainers.image.version=pr-${{ github.event.pull_request.number }}
+          file: ./Containerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=build-${{ steps.platform.outputs.pair }}
+          cache-to: type=gha,scope=build-${{ steps.platform.outputs.pair }},mode=max
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=pr-${{ github.event.pull_request.number }}
             REVISION=${{ github.event.pull_request.head.sha }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ steps.platform.outputs.pair }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merge all digests into multi-arch manifest
+  merge-manifests:
+    if: |
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'build-container'
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: pr-${{ github.event.pull_request.number }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          set -euo pipefail
+          readarray -t tag_args < <(jq -r '.tags[] | "-t " + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          readarray -t digest_files < <(find . -type f)
+          declare -a images
+          for file in "${digest_files[@]}"; do
+            digest=$(basename "$file")
+            images+=("ghcr.io/${{ github.repository }}@sha256:${digest}")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "${images[@]}"
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
 
       - name: Comment on PR
         uses: actions/github-script@v8
@@ -121,48 +159,3 @@ jobs:
               repo: context.repo.repo,
               name: 'build-container'
             })
-
-  # Cleanup PR image when PR is closed
-  cleanup-pr-image:
-    if: github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-    steps:
-      - name: Delete PR container image
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const prNumber = context.payload.pull_request.number;
-            const packageName = context.repo.repo;
-            const owner = context.repo.owner;
-
-            try {
-              // Get all versions of the package
-              const versions = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
-                package_type: 'container',
-                package_name: packageName,
-                username: owner
-              });
-
-              // Find version with tag pr-{number}
-              const prTag = `pr-${prNumber}`;
-              const versionToDelete = versions.data.find(v =>
-                v.metadata?.container?.tags?.includes(prTag)
-              );
-
-              if (versionToDelete) {
-                await github.rest.packages.deletePackageVersionForUser({
-                  package_type: 'container',
-                  package_name: packageName,
-                  username: owner,
-                  package_version_id: versionToDelete.id
-                });
-                console.log(`Deleted container image: ${prTag}`);
-              } else {
-                console.log(`No container image found for ${prTag}`);
-              }
-            } catch (error) {
-              console.log(`Failed to delete image: ${error.message}`);
-              // Don't fail the workflow if image doesn't exist
-            }

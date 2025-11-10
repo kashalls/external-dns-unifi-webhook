@@ -89,6 +89,7 @@ jobs:
     needs: build-image
     permissions:
       packages: write
+      id-token: write
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -130,3 +131,12 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          echo "${TAGS}" | xargs -I {} cosign sign --yes --recursive {}

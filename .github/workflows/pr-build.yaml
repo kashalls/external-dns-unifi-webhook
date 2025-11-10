@@ -5,7 +5,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   pull_request_target:
-    types: [labeled, closed]
+    types: [labeled]
 
 jobs:
   # Build and push image (requires approval, maintainer only)
@@ -154,45 +154,3 @@ jobs:
               repo: context.repo.repo,
               name: 'build-container'
             })
-
-  # Cleanup PR image when PR is closed
-  cleanup-pr-image:
-    if: github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-    steps:
-      - name: Delete PR container image
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const prNumber = context.payload.pull_request.number;
-            const packageName = context.repo.repo;
-
-            try {
-              // Get all versions of the package
-              const versions = await github.rest.packages.getAllPackageVersionsForPackageOwnedByAuthenticatedUser({
-                package_type: 'container',
-                package_name: packageName
-              });
-
-              // Find version with tag pr-{number}
-              const prTag = `pr-${prNumber}`;
-              const versionToDelete = versions.data.find(v =>
-                v.metadata?.container?.tags?.includes(prTag)
-              );
-
-              if (versionToDelete) {
-                await github.rest.packages.deletePackageVersionForAuthenticatedUser({
-                  package_type: 'container',
-                  package_name: packageName,
-                  package_version_id: versionToDelete.id
-                });
-                console.log(`Deleted container image: ${prTag}`);
-              } else {
-                console.log(`No container image found for ${prTag}`);
-              }
-            } catch (error) {
-              console.log(`Failed to delete image: ${error.message}`);
-              // Don't fail the workflow if image doesn't exist
-            }

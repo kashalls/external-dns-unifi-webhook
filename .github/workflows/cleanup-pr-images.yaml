@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Delete pr-* container images
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           OWNER="${{ github.repository_owner }}"
           PACKAGE="${{ github.event.repository.name }}"

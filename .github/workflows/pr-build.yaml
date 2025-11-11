@@ -197,6 +197,8 @@ jobs:
       packages: write
     steps:
       - name: Delete PR container image
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           OWNER="${{ github.repository_owner }}"
           PACKAGE="${{ github.event.repository.name }}"

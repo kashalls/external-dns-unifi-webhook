@@ -9,6 +9,7 @@ on:
 
 jobs:
   build-image:
+    name: Build Image
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -85,6 +86,7 @@ jobs:
           retention-days: 1
 
   merge-manifests:
+    name: Merge Manifests
     runs-on: ubuntu-latest
     needs: build-image
     permissions:
@@ -126,13 +128,18 @@ jobs:
         working-directory: /tmp/digests
         run: |
           set -euo pipefail
-          readarray -t tag_args < <(jq -r '.tags[] | "-t " + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          readarray -t digest_files < <(find . -type f)
-          declare -a images
-          for file in "${digest_files[@]}"; do
-            digest=$(basename "$file")
-            images+=("ghcr.io/${{ github.repository }}@sha256:${digest}")
+
+          # Build tag arguments array (-t and tag as separate elements)
+          mapfile -t tag_args < <(jq -r '.tags[] | "-t", .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          # Build image references array
+          images=()
+          for digest_file in *; do
+            [[ -f "$digest_file" ]] || continue
+            images+=("ghcr.io/${{ github.repository }}@sha256:${digest_file}")
           done
+
+          # Create multi-arch manifest
           docker buildx imagetools create "${tag_args[@]}" "${images[@]}"
 
       - name: Inspect image
@@ -148,3 +155,35 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           echo "${TAGS}" | xargs -I {} cosign sign --yes --recursive {}
+
+      - name: Generate build summary
+        run: |
+          IMAGE_TAG=$(echo "$DOCKER_METADATA_OUTPUT_JSON" | jq -r '.tags[0]')
+          MANIFEST_DIGEST=$(docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{.Manifest.Digest}}')
+
+          {
+            echo "## 🚀 Container Image Published"
+            echo ""
+            echo "### 📦 Image Tags"
+            echo "$DOCKER_METADATA_OUTPUT_JSON" | jq -r '.tags[] | "- `\(.)`"'
+            echo ""
+            echo "### 🏗️ Platforms"
+            docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{range .Manifest.Manifests}}- {{.Platform.OS}}/{{.Platform.Architecture}}{{if .Platform.Variant}}/{{.Platform.Variant}}{{end}}{{"\n"}}{{end}}'
+            echo ""
+            echo "### 🔒 Security"
+            echo "- ✅ Signed with cosign (keyless OIDC)"
+            echo "- 📋 Manifest digest: \`${MANIFEST_DIGEST}\`"
+            echo ""
+            echo "### 📥 Pull Command"
+            echo '```bash'
+            echo "docker pull ${IMAGE_TAG}"
+            echo '```'
+            echo ""
+            echo "### 🔐 Verify Signature"
+            echo '```bash'
+            echo "cosign verify \\"
+            echo "  --certificate-identity-regexp='https://github\\.com/${{ github.repository }}/\\.github/workflows/release\\.yaml@refs/heads/main' \\"
+            echo "  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \\"
+            echo "  ${IMAGE_TAG}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

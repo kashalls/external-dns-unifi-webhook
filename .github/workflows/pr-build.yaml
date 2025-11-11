@@ -3,18 +3,17 @@ name: PR Container Build
 
 on:
   pull_request_target:
-    types: [labeled]
+    types: [labeled, closed]
 
 jobs:
   # Build and push image (requires approval, maintainer only)
   build-and-push:
+    name: Build and Push
     if: |
       github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' &&
       github.event.label.name == 'build-container'
     runs-on: ${{ matrix.runner }}
-    environment:
-      name: Pull Request Build
     permissions:
       contents: read
       packages: write
@@ -87,6 +86,7 @@ jobs:
 
   # Merge all digests into multi-arch manifest
   merge-manifests:
+    name: Merge Manifests
     if: |
       github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' &&
@@ -125,18 +125,46 @@ jobs:
         working-directory: /tmp/digests
         run: |
           set -euo pipefail
-          readarray -t tag_args < <(jq -r '.tags[] | "-t " + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          readarray -t digest_files < <(find . -type f)
-          declare -a images
-          for file in "${digest_files[@]}"; do
-            digest=$(basename "$file")
-            images+=("ghcr.io/${{ github.repository }}@sha256:${digest}")
+
+          # Build tag arguments array (-t and tag as separate elements)
+          mapfile -t tag_args < <(jq -r '.tags[] | "-t", .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          # Build image references array
+          images=()
+          for digest_file in *; do
+            [[ -f "$digest_file" ]] || continue
+            images+=("ghcr.io/${{ github.repository }}@sha256:${digest_file}")
           done
+
+          # Create multi-arch manifest
           docker buildx imagetools create "${tag_args[@]}" "${images[@]}"
 
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
+
+      - name: Generate build summary
+        run: |
+          IMAGE_TAG="ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}"
+          MANIFEST_DIGEST=$(docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{.Manifest.Digest}}')
+
+          {
+            echo "## 🚀 PR Container Image Built"
+            echo ""
+            echo "### 📦 Image Tag"
+            echo "- \`${IMAGE_TAG}\`"
+            echo ""
+            echo "### 🏗️ Platforms"
+            docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{range .Manifest.Manifests}}- {{.Platform.OS}}/{{.Platform.Architecture}}{{if .Platform.Variant}}/{{.Platform.Variant}}{{end}}{{"\n"}}{{end}}'
+            echo ""
+            echo "### 📋 Manifest Digest"
+            echo "\`${MANIFEST_DIGEST}\`"
+            echo ""
+            echo "### 📥 Pull Command"
+            echo '```bash'
+            echo "docker pull ${IMAGE_TAG}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on PR
         uses: actions/github-script@v8
@@ -159,3 +187,38 @@ jobs:
               repo: context.repo.repo,
               name: 'build-container'
             })
+
+  # Clean up PR image when PR is closed
+  cleanup-pr-image:
+    name: Cleanup PR Image
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete PR container image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          PACKAGE="${{ github.event.repository.name }}"
+          TAG="pr-${{ github.event.pull_request.number }}"
+
+          echo "🔍 Looking for image with tag: ${TAG}"
+
+          # Find version ID for this PR tag
+          VERSION_ID=$(gh api --paginate "/users/${OWNER}/packages/container/${PACKAGE}/versions" \
+            --jq ".[] | select(.metadata.container.tags[]? == \"${TAG}\") | .id")
+
+          if [ -z "${VERSION_ID}" ]; then
+            echo "✅ No image found with tag ${TAG}"
+            exit 0
+          fi
+
+          echo "🗑️  Deleting image version ${VERSION_ID} with tag ${TAG}"
+          if gh api --method DELETE --silent "/users/${OWNER}/packages/container/${PACKAGE}/versions/${VERSION_ID}"; then
+            echo "✅ Successfully deleted image ${TAG}"
+          else
+            echo "❌ Failed to delete image ${TAG}"
+            exit 1
+          fi

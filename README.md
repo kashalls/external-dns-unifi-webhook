@@ -174,7 +174,7 @@ stringData:
           timeoutSeconds: 5
     extraArgs:
       - --ignore-ingress-tls-spec
-    policy: sync
+    policy: create-only
     sources: ["ingress", "service"]
     txtOwnerId: default
     txtPrefix: k8s.

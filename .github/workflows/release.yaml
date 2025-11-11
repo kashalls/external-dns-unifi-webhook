@@ -172,7 +172,6 @@ jobs:
             echo ""
             echo "### 🔒 Security"
             echo "- ✅ Signed with cosign (keyless OIDC)"
-            echo "- 📋 Manifest digest: \`${MANIFEST_DIGEST}\`"
             echo ""
             echo "### 📥 Pull Command"
             echo '```bash'

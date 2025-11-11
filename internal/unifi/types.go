@@ -15,6 +15,12 @@ type Config struct {
 	SkipTLSVerify      bool   `env:"UNIFI_SKIP_TLS_VERIFY"     envDefault:"true"`
 }
 
+// ClientURLs holds the URL patterns for the UniFi controller.
+type ClientURLs struct {
+	Login   string
+	Records string
+}
+
 // Login represents a login request to the UniFi API.
 type Login struct {
 	Username string `json:"username"`

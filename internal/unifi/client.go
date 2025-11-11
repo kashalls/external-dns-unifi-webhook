@@ -3,32 +3,23 @@ package unifi
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 	externaldnsendpoint "sigs.k8s.io/external-dns/endpoint"
 )
 
-type ClientURLs struct {
-	Login   string
-	Records string
-}
-
-// httpClient is the DNS provider client.
-type httpClient struct {
-	*Config
-	*http.Client
-
-	csrf       string
-	ClientURLs *ClientURLs
+// unifiAPIClient implements the UnifiAPI interface.
+type unifiAPIClient struct {
+	transport   HTTPTransport
+	transformer RecordTransformer
+	metrics     MetricsRecorder
+	logger      Logger
+	config      *Config
+	clientURLs  *ClientURLs
 }
 
 const (
@@ -48,64 +39,42 @@ const (
 	errorBodyBufferSize = 512
 )
 
-// newUnifiClient creates a new DNS provider client and logs in to store cookies.
-func newUnifiClient(config *Config) (*httpClient, error) {
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create cookie jar")
+// NewUnifiAPIClient creates a new UniFi API client with injected dependencies.
+//
+//nolint:ireturn // Factory function must return interface for dependency injection
+func NewUnifiAPIClient(
+	transport HTTPTransport,
+	transformer RecordTransformer,
+	metrics MetricsRecorder,
+	logger Logger,
+	config *Config,
+	clientURLs *ClientURLs,
+) UnifiAPI {
+	return &unifiAPIClient{
+		transport:   transport,
+		transformer: transformer,
+		metrics:     metrics,
+		logger:      logger,
+		config:      config,
+		clientURLs:  clientURLs,
 	}
-
-	// Create the HTTP client
-	client := &httpClient{
-		Config: config,
-		Client: &http.Client{
-			Transport: &http.Transport{
-				//nolint:gosec // InsecureSkipVerify is configurable via UNIFI_SKIP_TLS_VERIFY for self-signed certs
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipTLSVerify},
-			},
-			Jar: jar,
-		},
-		ClientURLs: &ClientURLs{
-			Login:   unifiLoginPath,
-			Records: unifiRecordPath,
-		},
-	}
-
-	if client.ExternalController {
-		client.ClientURLs.Login = unifiLoginPathExternal
-		client.ClientURLs.Records = unifiRecordPathExternal
-	}
-
-	if client.APIKey != "" {
-		return client, nil
-	}
-
-	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
-
-	err = client.login(context.Background())
-	if err != nil {
-		return nil, errors.Wrap(err, "initial login failed")
-	}
-
-	return client, nil
 }
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
-func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
-	m := metrics.Get()
+func (c *unifiAPIClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 	start := time.Now()
 
-	resp, err := c.doRequest(
+	resp, err := c.transport.DoRequest(
 		ctx,
 		http.MethodGet,
-		FormatURL(c.ClientURLs.Records, c.Host, c.Site),
+		FormatURL(c.clientURLs.Records, c.config.Host, c.config.Site),
 		nil,
 	)
 
 	duration := time.Since(start)
 
 	if err != nil {
-		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
+		c.metrics.RecordUniFiAPICall("get_endpoints", duration, 0, err)
 
 		return nil, errors.Wrap(err, "failed to fetch DNS records from UniFi")
 	}
@@ -115,7 +84,7 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
+		c.metrics.RecordUniFiAPICall("get_endpoints", duration, 0, err)
 
 		return nil, NewDataError("read", "get endpoints response body", err)
 	}
@@ -123,13 +92,13 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 	var records []DNSRecord
 	err = json.Unmarshal(bodyBytes, &records)
 	if err != nil {
-		log.Error("Failed to decode response", "error", err)
-		m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), err)
+		c.logger.Error("Failed to decode response", "error", err)
+		c.metrics.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), err)
 
 		return nil, NewDataError("unmarshal", "DNS records", err)
 	}
 
-	m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), nil)
+	c.metrics.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), nil)
 
 	// Loop through records to modify SRV type
 	for i, record := range records {
@@ -138,7 +107,7 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 		}
 
 		// Modify the Target for SRV records
-		records[i].Value = fmt.Sprintf("%d %d %d %s",
+		records[i].Value = c.transformer.FormatSRVValue(
 			*record.Priority,
 			*record.Weight,
 			*record.Port,
@@ -149,91 +118,65 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 		records[i].Port = nil
 	}
 
-	log.Debug("fetched records", "count", len(records))
+	c.logger.Debug("fetched records", "count", len(records))
 
 	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
-func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) ([]*DNSRecord, error) {
-	m := metrics.Get()
+func (c *unifiAPIClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) ([]*DNSRecord, error) {
 	start := time.Now()
 
 	// CNAME records can only have one target
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
-		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
-		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", "key", endpoint.DNSName, "ignored_targets", endpoint.Targets[1:])
+		c.metrics.IgnoredCNAMETargetsTotal().Inc()
+		c.logger.Warn("Ignoring additional CNAME targets. Only the first target will be used.", "key", endpoint.DNSName, "ignored_targets", endpoint.Targets[1:])
 		endpoint.Targets = endpoint.Targets[:1]
 	}
 
 	createdRecords := make([]*DNSRecord, 0, len(endpoint.Targets))
 
 	for _, target := range endpoint.Targets {
-		record := prepareDNSRecord(endpoint, target)
+		record := c.transformer.PrepareDNSRecord(endpoint, target)
 
 		// SRV records need special parsing
 		if endpoint.RecordType == recordTypeSRV {
-			err := parseSRVTarget(&record, endpoint.Targets[0])
+			err := c.transformer.ParseSRVTarget(&record, endpoint.Targets[0])
 			if err != nil {
-				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
+				c.metrics.SRVParsingErrorsTotal().Inc()
+				c.metrics.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
 
-				return nil, err
+				return nil, errors.Wrap(err, "failed to parse SRV target")
 			}
 		}
 
 		createdRecord, err := c.createSingleDNSRecord(ctx, &record)
 		if err != nil {
-			m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
+			c.metrics.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
 
 			return nil, err
 		}
 
 		createdRecords = append(createdRecords, createdRecord)
-		log.Debug("created new record", "key", createdRecord.Key, "type", createdRecord.RecordType, "target", createdRecord.Value)
+		c.logger.Debug("created new record", "key", createdRecord.Key, "type", createdRecord.RecordType, "target", createdRecord.Value)
 	}
 
-	m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, nil)
+	c.metrics.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, nil)
 
 	return createdRecords, nil
 }
 
-// prepareDNSRecord creates a DNSRecord from endpoint and target value.
-func prepareDNSRecord(endpoint *externaldnsendpoint.Endpoint, target string) DNSRecord {
-	return DNSRecord{
-		Enabled:    true,
-		Key:        endpoint.DNSName,
-		RecordType: endpoint.RecordType,
-		TTL:        endpoint.RecordTTL,
-		Value:      target,
-	}
-}
-
-// parseSRVTarget parses SRV record format and populates Priority, Weight, Port fields.
-func parseSRVTarget(record *DNSRecord, target string) error {
-	record.Priority = new(int)
-	record.Weight = new(int)
-	record.Port = new(int)
-
-	_, err := fmt.Sscanf(target, "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value)
-	if err != nil {
-		return NewDataError("parse", "SRV record target", err)
-	}
-
-	return nil
-}
-
 // createSingleDNSRecord sends a create request for a single DNS record and returns the created record.
-func (c *httpClient) createSingleDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
+func (c *unifiAPIClient) createSingleDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
 	jsonBody, err := json.Marshal(record)
 	if err != nil {
 		return nil, NewDataError("marshal", "DNS record", err)
 	}
 
-	resp, err := c.doRequest(
+	resp, err := c.transport.DoRequest(
 		ctx,
 		http.MethodPost,
-		FormatURL(c.ClientURLs.Records, c.Host, c.Site),
+		FormatURL(c.clientURLs.Records, c.config.Host, c.config.Site),
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
@@ -256,14 +199,13 @@ func (c *httpClient) createSingleDNSRecord(ctx context.Context, record *DNSRecor
 }
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
-func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) error {
-	m := metrics.Get()
+func (c *unifiAPIClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) error {
 	start := time.Now()
 
 	records, err := c.GetEndpoints(ctx)
 	if err != nil {
 		duration := time.Since(start)
-		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
+		c.metrics.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
 
 		return errors.Wrap(err, "failed to fetch records before deletion")
 	}
@@ -271,9 +213,9 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 	var deleteErrors []error
 	for _, record := range records {
 		if record.Key == endpoint.DNSName && record.RecordType == endpoint.RecordType {
-			deleteURL := FormatURL(c.ClientURLs.Records, c.Host, c.Site, record.ID)
+			deleteURL := FormatURL(c.clientURLs.Records, c.config.Host, c.config.Site, record.ID)
 
-			resp, err := c.doRequest(
+			resp, err := c.transport.DoRequest(
 				ctx,
 				http.MethodDelete,
 				deleteURL,
@@ -283,7 +225,7 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 				deleteErrors = append(deleteErrors, err)
 			} else {
 				_ = resp.Body.Close()
-				log.Debug("client successfully removed record", "key", record.Key, "type", record.RecordType, "target", record.Value)
+				c.logger.Debug("client successfully removed record", "key", record.Key, "type", record.RecordType, "target", record.Value)
 			}
 		}
 	}
@@ -294,172 +236,52 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 		for _, deleteErr := range deleteErrors {
 			err = errors.Wrap(deleteErr, err.Error())
 		}
-		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
+		c.metrics.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
 
 		return err
 	}
-	m.RecordUniFiAPICall("delete_endpoint", duration, 0, nil)
+	c.metrics.RecordUniFiAPICall("delete_endpoint", duration, 0, nil)
 
 	return nil
 }
 
-func (c *httpClient) login(ctx context.Context) error {
-	m := metrics.Get()
-	jsonBody, err := json.Marshal(Login{
-		Username: c.User,
-		Password: c.Password,
-		Remember: true,
-	})
+// newUnifiClient creates a new DNS provider client - DEPRECATED, use NewUnifiAPIClient instead.
+// This function is kept for backward compatibility and will be removed in future versions.
+//
+//nolint:ireturn // Factory function must return interface for dependency injection
+func newUnifiClient(config *Config) (UnifiAPI, error) {
+	metricsAdapter := NewMetricsAdapter(nil)
+	loggerAdapter := NewLoggerAdapter()
+
+	transport, err := NewHTTPTransport(config, metricsAdapter, loggerAdapter)
 	if err != nil {
-		return NewDataError("marshal", "login credentials", err)
+		return nil, err
 	}
 
-	// Perform the login request
-	resp, err := c.doRequest(
-		ctx,
-		http.MethodPost,
-		FormatURL(c.ClientURLs.Login, c.Host),
-		bytes.NewBuffer(jsonBody),
-	)
-	if err != nil {
-		m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "failure").Inc()
-		m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(0)
-
-		return err
-	}
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	// Check if the login was successful
-	if resp.StatusCode != http.StatusOK {
-		m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "failure").Inc()
-		m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(0)
-		respBody, readErr := io.ReadAll(resp.Body)
-		responseMsg := ""
-		if readErr == nil {
-			responseMsg = string(respBody)
-		}
-		log.Error("login failed", "status", resp.Status, "response", responseMsg)
-
-		return NewAuthError("login", resp.StatusCode, resp.Status, nil)
-	}
-
-	m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "success").Inc()
-	m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(1)
-
-	// Retrieve CSRF token from the response headers
-	if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {
-		c.csrf = resp.Header.Get("X-Csrf-Token")
-		m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
-	}
-
-	return nil
-}
-
-func (c *httpClient) doRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, path, body)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create HTTP request")
-	}
-
-	c.setHeaders(req)
-
-	resp, err := c.Do(req)
-	if err != nil {
-		return nil, NewNetworkError(method, path, err)
-	}
-
-	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
-	//nolint:godox // This TODO is intentional and will remain until the deprecated auth method is removed
-	if c.APIKey == "" {
-		c.handleCSRFToken(resp)
-
-		// If the status code is 401, re-login and retry the request
-		if resp.StatusCode == http.StatusUnauthorized {
-			resp, err = c.handleUnauthorized(ctx, req, method, path)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.handleErrorResponse(resp, method, path)
-	}
-
-	return resp, nil
-}
-
-// handleCSRFToken updates the CSRF token from response headers.
-func (c *httpClient) handleCSRFToken(resp *http.Response) {
-	csrf := resp.Header.Get("X-Csrf-Token")
-	if csrf == "" {
-		return
-	}
-
-	if c.csrf != csrf {
-		metrics.Get().UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
-	}
-	c.csrf = csrf
-}
-
-// handleUnauthorized handles 401 responses by re-logging in and retrying the request.
-func (c *httpClient) handleUnauthorized(ctx context.Context, req *http.Request, method, path string) (*http.Response, error) {
-	met := metrics.Get()
-	met.UniFiReloginTotal.WithLabelValues(metrics.ProviderName).Inc()
-
-	log.Debug("received 401 unauthorized, attempting to re-login")
-
-	err := c.login(ctx)
-	if err != nil {
-		log.Error("re-login failed", "error", err)
-
-		return nil, errors.Wrap(err, "re-login after 401 failed")
-	}
-
-	// Update the headers with new CSRF token
-	c.setHeaders(req)
-
-	// Retry the request
-	log.Debug("retrying request after re-login")
-
-	resp, err := c.Do(req)
-	if err != nil {
-		log.Error("Retry request failed", "error", err)
-
-		return nil, NewNetworkError(method+" (retry)", path, err)
-	}
-
-	return resp, nil
-}
-
-// handleErrorResponse processes non-200 status codes and returns appropriate errors.
-func (c *httpClient) handleErrorResponse(resp *http.Response, method, path string) error {
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, errorBodyBufferSize))
-	if err != nil {
-		return NewDataError("read", "error response body", err)
-	}
-
-	var apiError UnifiErrorResponse
-	err = json.Unmarshal(bodyBytes, &apiError)
-	if err != nil {
-		return NewDataError("unmarshal", "API error response", err)
-	}
-
-	return NewAPIError(method, path, resp.StatusCode, apiError.Message)
-}
-
-// setHeaders sets the headers for the HTTP request.
-func (c *httpClient) setHeaders(req *http.Request) {
-	if c.APIKey != "" {
-		req.Header.Set("X-Api-Key", c.APIKey)
+	// Get ClientURLs from transport
+	var clientURLs *ClientURLs
+	if ht, ok := transport.(interface{ GetClientURLs() *ClientURLs }); ok {
+		clientURLs = ht.GetClientURLs()
 	} else {
-		req.Header.Set("X-Csrf-Token", c.csrf)
+		// Fallback if transport doesn't expose GetClientURLs
+		clientURLs = &ClientURLs{
+			Login:   unifiLoginPath,
+			Records: unifiRecordPath,
+		}
+		if config.ExternalController {
+			clientURLs.Login = unifiLoginPathExternal
+			clientURLs.Records = unifiRecordPathExternal
+		}
 	}
 
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	transformer := NewRecordTransformer()
+
+	return NewUnifiAPIClient(
+		transport,
+		transformer,
+		metricsAdapter,
+		loggerAdapter,
+		config,
+		clientURLs,
+	), nil
 }

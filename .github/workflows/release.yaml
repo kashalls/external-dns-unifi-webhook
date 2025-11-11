@@ -153,3 +153,35 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           echo "${TAGS}" | xargs -I {} cosign sign --yes --recursive {}
+
+      - name: Generate build summary
+        run: |
+          IMAGE_TAG=$(echo "$DOCKER_METADATA_OUTPUT_JSON" | jq -r '.tags[0]')
+          MANIFEST_DIGEST=$(docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{.Manifest.Digest}}')
+
+          {
+            echo "## 🚀 Container Image Published"
+            echo ""
+            echo "### 📦 Image Tags"
+            echo "$DOCKER_METADATA_OUTPUT_JSON" | jq -r '.tags[] | "- `\(.)`"'
+            echo ""
+            echo "### 🏗️ Platforms"
+            docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{range .Manifest.Manifests}}- {{.Platform.OS}}/{{.Platform.Architecture}}{{if .Platform.Variant}}/{{.Platform.Variant}}{{end}}{{"\n"}}{{end}}'
+            echo ""
+            echo "### 🔒 Security"
+            echo "- ✅ Signed with cosign (keyless OIDC)"
+            echo "- 📋 Manifest digest: \`${MANIFEST_DIGEST}\`"
+            echo ""
+            echo "### 📥 Pull Command"
+            echo '```bash'
+            echo "docker pull ${IMAGE_TAG}"
+            echo '```'
+            echo ""
+            echo "### 🔐 Verify Signature"
+            echo '```bash'
+            echo "cosign verify \\"
+            echo "  --certificate-identity-regexp='https://github\\.com/${{ github.repository }}/\\.github/workflows/release\\.yaml@refs/heads/main' \\"
+            echo "  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \\"
+            echo "  ${IMAGE_TAG}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

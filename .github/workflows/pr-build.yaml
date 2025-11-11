@@ -143,6 +143,29 @@ jobs:
         run: |
           docker buildx imagetools inspect ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}
 
+      - name: Generate build summary
+        run: |
+          IMAGE_TAG="ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}"
+          MANIFEST_DIGEST=$(docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{.Manifest.Digest}}')
+
+          {
+            echo "## 🚀 PR Container Image Built"
+            echo ""
+            echo "### 📦 Image Tag"
+            echo "- \`${IMAGE_TAG}\`"
+            echo ""
+            echo "### 🏗️ Platforms"
+            docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{range .Manifest.Manifests}}- {{.Platform.OS}}/{{.Platform.Architecture}}{{if .Platform.Variant}}/{{.Platform.Variant}}{{end}}{{"\n"}}{{end}}'
+            echo ""
+            echo "### 📋 Manifest Digest"
+            echo "\`${MANIFEST_DIGEST}\`"
+            echo ""
+            echo "### 📥 Pull Command"
+            echo '```bash'
+            echo "docker pull ${IMAGE_TAG}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Comment on PR
         uses: actions/github-script@v8
         with:

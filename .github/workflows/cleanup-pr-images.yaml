@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   cleanup:
+    name: Cleanup PR Images
     runs-on: ubuntu-latest
     steps:
       - name: Delete pr-* container images

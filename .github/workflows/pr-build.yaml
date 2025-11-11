@@ -125,13 +125,18 @@ jobs:
         working-directory: /tmp/digests
         run: |
           set -euo pipefail
-          readarray -t tag_args < <(jq -r '.tags[] | "-t " + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          readarray -t digest_files < <(find . -type f)
-          declare -a images
-          for file in "${digest_files[@]}"; do
-            digest=$(basename "$file")
-            images+=("ghcr.io/${{ github.repository }}@sha256:${digest}")
+
+          # Build tag arguments array (-t and tag as separate elements)
+          mapfile -t tag_args < <(jq -r '.tags[] | "-t", .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          # Build image references array
+          images=()
+          for digest_file in *; do
+            [[ -f "$digest_file" ]] || continue
+            images+=("ghcr.io/${{ github.repository }}@sha256:${digest_file}")
           done
+
+          # Create multi-arch manifest
           docker buildx imagetools create "${tag_args[@]}" "${images[@]}"
 
       - name: Inspect image

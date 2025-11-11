@@ -4,9 +4,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+func init() {
+	// Initialize logger for tests
+	log.Init()
+}
 
 func TestMetricsAdapter_RecordUniFiAPICall(t *testing.T) {
 	m := metrics.New("test")

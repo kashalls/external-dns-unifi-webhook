@@ -394,3 +394,125 @@ func TestUnifiProvider_GetDomainFilter(t *testing.T) {
 		t.Error("GetDomainFilter() returned nil")
 	}
 }
+
+func TestNewUnifiProvider_Success(t *testing.T) {
+	mockAPI := &mockUnifiAPI{}
+	mockMetrics := &mockMetricsRecorder{}
+	mockLog := &mockLogger{}
+	domainFilter := endpoint.DomainFilter{}
+
+	provider, err := NewUnifiProvider(mockAPI, domainFilter, mockMetrics, mockLog)
+
+	if err != nil {
+		t.Fatalf("NewUnifiProvider() unexpected error: %v", err)
+	}
+
+	if provider == nil {
+		t.Fatal("NewUnifiProvider() returned nil provider")
+	}
+
+	unifiProvider, ok := provider.(*UnifiProvider)
+	if !ok {
+		t.Fatal("NewUnifiProvider() did not return *UnifiProvider")
+	}
+
+	if unifiProvider.api != mockAPI {
+		t.Error("NewUnifiProvider() did not set api correctly")
+	}
+
+	if unifiProvider.metrics != mockMetrics {
+		t.Error("NewUnifiProvider() did not set metrics correctly")
+	}
+
+	if unifiProvider.logger != mockLog {
+		t.Error("NewUnifiProvider() did not set logger correctly")
+	}
+}
+
+func TestNewUnifiProvider_WithDomainFilter(t *testing.T) {
+	mockAPI := &mockUnifiAPI{}
+	mockMetrics := &mockMetricsRecorder{}
+	mockLog := &mockLogger{}
+	domainFilter := *endpoint.NewDomainFilter([]string{"example.com", "test.com"})
+
+	provider, err := NewUnifiProvider(mockAPI, domainFilter, mockMetrics, mockLog)
+
+	if err != nil {
+		t.Fatalf("NewUnifiProvider() unexpected error: %v", err)
+	}
+
+	if provider == nil {
+		t.Fatal("NewUnifiProvider() returned nil provider")
+	}
+
+	unifiProvider := provider.(*UnifiProvider)
+
+	result := unifiProvider.GetDomainFilter()
+	if result == nil {
+		t.Fatal("Domain filter is nil")
+	}
+}
+
+func TestNewUnifiProviderFromConfig_Success(t *testing.T) {
+	config := &Config{
+		Host:          "https://unifi.example.com",
+		APIKey:        "test-api-key",
+		Site:          "default",
+		SkipTLSVerify: true,
+	}
+
+	domainFilter := endpoint.DomainFilter{}
+
+	provider, err := NewUnifiProviderFromConfig(domainFilter, config)
+
+	if err != nil {
+		t.Fatalf("NewUnifiProviderFromConfig() unexpected error: %v", err)
+	}
+
+	if provider == nil {
+		t.Fatal("NewUnifiProviderFromConfig() returned nil provider")
+	}
+
+	unifiProvider, ok := provider.(*UnifiProvider)
+	if !ok {
+		t.Fatal("NewUnifiProviderFromConfig() did not return *UnifiProvider")
+	}
+
+	if unifiProvider.api == nil {
+		t.Error("NewUnifiProviderFromConfig() did not set api")
+	}
+
+	if unifiProvider.metrics == nil {
+		t.Error("NewUnifiProviderFromConfig() did not set metrics")
+	}
+
+	if unifiProvider.logger == nil {
+		t.Error("NewUnifiProviderFromConfig() did not set logger")
+	}
+}
+
+func TestNewUnifiProviderFromConfig_WithDomainFilter(t *testing.T) {
+	config := &Config{
+		Host:          "https://unifi.example.com",
+		APIKey:        "test-api-key",
+		Site:          "default",
+		SkipTLSVerify: true,
+	}
+
+	domainFilter := *endpoint.NewDomainFilter([]string{"example.com"})
+
+	provider, err := NewUnifiProviderFromConfig(domainFilter, config)
+
+	if err != nil {
+		t.Fatalf("NewUnifiProviderFromConfig() unexpected error: %v", err)
+	}
+
+	if provider == nil {
+		t.Fatal("NewUnifiProviderFromConfig() returned nil provider")
+	}
+
+	result := provider.(*UnifiProvider).GetDomainFilter()
+	if result == nil {
+		t.Error("Domain filter is nil")
+	}
+}

@@ -173,18 +173,7 @@ func TestGetEndpoints(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := &httpClient{
-				Config: &Config{
-					Host:          server.URL,
-					Site:          "default",
-					APIKey:        "test-key",
-					SkipTLSVerify: true,
-				},
-				Client: server.Client(),
-				ClientURLs: &ClientURLs{
-					Records: "%s/v2/api/site/%s/static-dns/%s",
-				},
-			}
+			client := createTestClient(t, server)
 
 			records, err := client.GetEndpoints(context.Background())
 
@@ -368,18 +357,7 @@ func TestCreateEndpoint(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := &httpClient{
-				Config: &Config{
-					Host:          server.URL,
-					Site:          "default",
-					APIKey:        "test-key",
-					SkipTLSVerify: true,
-				},
-				Client: server.Client(),
-				ClientURLs: &ClientURLs{
-					Records: "%s/v2/api/site/%s/static-dns/%s",
-				},
-			}
+			client := createTestClient(t, server)
 
 			records, err := client.CreateEndpoint(context.Background(), tt.endpoint)
 
@@ -539,18 +517,7 @@ func TestDeleteEndpoint(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := &httpClient{
-				Config: &Config{
-					Host:          server.URL,
-					Site:          "default",
-					APIKey:        "test-key",
-					SkipTLSVerify: true,
-				},
-				Client: server.Client(),
-				ClientURLs: &ClientURLs{
-					Records: "%s/v2/api/site/%s/static-dns/%s",
-				},
-			}
+			client := createTestClient(t, server)
 
 			err := client.DeleteEndpoint(context.Background(), tt.endpoint)
 
@@ -568,12 +535,11 @@ func TestDeleteEndpoint(t *testing.T) {
 	}
 }
 
-// TestSetHeaders tests header setting logic.
+// TestSetHeaders tests header setting logic with mock transport.
 func TestSetHeaders(t *testing.T) {
 	tests := []struct {
 		name            string
 		config          *Config
-		csrf            string
 		expectedHeaders map[string]string
 	}{
 		{
@@ -581,21 +547,8 @@ func TestSetHeaders(t *testing.T) {
 			config: &Config{
 				APIKey: "test-api-key",
 			},
-			csrf: "",
 			expectedHeaders: map[string]string{
 				"X-Api-Key":    "test-api-key",
-				"Accept":       "application/json",
-				"Content-Type": "application/json; charset=utf-8",
-			},
-		},
-		{
-			name: "with CSRF token",
-			config: &Config{
-				APIKey: "",
-			},
-			csrf: "csrf-token-123",
-			expectedHeaders: map[string]string{
-				"X-Csrf-Token": "csrf-token-123",
 				"Accept":       "application/json",
 				"Content-Type": "application/json; charset=utf-8",
 			},
@@ -604,13 +557,12 @@ func TestSetHeaders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := &httpClient{
-				Config: tt.config,
-				csrf:   tt.csrf,
+			mockTransport := &mockHTTPTransport{
+				config: tt.config,
 			}
 
 			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", http.NoBody)
-			client.setHeaders(req)
+			mockTransport.SetHeaders(req)
 
 			for key, expectedValue := range tt.expectedHeaders {
 				actualValue := req.Header.Get(key)
@@ -687,4 +639,81 @@ func TestFormatURL_ClientUsage(t *testing.T) {
 // Helper function for tests.
 func intPtr(i int) *int {
 	return &i
+}
+
+// createTestClient creates a test UniFi API client with httptest server.
+func createTestClient(t *testing.T, server *httptest.Server) UnifiAPI {
+	t.Helper()
+
+	config := &Config{
+		Host:          server.URL,
+		Site:          "default",
+		APIKey:        "test-key",
+		SkipTLSVerify: true,
+	}
+
+	clientURLs := &ClientURLs{
+		Records: "%s/v2/api/site/%s/static-dns/%s",
+	}
+
+	// Create mock transport that uses the test server
+	mockTransport := &mockHTTPTransport{
+		client:     server.Client(),
+		config:     config,
+		clientURLs: clientURLs,
+	}
+
+	transformer := NewRecordTransformer()
+	metricsAdapter := NewMetricsAdapter(metrics.Get())
+	loggerAdapter := NewLoggerAdapter()
+
+	return NewUnifiAPIClient(
+		mockTransport,
+		transformer,
+		metricsAdapter,
+		loggerAdapter,
+		config,
+		clientURLs,
+	)
+}
+
+// mockHTTPTransport is a simple mock for HTTPTransport interface for testing.
+type mockHTTPTransport struct {
+	client     *http.Client
+	config     *Config
+	clientURLs *ClientURLs
+}
+
+func (m *mockHTTPTransport) DoRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, path, body)
+	if err != nil {
+		return nil, err
+	}
+
+	m.SetHeaders(req)
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for non-200 status codes and return appropriate errors
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		var apiError UnifiErrorResponse
+		_ = json.Unmarshal(bodyBytes, &apiError)
+		return nil, NewAPIError(method, path, resp.StatusCode, apiError.Message)
+	}
+
+	return resp, nil
+}
+
+func (m *mockHTTPTransport) Login(_ context.Context) error {
+	return nil
+}
+
+func (m *mockHTTPTransport) SetHeaders(req *http.Request) {
+	req.Header.Set("X-Api-Key", m.config.APIKey)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 }

@@ -3,7 +3,7 @@ name: PR Container Build
 
 on:
   pull_request_target:
-    types: [labeled]
+    types: [labeled, closed]
 
 jobs:
   # Build and push image (requires approval, maintainer only)
@@ -187,3 +187,36 @@ jobs:
               repo: context.repo.repo,
               name: 'build-container'
             })
+
+  # Clean up PR image when PR is closed
+  cleanup-pr-image:
+    name: Cleanup PR Image
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete PR container image
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          PACKAGE="${{ github.event.repository.name }}"
+          TAG="pr-${{ github.event.pull_request.number }}"
+
+          echo "🔍 Looking for image with tag: ${TAG}"
+
+          # Find version ID for this PR tag
+          VERSION_ID=$(gh api --paginate "/users/${OWNER}/packages/container/${PACKAGE}/versions" \
+            --jq ".[] | select(.metadata.container.tags[]? == \"${TAG}\") | .id")
+
+          if [ -z "${VERSION_ID}" ]; then
+            echo "✅ No image found with tag ${TAG}"
+            exit 0
+          fi
+
+          echo "🗑️  Deleting image version ${VERSION_ID} with tag ${TAG}"
+          if gh api --method DELETE --silent "/users/${OWNER}/packages/container/${PACKAGE}/versions/${VERSION_ID}"; then
+            echo "✅ Successfully deleted image ${TAG}"
+          else
+            echo "❌ Failed to delete image ${TAG}"
+            exit 1
+          fi

@@ -11,10 +11,16 @@ import (
 	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
 )
 
+const (
+	testAPIKey     = "test-api-key"
+	testLoginPath  = "/api/auth/login"
+	testCSRFHeader = "X-Csrf-Token"
+)
+
 func TestNewHTTPTransport_WithAPIKey(t *testing.T) {
 	config := &Config{
 		Host:          "https://unifi.example.com",
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -43,7 +49,7 @@ func TestNewHTTPTransport_ExternalController(t *testing.T) {
 func TestHTTPTransport_DoRequest_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify API key header
-		if r.Header.Get("X-Api-Key") != "test-api-key" {
+		if r.Header.Get("X-Api-Key") != testAPIKey {
 			t.Errorf("Missing or incorrect X-Api-Key header")
 		}
 
@@ -54,7 +60,7 @@ func TestHTTPTransport_DoRequest_Success(t *testing.T) {
 
 	config := &Config{
 		Host:          server.URL,
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -79,7 +85,7 @@ func TestHTTPTransport_DoRequest_With401Retry(t *testing.T) {
 }
 
 func TestHTTPTransport_DoRequest_NonOKStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"message": "internal server error"}`))
 	}))
@@ -87,7 +93,7 @@ func TestHTTPTransport_DoRequest_NonOKStatus(t *testing.T) {
 
 	config := &Config{
 		Host:          server.URL,
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -96,9 +102,12 @@ func TestHTTPTransport_DoRequest_NonOKStatus(t *testing.T) {
 		t.Fatalf("NewHTTPTransport() error = %v", err)
 	}
 
-	_, err = transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
+	resp, err := transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
 	if err == nil {
 		t.Fatal("DoRequest() expected error for 500 status, got nil")
+	}
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 }
 
@@ -121,7 +130,7 @@ func TestHTTPTransport_DoRequest_WithBody(t *testing.T) {
 
 	config := &Config{
 		Host:          server.URL,
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -145,7 +154,7 @@ func TestHTTPTransport_DoRequest_WithBody(t *testing.T) {
 func TestHTTPTransport_SetHeaders_WithAPIKey(t *testing.T) {
 	config := &Config{
 		Host:          "https://unifi.example.com",
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -154,10 +163,10 @@ func TestHTTPTransport_SetHeaders_WithAPIKey(t *testing.T) {
 		t.Fatalf("NewHTTPTransport() error = %v", err)
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://unifi.example.com/test", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://unifi.example.com/test", http.NoBody)
 	transport.SetHeaders(req)
 
-	if req.Header.Get("X-Api-Key") != "test-api-key" {
+	if req.Header.Get("X-Api-Key") != testAPIKey {
 		t.Errorf("X-Api-Key header = %s, want test-api-key", req.Header.Get("X-Api-Key"))
 	}
 
@@ -189,7 +198,7 @@ func TestHTTPTransport_CSRFTokenUpdate(t *testing.T) {
 func TestHTTPTransport_GetClientURLs(t *testing.T) {
 	config := &Config{
 		Host:          "https://unifi.example.com",
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -220,7 +229,7 @@ func TestHTTPTransport_GetClientURLs(t *testing.T) {
 func TestHTTPTransport_GetConfig(t *testing.T) {
 	config := &Config{
 		Host:          "https://unifi.example.com",
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		Site:          "default",
 		SkipTLSVerify: true,
 	}
@@ -254,7 +263,7 @@ func TestHTTPTransport_GetConfig(t *testing.T) {
 }
 
 func TestHTTPTransport_DoRequest_ContextCanceled(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		// Simulate slow response
 		<-r.Context().Done()
 	}))
@@ -262,7 +271,7 @@ func TestHTTPTransport_DoRequest_ContextCanceled(t *testing.T) {
 
 	config := &Config{
 		Host:          server.URL,
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -274,16 +283,19 @@ func TestHTTPTransport_DoRequest_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err = transport.DoRequest(ctx, http.MethodGet, server.URL+"/test", nil)
+	resp, err := transport.DoRequest(ctx, http.MethodGet, server.URL+"/test", nil)
 	if err == nil {
 		t.Fatal("DoRequest() expected error for canceled context, got nil")
+	}
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 }
 
 func TestHTTPTransport_DoRequest_InvalidURL(t *testing.T) {
 	config := &Config{
 		Host:          "https://unifi.example.com",
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -292,14 +304,17 @@ func TestHTTPTransport_DoRequest_InvalidURL(t *testing.T) {
 		t.Fatalf("NewHTTPTransport() error = %v", err)
 	}
 
-	_, err = transport.DoRequest(context.Background(), http.MethodGet, "://invalid-url", nil)
+	resp, err := transport.DoRequest(context.Background(), http.MethodGet, "://invalid-url", nil)
 	if err == nil {
 		t.Fatal("DoRequest() expected error for invalid URL, got nil")
+	}
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 }
 
 func TestHTTPTransport_HandleErrorResponse_WithMessage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"meta": {"msg": "bad request"}}`))
 	}))
@@ -307,7 +322,7 @@ func TestHTTPTransport_HandleErrorResponse_WithMessage(t *testing.T) {
 
 	config := &Config{
 		Host:          server.URL,
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -316,14 +331,17 @@ func TestHTTPTransport_HandleErrorResponse_WithMessage(t *testing.T) {
 		t.Fatalf("NewHTTPTransport() error = %v", err)
 	}
 
-	_, err = transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
+	resp, err := transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
 	if err == nil {
 		t.Fatal("DoRequest() expected error for 400 status, got nil")
+	}
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 }
 
 func TestHTTPTransport_HandleErrorResponse_WithoutMessage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{}`))
 	}))
@@ -331,7 +349,7 @@ func TestHTTPTransport_HandleErrorResponse_WithoutMessage(t *testing.T) {
 
 	config := &Config{
 		Host:          server.URL,
-		APIKey:        "test-api-key",
+		APIKey:        testAPIKey,
 		SkipTLSVerify: true,
 	}
 
@@ -340,20 +358,24 @@ func TestHTTPTransport_HandleErrorResponse_WithoutMessage(t *testing.T) {
 		t.Fatalf("NewHTTPTransport() error = %v", err)
 	}
 
-	_, err = transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
+	resp, err := transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
 	if err == nil {
 		t.Fatal("DoRequest() expected error for 403 status, got nil")
+	}
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 }
 
 func TestHTTPTransport_Login_Minimal(t *testing.T) {
 	loginCalled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/auth/login" {
+		if r.URL.Path == testLoginPath {
 			loginCalled = true
-			w.Header().Set("X-CSRF-Token", "test-csrf-token")
+			w.Header().Set(testCSRFHeader, "test-csrf-token")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"meta": {"rc": "ok"}}`))
+
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -383,10 +405,11 @@ func TestHTTPTransport_Login_Minimal(t *testing.T) {
 
 func TestHTTPTransport_HandleCSRFToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/auth/login" {
-			w.Header().Set("X-CSRF-Token", "new-csrf-token")
+		if r.URL.Path == testLoginPath {
+			w.Header().Set(testCSRFHeader, "new-csrf-token")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"meta": {"rc": "ok"}}`))
+
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -406,13 +429,13 @@ func TestHTTPTransport_HandleCSRFToken(t *testing.T) {
 		t.Fatalf("NewHTTPTransport() error = %v", err)
 	}
 
-	ht, ok := transport.(*httpTransport)
+	httpTrans, ok := transport.(*httpTransport)
 	if !ok {
 		t.Fatal("Transport is not httpTransport")
 	}
 
-	if ht.csrf != "new-csrf-token" {
-		t.Errorf("CSRF token = %s, want new-csrf-token", ht.csrf)
+	if httpTrans.csrf != "new-csrf-token" {
+		t.Errorf("CSRF token = %s, want new-csrf-token", httpTrans.csrf)
 	}
 }
 
@@ -420,16 +443,18 @@ func TestHTTPTransport_HandleUnauthorized(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		if r.URL.Path == "/api/auth/login" {
-			w.Header().Set("X-CSRF-Token", "test-csrf-token")
+		if r.URL.Path == testLoginPath {
+			w.Header().Set(testCSRFHeader, "test-csrf-token")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"meta": {"rc": "ok"}}`))
+
 			return
 		}
 		if callCount == 2 {
 			// First call to /test returns 401
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{}`))
+
 			return
 		}
 		// After re-login, return success

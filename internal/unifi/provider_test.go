@@ -11,9 +11,19 @@ import (
 	"sigs.k8s.io/external-dns/plan"
 )
 
+const (
+	testExampleDomain = "test.example.com"
+)
+
+var (
+	errAPIFailure    = errors.New("API error")
+	errCreateFailure = errors.New("create failed")
+	errDeleteFailure = errors.New("delete failed")
+)
+
 // mockUnifiAPI is a mock implementation of UnifiAPI for testing.
 type mockUnifiAPI struct {
-	getEndpointsFunc  func(ctx context.Context) ([]DNSRecord, error)
+	getEndpointsFunc   func(ctx context.Context) ([]DNSRecord, error)
 	createEndpointFunc func(ctx context.Context, endpoint *endpoint.Endpoint) ([]*DNSRecord, error)
 	deleteEndpointFunc func(ctx context.Context, endpoint *endpoint.Endpoint) error
 }
@@ -22,6 +32,7 @@ func (m *mockUnifiAPI) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 	if m.getEndpointsFunc != nil {
 		return m.getEndpointsFunc(ctx)
 	}
+
 	return nil, nil
 }
 
@@ -29,6 +40,7 @@ func (m *mockUnifiAPI) CreateEndpoint(ctx context.Context, ep *endpoint.Endpoint
 	if m.createEndpointFunc != nil {
 		return m.createEndpointFunc(ctx, ep)
 	}
+
 	return nil, nil
 }
 
@@ -36,22 +48,23 @@ func (m *mockUnifiAPI) DeleteEndpoint(ctx context.Context, ep *endpoint.Endpoint
 	if m.deleteEndpointFunc != nil {
 		return m.deleteEndpointFunc(ctx, ep)
 	}
+
 	return nil
 }
 
 // mockMetricsRecorder is a mock implementation of MetricsRecorder for testing.
 type mockMetricsRecorder struct {
-	recordUniFiAPICallFunc    func(operation string, duration time.Duration, responseSize int, err error)
-	recordChangeFunc          func(operation, recordType string)
-	updateRecordsByTypeFunc   func(recordType string, count int)
-	ignoredCNAMETargetsTotal  prometheus.Counter
-	srvParsingErrorsTotal     prometheus.Counter
-	cnameConflictsTotal       *prometheus.CounterVec
-	batchSize                 *prometheus.HistogramVec
-	unifiLoginTotal           *prometheus.CounterVec
-	unifiConnected            *prometheus.GaugeVec
-	unifiCSRFRefreshesTotal   *prometheus.CounterVec
-	unifiReloginTotal         *prometheus.CounterVec
+	recordUniFiAPICallFunc   func(operation string, duration time.Duration, responseSize int, err error)
+	recordChangeFunc         func(operation, recordType string)
+	updateRecordsByTypeFunc  func(recordType string, count int)
+	ignoredCNAMETargetsTotal prometheus.Counter
+	srvParsingErrorsTotal    prometheus.Counter
+	cnameConflictsTotal      *prometheus.CounterVec
+	batchSize                *prometheus.HistogramVec
+	unifiLoginTotal          *prometheus.CounterVec
+	unifiConnected           *prometheus.GaugeVec
+	unifiCSRFRefreshesTotal  *prometheus.CounterVec
+	unifiReloginTotal        *prometheus.CounterVec
 }
 
 func (m *mockMetricsRecorder) RecordUniFiAPICall(operation string, duration time.Duration, responseSize int, err error) {
@@ -73,11 +86,19 @@ func (m *mockMetricsRecorder) UpdateRecordsByType(recordType string, count int) 
 }
 
 func (m *mockMetricsRecorder) IgnoredCNAMETargetsTotal() prometheus.Counter {
-	return m.ignoredCNAMETargetsTotal
+	if m.ignoredCNAMETargetsTotal != nil {
+		return m.ignoredCNAMETargetsTotal
+	}
+
+	return prometheus.NewCounter(prometheus.CounterOpts{Name: "ignored_cname_targets_total", Help: "Total number of ignored CNAME targets"})
 }
 
 func (m *mockMetricsRecorder) SRVParsingErrorsTotal() prometheus.Counter {
-	return m.srvParsingErrorsTotal
+	if m.srvParsingErrorsTotal != nil {
+		return m.srvParsingErrorsTotal
+	}
+
+	return prometheus.NewCounter(prometheus.CounterOpts{Name: "srv_parsing_errors_total", Help: "Total number of SRV parsing errors"})
 }
 
 func (m *mockMetricsRecorder) CNAMEConflictsTotal() *prometheus.CounterVec {
@@ -152,7 +173,7 @@ func TestUnifiProvider_Records(t *testing.T) {
 			expectedErr: false,
 			validateResult: func(t *testing.T, endpoints []*endpoint.Endpoint) {
 				t.Helper()
-				if endpoints[0].DNSName != "test.example.com" {
+				if endpoints[0].DNSName != testExampleDomain {
 					t.Errorf("DNSName = %q, want test.example.com", endpoints[0].DNSName)
 				}
 				if len(endpoints[0].Targets) != 2 {
@@ -172,7 +193,7 @@ func TestUnifiProvider_Records(t *testing.T) {
 		},
 		{
 			name:        "API error",
-			mockError:   errors.New("API error"),
+			mockError:   errAPIFailure,
 			expectedLen: 0,
 			expectedErr: true,
 		},
@@ -187,13 +208,13 @@ func TestUnifiProvider_Records(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockAPI := &mockUnifiAPI{
-				getEndpointsFunc: func(ctx context.Context) ([]DNSRecord, error) {
+				getEndpointsFunc: func(_ context.Context) ([]DNSRecord, error) {
 					return tt.mockRecords, tt.mockError
 				},
 			}
 
 			mockMetrics := &mockMetricsRecorder{
-				updateRecordsByTypeFunc: func(recordType string, count int) {},
+				updateRecordsByTypeFunc: func(_ string, _ int) {},
 			}
 
 			mockLog := &mockLogger{}
@@ -301,7 +322,7 @@ func TestUnifiProvider_ApplyChanges(t *testing.T) {
 				},
 			},
 			existingRecords:    []DNSRecord{},
-			createError:        errors.New("create failed"),
+			createError:        errCreateFailure,
 			expectedErr:        true,
 			expectedCreateCall: 1,
 			expectedDeleteCall: 0,
@@ -316,7 +337,7 @@ func TestUnifiProvider_ApplyChanges(t *testing.T) {
 			existingRecords: []DNSRecord{
 				{ID: "1", Key: "old.example.com", RecordType: "A", Value: "1.2.3.4", TTL: 300},
 			},
-			deleteError:        errors.New("delete failed"),
+			deleteError:        errDeleteFailure,
 			expectedErr:        true,
 			expectedCreateCall: 0,
 			expectedDeleteCall: 1,
@@ -329,27 +350,35 @@ func TestUnifiProvider_ApplyChanges(t *testing.T) {
 			deleteCallCount := 0
 
 			mockAPI := &mockUnifiAPI{
-				getEndpointsFunc: func(ctx context.Context) ([]DNSRecord, error) {
+				getEndpointsFunc: func(_ context.Context) ([]DNSRecord, error) {
 					return tt.existingRecords, nil
 				},
-				createEndpointFunc: func(ctx context.Context, ep *endpoint.Endpoint) ([]*DNSRecord, error) {
+				createEndpointFunc: func(_ context.Context, endpointToCreate *endpoint.Endpoint) ([]*DNSRecord, error) {
 					createCallCount++
 					if tt.createError != nil {
 						return nil, tt.createError
 					}
-					return []*DNSRecord{{ID: "new", Key: ep.DNSName, RecordType: ep.RecordType}}, nil
+
+					return []*DNSRecord{{ID: "new", Key: endpointToCreate.DNSName, RecordType: endpointToCreate.RecordType}}, nil
 				},
-				deleteEndpointFunc: func(ctx context.Context, ep *endpoint.Endpoint) error {
+				deleteEndpointFunc: func(_ context.Context, _ *endpoint.Endpoint) error {
 					deleteCallCount++
+
 					return tt.deleteError
 				},
 			}
 
 			mockMetrics := &mockMetricsRecorder{
-				recordChangeFunc:        func(operation, recordType string) {},
-				updateRecordsByTypeFunc: func(recordType string, count int) {},
-				batchSize:               prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "test"}, []string{"provider", "operation"}),
-				cnameConflictsTotal:     prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test"}, []string{"provider"}),
+				recordChangeFunc:        func(_, _ string) {},
+				updateRecordsByTypeFunc: func(_ string, _ int) {},
+				batchSize: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+					Name: "test_batch_size",
+					Help: "Batch size for operations",
+				}, []string{"provider", "operation"}),
+				cnameConflictsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+					Name: "test_cname_conflicts_total",
+					Help: "Total number of CNAME conflicts",
+				}, []string{"provider"}),
 			}
 
 			mockLog := &mockLogger{}
@@ -402,7 +431,6 @@ func TestNewUnifiProvider_Success(t *testing.T) {
 	domainFilter := endpoint.DomainFilter{}
 
 	provider, err := NewUnifiProvider(mockAPI, domainFilter, mockMetrics, mockLog)
-
 	if err != nil {
 		t.Fatalf("NewUnifiProvider() unexpected error: %v", err)
 	}
@@ -436,7 +464,6 @@ func TestNewUnifiProvider_WithDomainFilter(t *testing.T) {
 	domainFilter := *endpoint.NewDomainFilter([]string{"example.com", "test.com"})
 
 	provider, err := NewUnifiProvider(mockAPI, domainFilter, mockMetrics, mockLog)
-
 	if err != nil {
 		t.Fatalf("NewUnifiProvider() unexpected error: %v", err)
 	}
@@ -445,7 +472,10 @@ func TestNewUnifiProvider_WithDomainFilter(t *testing.T) {
 		t.Fatal("NewUnifiProvider() returned nil provider")
 	}
 
-	unifiProvider := provider.(*UnifiProvider)
+	unifiProvider, ok := provider.(*UnifiProvider)
+	if !ok {
+		t.Fatal("Provider is not *UnifiProvider")
+	}
 
 	result := unifiProvider.GetDomainFilter()
 	if result == nil {
@@ -464,7 +494,6 @@ func TestNewUnifiProviderFromConfig_Success(t *testing.T) {
 	domainFilter := endpoint.DomainFilter{}
 
 	provider, err := NewUnifiProviderFromConfig(domainFilter, config)
-
 	if err != nil {
 		t.Fatalf("NewUnifiProviderFromConfig() unexpected error: %v", err)
 	}
@@ -502,7 +531,6 @@ func TestNewUnifiProviderFromConfig_WithDomainFilter(t *testing.T) {
 	domainFilter := *endpoint.NewDomainFilter([]string{"example.com"})
 
 	provider, err := NewUnifiProviderFromConfig(domainFilter, config)
-
 	if err != nil {
 		t.Fatalf("NewUnifiProviderFromConfig() unexpected error: %v", err)
 	}
@@ -511,7 +539,12 @@ func TestNewUnifiProviderFromConfig_WithDomainFilter(t *testing.T) {
 		t.Fatal("NewUnifiProviderFromConfig() returned nil provider")
 	}
 
-	result := provider.(*UnifiProvider).GetDomainFilter()
+	unifiProvider, ok := provider.(*UnifiProvider)
+	if !ok {
+		t.Fatal("Provider is not *UnifiProvider")
+	}
+
+	result := unifiProvider.GetDomainFilter()
 	if result == nil {
 		t.Error("Domain filter is nil")
 	}

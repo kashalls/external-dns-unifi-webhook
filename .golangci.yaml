@@ -90,6 +90,7 @@ linters:
           - gocognit
           - gocyclo
           - cyclop
+          - ireturn
         path: _test\.go
 formatters:
   enable:

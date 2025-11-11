@@ -6,6 +6,10 @@ import (
 	"sigs.k8s.io/external-dns/endpoint"
 )
 
+const (
+	testSIPExampleDomain = "sip.example.com"
+)
+
 func TestRecordTransformer_PrepareDNSRecord(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -136,7 +140,7 @@ func TestRecordTransformer_ParseSRVTarget(t *testing.T) {
 	}{
 		{
 			name:        "valid SRV format",
-			target:      "10 60 5060 sip.example.com",
+			target:      "10 60 5060 " + testSIPExampleDomain,
 			expectedErr: false,
 			validateResult: func(t *testing.T, record *DNSRecord) {
 				t.Helper()
@@ -158,7 +162,7 @@ func TestRecordTransformer_ParseSRVTarget(t *testing.T) {
 				if *record.Port != 5060 {
 					t.Errorf("Port = %d, want 5060", *record.Port)
 				}
-				if record.Value != "sip.example.com" {
+				if record.Value != testSIPExampleDomain {
 					t.Errorf("Value = %q, want sip.example.com", record.Value)
 				}
 			},
@@ -229,11 +233,11 @@ func TestRecordTransformer_ParseSRVTarget(t *testing.T) {
 		},
 		{
 			name:        "invalid format - extra fields",
-			target:      "10 60 5060 sip.example.com extra",
+			target:      "10 60 5060 " + testSIPExampleDomain + " extra",
 			expectedErr: false, // Sscanf will parse first 4 fields successfully
 			validateResult: func(t *testing.T, record *DNSRecord) {
 				t.Helper()
-				if record.Value != "sip.example.com" {
+				if record.Value != testSIPExampleDomain {
 					t.Errorf("Value = %q, want sip.example.com (extra field should be ignored)", record.Value)
 				}
 			},
@@ -279,8 +283,8 @@ func TestRecordTransformer_FormatSRVValue(t *testing.T) {
 			priority: 10,
 			weight:   60,
 			port:     5060,
-			target:   "sip.example.com",
-			expected: "10 60 5060 sip.example.com",
+			target:   testSIPExampleDomain,
+			expected: "10 60 5060 " + testSIPExampleDomain,
 		},
 		{
 			name:     "zero values",
@@ -351,7 +355,7 @@ func TestRecordTransformer_SRVRoundtrip(t *testing.T) {
 			priority: 10,
 			weight:   60,
 			port:     5060,
-			target:   "sip.example.com",
+			target:   testSIPExampleDomain,
 		},
 		{
 			name:     "zero values",

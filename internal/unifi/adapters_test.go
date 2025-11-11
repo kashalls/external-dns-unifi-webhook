@@ -1,6 +1,7 @@
 package unifi
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -14,9 +15,9 @@ func init() {
 	log.Init()
 }
 
-func TestMetricsAdapter_RecordUniFiAPICall(t *testing.T) {
-	m := metrics.New("test")
-	adapter := NewMetricsAdapter(m)
+func TestMetricsAdapter_RecordUniFiAPICall(_ *testing.T) {
+	metricsRecorder := metrics.New("test")
+	adapter := NewMetricsAdapter(metricsRecorder)
 
 	// Test successful call
 	adapter.RecordUniFiAPICall("GetEndpoints", 100*time.Millisecond, 1024, nil)
@@ -27,9 +28,9 @@ func TestMetricsAdapter_RecordUniFiAPICall(t *testing.T) {
 	// Just verify it doesn't panic - actual metric verification would require prometheus test infrastructure
 }
 
-func TestMetricsAdapter_RecordChange(t *testing.T) {
-	m := metrics.New("test")
-	adapter := NewMetricsAdapter(m)
+func TestMetricsAdapter_RecordChange(_ *testing.T) {
+	metricsRecorder := metrics.New("test")
+	adapter := NewMetricsAdapter(metricsRecorder)
 
 	adapter.RecordChange("create", "A")
 	adapter.RecordChange("delete", "CNAME")
@@ -38,9 +39,9 @@ func TestMetricsAdapter_RecordChange(t *testing.T) {
 	// Just verify it doesn't panic
 }
 
-func TestMetricsAdapter_UpdateRecordsByType(t *testing.T) {
-	m := metrics.New("test")
-	adapter := NewMetricsAdapter(m)
+func TestMetricsAdapter_UpdateRecordsByType(_ *testing.T) {
+	metricsRecorder := metrics.New("test")
+	adapter := NewMetricsAdapter(metricsRecorder)
 
 	adapter.UpdateRecordsByType("A", 10)
 	adapter.UpdateRecordsByType("AAAA", 5)
@@ -181,7 +182,7 @@ func TestMetricsAdapter_AllMetrics(t *testing.T) {
 	}
 }
 
-func TestLoggerAdapter_Debug(t *testing.T) {
+func TestLoggerAdapter_Debug(_ *testing.T) {
 	adapter := NewLoggerAdapter()
 
 	// Test basic debug logging
@@ -192,7 +193,7 @@ func TestLoggerAdapter_Debug(t *testing.T) {
 	// Just verify it doesn't panic
 }
 
-func TestLoggerAdapter_Info(t *testing.T) {
+func TestLoggerAdapter_Info(_ *testing.T) {
 	adapter := NewLoggerAdapter()
 
 	// Test basic info logging
@@ -203,7 +204,7 @@ func TestLoggerAdapter_Info(t *testing.T) {
 	// Just verify it doesn't panic
 }
 
-func TestLoggerAdapter_Warn(t *testing.T) {
+func TestLoggerAdapter_Warn(_ *testing.T) {
 	adapter := NewLoggerAdapter()
 
 	// Test basic warn logging
@@ -214,7 +215,7 @@ func TestLoggerAdapter_Warn(t *testing.T) {
 	// Just verify it doesn't panic
 }
 
-func TestLoggerAdapter_Error(t *testing.T) {
+func TestLoggerAdapter_Error(_ *testing.T) {
 	adapter := NewLoggerAdapter()
 
 	// Test basic error logging
@@ -278,17 +279,19 @@ func TestNewMetricsAdapter_NilMetrics(t *testing.T) {
 func TestMetricsAdapter_PrometheusIntegration(t *testing.T) {
 	// Test that metrics can be registered with Prometheus
 	registry := prometheus.NewRegistry()
-	m := metrics.New("test")
+	metricsRecorder := metrics.New("test")
 
 	// Register metrics
-	if err := registry.Register(m.UniFiAPIDuration); err != nil {
+	err := registry.Register(metricsRecorder.UniFiAPIDuration)
+	if err != nil {
 		// Ignore already registered error
-		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+		var alreadyRegisteredErr prometheus.AlreadyRegisteredError
+		if !errors.As(err, &alreadyRegisteredErr) {
 			t.Errorf("Failed to register UniFiAPIDuration: %v", err)
 		}
 	}
 
-	adapter := NewMetricsAdapter(m)
+	adapter := NewMetricsAdapter(metricsRecorder)
 
 	// Use the adapter
 	adapter.RecordUniFiAPICall("test", 100*time.Millisecond, 512, nil)

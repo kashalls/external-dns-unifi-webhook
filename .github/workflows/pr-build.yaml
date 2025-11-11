@@ -14,8 +14,6 @@ jobs:
       github.event.action == 'labeled' &&
       github.event.label.name == 'build-container'
     runs-on: ${{ matrix.runner }}
-    environment:
-      name: Pull Request Build
     permissions:
       contents: read
       packages: write

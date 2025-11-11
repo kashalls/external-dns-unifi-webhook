@@ -252,3 +252,212 @@ func TestHTTPTransport_GetConfig(t *testing.T) {
 		t.Errorf("Config.Site = %s, want %s", retrievedConfig.Site, config.Site)
 	}
 }
+
+func TestHTTPTransport_DoRequest_ContextCanceled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate slow response
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	config := &Config{
+		Host:          server.URL,
+		APIKey:        "test-api-key",
+		SkipTLSVerify: true,
+	}
+
+	transport, err := NewHTTPTransport(config, NewMetricsAdapter(metrics.New("test")), NewLoggerAdapter())
+	if err != nil {
+		t.Fatalf("NewHTTPTransport() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	_, err = transport.DoRequest(ctx, http.MethodGet, server.URL+"/test", nil)
+	if err == nil {
+		t.Fatal("DoRequest() expected error for canceled context, got nil")
+	}
+}
+
+func TestHTTPTransport_DoRequest_InvalidURL(t *testing.T) {
+	config := &Config{
+		Host:          "https://unifi.example.com",
+		APIKey:        "test-api-key",
+		SkipTLSVerify: true,
+	}
+
+	transport, err := NewHTTPTransport(config, NewMetricsAdapter(metrics.New("test")), NewLoggerAdapter())
+	if err != nil {
+		t.Fatalf("NewHTTPTransport() error = %v", err)
+	}
+
+	_, err = transport.DoRequest(context.Background(), http.MethodGet, "://invalid-url", nil)
+	if err == nil {
+		t.Fatal("DoRequest() expected error for invalid URL, got nil")
+	}
+}
+
+func TestHTTPTransport_HandleErrorResponse_WithMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"meta": {"msg": "bad request"}}`))
+	}))
+	defer server.Close()
+
+	config := &Config{
+		Host:          server.URL,
+		APIKey:        "test-api-key",
+		SkipTLSVerify: true,
+	}
+
+	transport, err := NewHTTPTransport(config, NewMetricsAdapter(metrics.New("test")), NewLoggerAdapter())
+	if err != nil {
+		t.Fatalf("NewHTTPTransport() error = %v", err)
+	}
+
+	_, err = transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
+	if err == nil {
+		t.Fatal("DoRequest() expected error for 400 status, got nil")
+	}
+}
+
+func TestHTTPTransport_HandleErrorResponse_WithoutMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	config := &Config{
+		Host:          server.URL,
+		APIKey:        "test-api-key",
+		SkipTLSVerify: true,
+	}
+
+	transport, err := NewHTTPTransport(config, NewMetricsAdapter(metrics.New("test")), NewLoggerAdapter())
+	if err != nil {
+		t.Fatalf("NewHTTPTransport() error = %v", err)
+	}
+
+	_, err = transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
+	if err == nil {
+		t.Fatal("DoRequest() expected error for 403 status, got nil")
+	}
+}
+
+func TestHTTPTransport_Login_Minimal(t *testing.T) {
+	loginCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/auth/login" {
+			loginCalled = true
+			w.Header().Set("X-CSRF-Token", "test-csrf-token")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"meta": {"rc": "ok"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	config := &Config{
+		Host:          server.URL,
+		User:          "admin",
+		Password:      "password",
+		SkipTLSVerify: true,
+	}
+
+	transport, err := NewHTTPTransport(config, NewMetricsAdapter(metrics.New("test")), NewLoggerAdapter())
+	if err != nil {
+		t.Fatalf("NewHTTPTransport() error = %v", err)
+	}
+
+	if !loginCalled {
+		t.Error("Login was not called during NewHTTPTransport with User/Password")
+	}
+
+	if transport == nil {
+		t.Fatal("NewHTTPTransport() returned nil")
+	}
+}
+
+func TestHTTPTransport_HandleCSRFToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/auth/login" {
+			w.Header().Set("X-CSRF-Token", "new-csrf-token")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"meta": {"rc": "ok"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data": []}`))
+	}))
+	defer server.Close()
+
+	config := &Config{
+		Host:          server.URL,
+		User:          "admin",
+		Password:      "password",
+		SkipTLSVerify: true,
+	}
+
+	transport, err := NewHTTPTransport(config, NewMetricsAdapter(metrics.New("test")), NewLoggerAdapter())
+	if err != nil {
+		t.Fatalf("NewHTTPTransport() error = %v", err)
+	}
+
+	ht, ok := transport.(*httpTransport)
+	if !ok {
+		t.Fatal("Transport is not httpTransport")
+	}
+
+	if ht.csrf != "new-csrf-token" {
+		t.Errorf("CSRF token = %s, want new-csrf-token", ht.csrf)
+	}
+}
+
+func TestHTTPTransport_HandleUnauthorized(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if r.URL.Path == "/api/auth/login" {
+			w.Header().Set("X-CSRF-Token", "test-csrf-token")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"meta": {"rc": "ok"}}`))
+			return
+		}
+		if callCount == 2 {
+			// First call to /test returns 401
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		// After re-login, return success
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data": []}`))
+	}))
+	defer server.Close()
+
+	config := &Config{
+		Host:          server.URL,
+		User:          "admin",
+		Password:      "password",
+		SkipTLSVerify: true,
+	}
+
+	transport, err := NewHTTPTransport(config, NewMetricsAdapter(metrics.New("test")), NewLoggerAdapter())
+	if err != nil {
+		t.Fatalf("NewHTTPTransport() error = %v", err)
+	}
+
+	// This should trigger 401, re-login, and retry
+	resp, err := transport.DoRequest(context.Background(), http.MethodGet, server.URL+"/test", nil)
+	if err != nil {
+		t.Fatalf("DoRequest() unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if callCount < 3 {
+		t.Errorf("Expected at least 3 calls (login, 401, retry), got %d", callCount)
+	}
+}

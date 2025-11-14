@@ -174,12 +174,14 @@ stringData:
           timeoutSeconds: 5
     extraArgs:
       - --ignore-ingress-tls-spec
-    policy: sync
+    policy: create-only
     sources: ["ingress", "service"]
     txtOwnerId: default
     txtPrefix: k8s.
     domainFilters: ["example.com"] # replace with your domain
     ```
+
+    For additional customization, refer to the [helm values](https://github.com/kubernetes-sigs/external-dns/blob/master/charts/external-dns/values.yaml).
 
 4. Install the Helm chart
 

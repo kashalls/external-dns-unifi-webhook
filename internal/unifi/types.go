@@ -11,9 +11,11 @@ type Config struct {
 	User               string `env:"UNIFI_USER"                envDefault:""`
 	Password           string `env:"UNIFI_PASS"                envDefault:""`
 	Site               string `env:"UNIFI_SITE"                envDefault:"default"`
-	ExternalController bool   `env:"UNIFI_EXTERNAL_CONTROLLER" envDefault:"false"`
+	ExternalController bool   `env:"UNIFI_EXTERNAL_CONTROLLER" envDefault:"false"` // If false, Network Controller is on device
 	SkipTLSVerify      bool   `env:"UNIFI_SKIP_TLS_VERIFY"     envDefault:"true"`
-	CloudAPI           bool   `env:"UNIFI_CLOUD_API"           envDefault:"false"`
+	UseExperimentalAPI bool   `env:"UNIFI_EXPERIMENTAL_API"    envDefault:"false"`
+	UseCloudConnector  bool   `env:"UNIFI_CLOUD_CONNECTOR"     envDefault:"false"` // https://developer.ui.com/network/v10.1.68/connectorget
+	ConsoleID          string `env:"UNIFI_CLOUD_CONSOLE_ID"    envDefault:""`
 }
 
 // Login represents a login request to the UniFi API.

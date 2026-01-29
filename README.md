@@ -30,8 +30,10 @@
 
 ExternalDNS Provider for UniFi supports 2 styles of authentication:
 
-- UniFi API Key
-- Username & Password (Deprecated)
+- UniFi API Key (Console Firmware >= 4.3.6)
+- Username & Password
+- Unifi Cloud Connector (Console Firmware >= 5.0.3)
+  - https://unifi.ui.com/settings/api-keys
 
 Click the below headers to view the instructions:
 
@@ -202,6 +204,8 @@ stringData:
 | `UNIFI_SITE`                 | Unifi Site Identifier (used in multi-site installations)          | `default`     |
 | `UNIFI_HOST`                 | Host of the Unifi Controller (must be provided).                  | N/A           |
 | `UNIFI_EXTERNAL_CONTROLLER`* | Toggles support for non-UniFi Hardware                            | `false`       |
+| `UNIFI_CLOUD_CONNECTOR`      | Enables cloud connector for remote installations                  | `false`       |
+| `UNIFI_CLOUD_CONSOLE_ID`     | Sets the cloud console id for this remote installation            | N/A           |
 | `LOG_LEVEL`                  | Change the verbosity of logs (used when making a bug report)      | `info`        |
 
 *`UNIFI_EXTERNAL_CONTROLLER` is used to toggle between two versions of the Network Controller API. If you are running the UniFi software outside of UniFi's official hardware (e.g., Cloud Key or Dream Machine), you'll need to set `UNIFI_EXTERNAL_CONTROLLER` to `true`

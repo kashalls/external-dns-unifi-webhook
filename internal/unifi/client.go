@@ -32,6 +32,8 @@ type httpClient struct {
 }
 
 const (
+	unifiCloudAPIBaseURL = "https://api.ui.com/v1/connector/consoles/%s"
+
 	unifiLoginPath          = "%s/api/auth/login"
 	unifiLoginPathExternal  = "%s/api/login"
 	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
@@ -74,6 +76,12 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 	if client.ExternalController {
 		client.ClientURLs.Login = unifiLoginPathExternal
 		client.ClientURLs.Records = unifiRecordPathExternal
+	}
+
+	if client.UseCloudConnector {
+		client.Host = unifiCloudAPIBaseURL
+		client.ClientURLs.Login = unifiLoginPath
+		client.ClientURLs.Records = unifiRecordPath
 	}
 
 	if client.APIKey != "" {

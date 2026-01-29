@@ -13,6 +13,7 @@ type Config struct {
 	Site               string `env:"UNIFI_SITE"                envDefault:"default"`
 	ExternalController bool   `env:"UNIFI_EXTERNAL_CONTROLLER" envDefault:"false"`
 	SkipTLSVerify      bool   `env:"UNIFI_SKIP_TLS_VERIFY"     envDefault:"true"`
+	CloudAPI           bool   `env:"UNIFI_CLOUD_API"           envDefault:"false"`
 }
 
 // Login represents a login request to the UniFi API.

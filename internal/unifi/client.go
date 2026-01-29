@@ -80,8 +80,6 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		return client, nil
 	}
 
-	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
-
 	err = client.login(context.Background())
 	if err != nil {
 		return nil, errors.Wrap(err, "initial login failed")

@@ -18,14 +18,15 @@ import (
 
 // Integration API record type discriminator values.
 const (
-	integrationTypeA       = "A_RECORD"
-	integrationTypeAAAA    = "AAAA_RECORD"
-	integrationTypeCNAME   = "CNAME_RECORD"
-	integrationTypeMX      = "MX_RECORD"
-	integrationTypeTXT     = "TXT_RECORD"
-	integrationTypeSRV     = "SRV_RECORD"
+	integrationTypeA     = "A_RECORD"
+	integrationTypeAAAA  = "AAAA_RECORD"
+	integrationTypeCNAME = "CNAME_RECORD"
+	integrationTypeMX    = "MX_RECORD"
+	integrationTypeTXT   = "TXT_RECORD"
+	integrationTypeSRV   = "SRV_RECORD"
 
 	integrationMaxPageLimit = 200
+	srvDNSNameParts         = 3
 )
 
 // getIntegrationPolicies fetches all DNS policies from the Integration API,
@@ -64,8 +65,8 @@ func (c *httpClient) getIntegrationPolicies(ctx context.Context) ([]DNSRecord, e
 			return nil, NewDataError("unmarshal", "DNS policies page", err)
 		}
 
-		for _, policy := range page.Data {
-			record, ok := policyToDNSRecord(policy)
+		for i := range page.Data {
+			record, ok := policyToDNSRecord(page.Data[i])
 			if ok {
 				allRecords = append(allRecords, record)
 			}
@@ -184,75 +185,87 @@ func (c *httpClient) deleteIntegrationPolicy(ctx context.Context, ep *externaldn
 // format. Returns (record, false) for unsupported types (e.g. FORWARD_DOMAIN) so
 // the caller can skip them cleanly.
 func policyToDNSRecord(p DNSPolicy) (DNSRecord, bool) {
-	rec := DNSRecord{
-		ID:      p.ID,
-		Enabled: p.Enabled,
-	}
-
 	switch p.Type {
 	case integrationTypeA:
-		rec.Key = p.Domain
-		rec.RecordType = recordTypeA
-		if p.IPv4Address != nil {
-			rec.Value = *p.IPv4Address
-		}
-		if p.TTLSeconds != nil {
-			rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
-		}
-
+		return policyToARecord(p), true
 	case integrationTypeAAAA:
-		rec.Key = p.Domain
-		rec.RecordType = recordTypeAAAA
-		if p.IPv6Address != nil {
-			rec.Value = *p.IPv6Address
-		}
-		if p.TTLSeconds != nil {
-			rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
-		}
-
+		return policyToAAAARecord(p), true
 	case integrationTypeCNAME:
-		rec.Key = p.Domain
-		rec.RecordType = recordTypeCNAME
-		if p.TargetDomain != nil {
-			rec.Value = *p.TargetDomain
-		}
-		if p.TTLSeconds != nil {
-			rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
-		}
-
+		return policyToCNAMERecord(p), true
 	case integrationTypeMX:
-		rec.Key = p.Domain
-		rec.RecordType = recordTypeMX
-		if p.Priority != nil && p.MailServerDomain != nil {
-			rec.Value = fmt.Sprintf("%d %s", *p.Priority, *p.MailServerDomain)
-		}
-
+		return policyToMXRecord(p), true
 	case integrationTypeTXT:
-		rec.Key = p.Domain
-		rec.RecordType = recordTypeTXT
-		if p.Text != nil {
-			rec.Value = *p.Text
-		}
-
+		return policyToTXTRecord(p), true
 	case integrationTypeSRV:
-		// Reconstruct the canonical external-dns SRV name: _service._protocol.domain
-		if p.Service != nil && p.Protocol != nil {
-			rec.Key = fmt.Sprintf("%s.%s.%s", *p.Service, *p.Protocol, p.Domain)
-		} else {
-			rec.Key = p.Domain
-		}
-		rec.RecordType = recordTypeSRV
-		// Encode as "priority weight port target" matching the static-dns transformation.
-		if p.Priority != nil && p.Weight != nil && p.Port != nil && p.ServerDomain != nil {
-			rec.Value = fmt.Sprintf("%d %d %d %s", *p.Priority, *p.Weight, *p.Port, *p.ServerDomain)
-		}
-
+		return policyToSRVRecord(p), true
 	default:
 		// FORWARD_DOMAIN and any future types are silently skipped.
 		return DNSRecord{}, false
 	}
+}
 
-	return rec, true
+func policyToARecord(p DNSPolicy) DNSRecord {
+	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeA}
+	if p.IPv4Address != nil {
+		rec.Value = *p.IPv4Address
+	}
+	if p.TTLSeconds != nil {
+		rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
+	}
+	return rec
+}
+
+func policyToAAAARecord(p DNSPolicy) DNSRecord {
+	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeAAAA}
+	if p.IPv6Address != nil {
+		rec.Value = *p.IPv6Address
+	}
+	if p.TTLSeconds != nil {
+		rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
+	}
+	return rec
+}
+
+func policyToCNAMERecord(p DNSPolicy) DNSRecord {
+	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeCNAME}
+	if p.TargetDomain != nil {
+		rec.Value = *p.TargetDomain
+	}
+	if p.TTLSeconds != nil {
+		rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
+	}
+	return rec
+}
+
+func policyToMXRecord(p DNSPolicy) DNSRecord {
+	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeMX}
+	if p.Priority != nil && p.MailServerDomain != nil {
+		rec.Value = fmt.Sprintf("%d %s", *p.Priority, *p.MailServerDomain)
+	}
+	return rec
+}
+
+func policyToTXTRecord(p DNSPolicy) DNSRecord {
+	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeTXT}
+	if p.Text != nil {
+		rec.Value = *p.Text
+	}
+	return rec
+}
+
+func policyToSRVRecord(p DNSPolicy) DNSRecord {
+	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, RecordType: recordTypeSRV}
+	// Reconstruct the canonical external-dns SRV name: _service._protocol.domain
+	if p.Service != nil && p.Protocol != nil {
+		rec.Key = fmt.Sprintf("%s.%s.%s", *p.Service, *p.Protocol, p.Domain)
+	} else {
+		rec.Key = p.Domain
+	}
+	// Encode as "priority weight port target" matching the static-dns transformation.
+	if p.Priority != nil && p.Weight != nil && p.Port != nil && p.ServerDomain != nil {
+		rec.Value = fmt.Sprintf("%d %d %d %s", *p.Priority, *p.Weight, *p.Port, *p.ServerDomain)
+	}
+	return rec
 }
 
 // endpointToDNSPolicy converts an external-dns Endpoint + single target string
@@ -296,25 +309,9 @@ func endpointToDNSPolicy(ep *externaldnsendpoint.Endpoint, target string) (DNSPo
 
 	case recordTypeSRV:
 		policy.Type = integrationTypeSRV
-		// The external-dns DNS name for SRV is "_service._protocol.domain".
-		service, protocol, domain, err := parseSRVDNSName(ep.DNSName)
-		if err != nil {
+		if err := fillSRVPolicy(ep, target, &policy); err != nil {
 			return DNSPolicy{}, err
 		}
-		policy.Domain = domain
-		policy.Service = strPtr(service)
-		policy.Protocol = strPtr(protocol)
-
-		// The target is "priority weight port serverDomain".
-		var priority, weight, port int
-		var serverDomain string
-		if _, err := fmt.Sscanf(target, "%d %d %d %s", &priority, &weight, &port, &serverDomain); err != nil {
-			return DNSPolicy{}, NewDataError("parse", "SRV target for integration API", err)
-		}
-		policy.Priority = &priority
-		policy.Weight = &weight
-		policy.Port = &port
-		policy.ServerDomain = strPtr(serverDomain)
 
 	default:
 		return DNSPolicy{}, errors.Newf("record type %q is not supported by the Integration API", ep.RecordType)
@@ -323,11 +320,35 @@ func endpointToDNSPolicy(ep *externaldnsendpoint.Endpoint, target string) (DNSPo
 	return policy, nil
 }
 
+// fillSRVPolicy populates the SRV-specific fields of a DNSPolicy from the
+// external-dns endpoint DNS name ("_service._protocol.domain") and target
+// ("priority weight port serverDomain").
+func fillSRVPolicy(ep *externaldnsendpoint.Endpoint, target string, policy *DNSPolicy) error {
+	service, protocol, domain, err := parseSRVDNSName(ep.DNSName)
+	if err != nil {
+		return err
+	}
+	policy.Domain = domain
+	policy.Service = strPtr(service)
+	policy.Protocol = strPtr(protocol)
+
+	var priority, weight, port int
+	var serverDomain string
+	if _, err := fmt.Sscanf(target, "%d %d %d %s", &priority, &weight, &port, &serverDomain); err != nil {
+		return NewDataError("parse", "SRV target for integration API", err)
+	}
+	policy.Priority = &priority
+	policy.Weight = &weight
+	policy.Port = &port
+	policy.ServerDomain = strPtr(serverDomain)
+	return nil
+}
+
 // parseSRVDNSName splits "_service._protocol.domain" into its three components.
 // Both service and protocol must start with an underscore per RFC 2782.
 func parseSRVDNSName(name string) (service, protocol, domain string, err error) {
-	parts := strings.SplitN(name, ".", 3)
-	if len(parts) != 3 || !strings.HasPrefix(parts[0], "_") || !strings.HasPrefix(parts[1], "_") {
+	parts := strings.SplitN(name, ".", srvDNSNameParts)
+	if len(parts) != srvDNSNameParts || !strings.HasPrefix(parts[0], "_") || !strings.HasPrefix(parts[1], "_") {
 		return "", "", "", NewDataError("parse", "SRV DNS name: "+name, nil)
 	}
 	return parts[0], parts[1], parts[2], nil

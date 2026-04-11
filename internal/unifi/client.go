@@ -158,13 +158,21 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 
 	m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), nil)
 
-	// Loop through records to modify SRV type
+	transformSRVRecords(records)
+
+	log.Debug("fetched records", "count", len(records))
+
+	return records, nil
+}
+
+// transformSRVRecords rewrites SRV records from the static-dns wire format
+// (Priority/Weight/Port fields) into the "priority weight port target" Value
+// string that external-dns expects, and nils out the separate pointer fields.
+func transformSRVRecords(records []DNSRecord) {
 	for i, record := range records {
 		if record.RecordType != recordTypeSRV {
 			continue
 		}
-
-		// Modify the Target for SRV records
 		records[i].Value = fmt.Sprintf("%d %d %d %s",
 			*record.Priority,
 			*record.Weight,
@@ -175,10 +183,6 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 		records[i].Weight = nil
 		records[i].Port = nil
 	}
-
-	log.Debug("fetched records", "count", len(records))
-
-	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
@@ -342,7 +346,7 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 
 func (c *httpClient) login(ctx context.Context) error {
 	m := metrics.Get()
-	jsonBody, err := json.Marshal(Login{
+	jsonBody, err := json.Marshal(Login{ //nolint:gosec // G101: password is user-supplied config, not a hardcoded credential
 		Username: c.User,
 		Password: c.Password,
 		Remember: true,
@@ -464,7 +468,7 @@ func (c *httpClient) handleUnauthorized(ctx context.Context, req *http.Request, 
 	// Retry the request
 	log.Debug("retrying request after re-login")
 
-	resp, err := c.Do(req)
+	resp, err := c.Do(req) //nolint:gosec // G107: URL is constructed from validated config (UNIFI_HOST), not user-controlled input
 	if err != nil {
 		log.Error("Retry request failed", "error", err)
 

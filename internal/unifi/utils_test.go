@@ -152,7 +152,7 @@ func TestFormatURL(t *testing.T) {
 		{
 			name:     "URL with credentials",
 			path:     "%s/api",
-			params:   []string{"https://user:pass@example.com"},
+			params:   []string{"https://user:pass@example.com"}, //nolint:gosec // G101: test credential, not a real one
 			expected: "https://user:pass@example.com/api",
 		},
 		{

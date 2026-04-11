@@ -335,7 +335,7 @@ func endpointToDNSPolicy(endpoint *externaldnsendpoint.Endpoint, target string) 
 		}
 
 	default:
-		return DNSPolicy{}, errors.Newf("record type %q is not supported by the Integration API", endpoint.RecordType)
+		return DNSPolicy{}, fmt.Errorf("record type %q is not supported by the Integration API", endpoint.RecordType)
 	}
 
 	return policy, nil

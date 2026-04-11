@@ -32,12 +32,18 @@ type httpClient struct {
 }
 
 const (
+	// unifiCloudAPIBaseURL is a fmt format string; substitute the console ID with fmt.Sprintf.
 	unifiCloudAPIBaseURL = "https://api.ui.com/v1/connector/consoles/%s"
 
 	unifiLoginPath          = "%s/api/auth/login"
 	unifiLoginPathExternal  = "%s/api/login"
 	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 	unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
+
+	// unifiIntegrationRecordPath is the path for the new Integration API DNS policies endpoint.
+	// Works for both local (/proxy/network/integration/…) and cloud connector (host already
+	// contains the console prefix) by using the same FormatURL template mechanism.
+	unifiIntegrationRecordPath = "%s/proxy/network/integration/v1/sites/%s/dns/policies/%s"
 
 	recordTypeA     = "A"
 	recordTypeAAAA  = "AAAA"
@@ -79,9 +85,20 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 	}
 
 	if client.UseCloudConnector {
-		client.Host = unifiCloudAPIBaseURL
+		if client.ConsoleID == "" {
+			return nil, errors.New("UNIFI_CLOUD_CONSOLE_ID is required when UNIFI_CLOUD_CONNECTOR is enabled")
+		}
+		// Substitute the console ID into the base URL so FormatURL can treat it as a plain host prefix.
+		client.Host = fmt.Sprintf(unifiCloudAPIBaseURL, client.ConsoleID)
 		client.ClientURLs.Login = unifiLoginPath
 		client.ClientURLs.Records = unifiRecordPath
+	}
+
+	if client.UseIntegrationAPI {
+		if client.APIKey == "" {
+			return nil, errors.New("UNIFI_API_KEY is required when UNIFI_INTEGRATION_API is enabled; username/password auth is not supported by the Integration API")
+		}
+		client.ClientURLs.Records = unifiIntegrationRecordPath
 	}
 
 	if client.APIKey != "" {
@@ -98,6 +115,10 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
+	if c.UseIntegrationAPI {
+		return c.getIntegrationPolicies(ctx)
+	}
+
 	m := metrics.Get()
 	start := time.Now()
 
@@ -162,15 +183,21 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) ([]*DNSRecord, error) {
-	m := metrics.Get()
-	start := time.Now()
-
-	// CNAME records can only have one target
+	// CNAME records can only have one target regardless of which API is used.
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
-		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
+		metrics.Get().IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
 		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", "key", endpoint.DNSName, "ignored_targets", endpoint.Targets[1:])
 		endpoint.Targets = endpoint.Targets[:1]
 	}
+
+	if c.UseIntegrationAPI {
+		return c.createIntegrationPolicy(ctx, endpoint)
+	}
+
+	m := metrics.Get()
+	start := time.Now()
+
+	// CNAME warning already handled above; targets already truncated.
 
 	createdRecords := make([]*DNSRecord, 0, len(endpoint.Targets))
 
@@ -263,6 +290,10 @@ func (c *httpClient) createSingleDNSRecord(ctx context.Context, record *DNSRecor
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) error {
+	if c.UseIntegrationAPI {
+		return c.deleteIntegrationPolicy(ctx, endpoint)
+	}
+
 	m := metrics.Get()
 	start := time.Now()
 
@@ -391,8 +422,9 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body io
 		}
 	}
 
-	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
-	if resp.StatusCode != http.StatusOK {
+	// Accept any 2xx response. The static-dns API always returns 200, but the
+	// Integration API returns 201 Created for POST requests.
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= 300 {
 		return nil, c.handleErrorResponse(resp, method, path)
 	}
 

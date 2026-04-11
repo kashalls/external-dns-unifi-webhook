@@ -23,8 +23,26 @@
 - Wildcard and Duplicate CNAME Records are not supported by UniFi.
   - *.example.com 0 IN CNAME internal.example.com
   - deployment.example.com 0 IN CNAME external.example.com internal.example.com
+- When using the **Integration API** (`UNIFI_INTEGRATION_API=true`), NS records are silently skipped and `UNIFI_API_KEY` is required — username/password auth is rejected at startup.
 
 ## ⛵ Deployment
+
+### Connection Modes
+
+The provider supports four connection modes. Choose the combination that matches your setup:
+
+| Mode | `UNIFI_HOST` | Extra flags | Auth | API used |
+|------|-------------|-------------|------|----------|
+| **Local (default)** | `https://192.168.1.1` | — | API key or user/pass | Static DNS (`/proxy/network/v2/api/…`) |
+| **External Controller** | `https://myserver:8443` | `UNIFI_EXTERNAL_CONTROLLER=true` | API key or user/pass | Static DNS (`/v2/api/…`) |
+| **Cloud Connector** | any (overridden automatically) | `UNIFI_CLOUD_CONNECTOR=true` + `UNIFI_CLOUD_CONSOLE_ID=<id>` | **API key only** | Static DNS via `api.ui.com` proxy |
+| **Integration API — local** | `https://192.168.1.1` | `UNIFI_INTEGRATION_API=true` | **API key only** | Integration API (`/proxy/network/integration/v1/…`) |
+| **Integration API — cloud** | any (overridden automatically) | `UNIFI_CLOUD_CONNECTOR=true` + `UNIFI_CLOUD_CONSOLE_ID=<id>` + `UNIFI_INTEGRATION_API=true` | **API key only** | Integration API via `api.ui.com` proxy |
+
+> **Integration API** is the newer UniFi Network API (`/proxy/network/integration/v1/sites/{siteId}/dns/policies`).
+> It requires `UNIFI_API_KEY` — username/password authentication is not supported and the provider will
+> refuse to start if `UNIFI_INTEGRATION_API=true` without an API key set.
+> NS records are not supported by this API and will be silently skipped. All other record types (A, AAAA, CNAME, MX, TXT, SRV) are fully supported.
 
 ### Creating UniFi Credentials
 
@@ -129,6 +147,67 @@ stringData:
 
 </details>
 
+<details>
+<summary>UniFi Cloud Connector</summary>
+<br>
+
+The Cloud Connector lets the provider reach your local console through Ubiquiti's cloud proxy at
+`api.ui.com` — no VPN or port-forwarding required.
+
+1. Log in to [unifi.ui.com](https://unifi.ui.com) and navigate to **Settings → API Keys**.
+
+2. Create an API key and copy it.
+
+3. Find your **Console ID** using either method below:
+
+   **Option A — browser URL**
+   Open [unifi.ui.com](https://unifi.ui.com), navigate to your console, and copy the UUID from the URL:
+   ```
+   https://unifi.ui.com/consoles/<console-id>/...
+   ```
+
+   **Option B — API**
+   Query the Ubiquiti account API with your API key. The `id` field in each returned object is the Console ID:
+   ```sh
+   curl -s "https://api.ui.com/v1/hosts" \
+     -H "X-API-Key: <your-api-key>" | jq '.[].id'
+   ```
+
+4. Create a Kubernetes secret:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+    name: external-dns-unifi-secret
+stringData:
+  api-key: <your-api-key>
+```
+
+5. Set the following environment variables in your Helm values (see [Installing the provider](#installing-the-provider)):
+
+```yaml
+- name: UNIFI_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: external-dns-unifi-secret
+      key: api-key
+- name: UNIFI_CLOUD_CONNECTOR
+  value: "true"
+- name: UNIFI_CLOUD_CONSOLE_ID
+  value: "<your-console-id>"
+```
+
+To additionally use the new Integration API add:
+
+```yaml
+- name: UNIFI_INTEGRATION_API
+  value: "true"
+```
+
+</details>
+
 ### Installing the provider
 
 1. Add the ExternalDNS Helm repository to your cluster.
@@ -193,22 +272,23 @@ stringData:
 
 ## Configuration
 
-### Unifi Controller Configuration
+### UniFi Controller Configuration
 
-| Environment Variable         | Description                                                       | Default Value |
-|------------------------------|-------------------------------------------------------------------|---------------|
-| `UNIFI_API_KEY`              | The local api key provided for your user                          | N/A           |
-| `UNIFI_USER`                 | Username for the Unifi Controller (deprecated use `UNIFI_API_KEY`). | N/A           |
-| `UNIFI_PASS`                 | Password for the Unifi Controller (deprecated use `UNIFI_API_KEY`). | N/A           |
-| `UNIFI_SKIP_TLS_VERIFY`      | Whether to skip TLS verification (true or false).                 | `true`        |
-| `UNIFI_SITE`                 | Unifi Site Identifier (used in multi-site installations)          | `default`     |
-| `UNIFI_HOST`                 | Host of the Unifi Controller (must be provided).                  | N/A           |
-| `UNIFI_EXTERNAL_CONTROLLER`* | Toggles support for non-UniFi Hardware                            | `false`       |
-| `UNIFI_CLOUD_CONNECTOR`      | Enables cloud connector for remote installations                  | `false`       |
-| `UNIFI_CLOUD_CONSOLE_ID`     | Sets the cloud console id for this remote installation            | N/A           |
-| `LOG_LEVEL`                  | Change the verbosity of logs (used when making a bug report)      | `info`        |
+| Environment Variable         | Description                                                                           | Default Value |
+|------------------------------|---------------------------------------------------------------------------------------|---------------|
+| `UNIFI_HOST`                 | Base URL of your UniFi controller (e.g. `https://192.168.1.1`). Required.            | N/A           |
+| `UNIFI_API_KEY`              | API key for the UniFi controller (recommended, Console Firmware ≥ 4.3.6).            | N/A           |
+| `UNIFI_USER`                 | Username for the UniFi controller (deprecated — use `UNIFI_API_KEY` instead).        | N/A           |
+| `UNIFI_PASS`                 | Password for the UniFi controller (deprecated — use `UNIFI_API_KEY` instead).        | N/A           |
+| `UNIFI_SITE`                 | UniFi site identifier, used in multi-site installations.                              | `default`     |
+| `UNIFI_SKIP_TLS_VERIFY`      | Skip TLS certificate verification (useful for self-signed certs).                    | `true`        |
+| `UNIFI_EXTERNAL_CONTROLLER`* | Use the external-controller API path (`/v2/api/…`) for non-UniFi hardware.           | `false`       |
+| `UNIFI_CLOUD_CONNECTOR`      | Route requests through Ubiquiti's cloud proxy at `api.ui.com` instead of directly.   | `false`       |
+| `UNIFI_CLOUD_CONSOLE_ID`     | Console ID required when `UNIFI_CLOUD_CONNECTOR=true`.                               | N/A           |
+| `UNIFI_INTEGRATION_API`      | Use the new Integration API (`/proxy/network/integration/v1/…`) for DNS policies. Compatible with both local and cloud-connector modes. Requires `UNIFI_API_KEY`. | `false` |
+| `LOG_LEVEL`                  | Log verbosity (`debug`, `info`, `warn`, `error`).                                    | `info`        |
 
-*`UNIFI_EXTERNAL_CONTROLLER` is used to toggle between two versions of the Network Controller API. If you are running the UniFi software outside of UniFi's official hardware (e.g., Cloud Key or Dream Machine), you'll need to set `UNIFI_EXTERNAL_CONTROLLER` to `true`
+*`UNIFI_EXTERNAL_CONTROLLER` selects the legacy external-controller path (`/v2/api/site/…`). Enable this when running the UniFi Network application on non-UniFi hardware (e.g. a generic Linux server) rather than a Dream Machine or Cloud Key.
 
 ### Server Configuration
 

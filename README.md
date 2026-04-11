@@ -32,7 +32,7 @@
 The provider supports four connection modes. Choose the combination that matches your setup:
 
 | Mode | `UNIFI_HOST` | Extra flags | Auth | API used |
-|------|-------------|-------------|------|----------|
+| --- | --- | --- | --- | --- |
 | **Local (default)** | `https://192.168.1.1` | — | API key or user/pass | Static DNS (`/proxy/network/v2/api/…`) |
 | **External Controller** | `https://myserver:8443` | `UNIFI_EXTERNAL_CONTROLLER=true` | API key or user/pass | Static DNS (`/v2/api/…`) |
 | **Cloud Connector** | any (overridden automatically) | `UNIFI_CLOUD_CONNECTOR=true` + `UNIFI_CLOUD_CONSOLE_ID=<id>` | **API key only** | Static DNS via `api.ui.com` proxy |
@@ -51,7 +51,7 @@ ExternalDNS Provider for UniFi supports 2 styles of authentication:
 - UniFi API Key (Console Firmware >= 4.3.6)
 - Username & Password
 - Unifi Cloud Connector (Console Firmware >= 5.0.3)
-  - https://unifi.ui.com/settings/api-keys
+  - [Settings → API Keys](https://unifi.ui.com/settings/api-keys)
 
 Click the below headers to view the instructions:
 
@@ -162,12 +162,11 @@ The Cloud Connector lets the provider reach your local console through Ubiquiti'
 
    **Option A — browser URL**
    Open [unifi.ui.com](https://unifi.ui.com), navigate to your console, and copy the UUID from the URL:
-   ```
-   https://unifi.ui.com/consoles/<console-id>/...
-   ```
+   `https://unifi.ui.com/consoles/<console-id>/...`
 
    **Option B — API**
    Query the Ubiquiti account API with your API key. The `id` field in each returned object is the Console ID:
+
    ```sh
    curl -s "https://api.ui.com/v1/hosts" \
      -H "X-API-Key: <your-api-key>" | jq '.[].id'
@@ -285,7 +284,7 @@ To additionally use the new Integration API add:
 | `UNIFI_EXTERNAL_CONTROLLER`* | Use the external-controller API path (`/v2/api/…`) for non-UniFi hardware.           | `false`       |
 | `UNIFI_CLOUD_CONNECTOR`      | Route requests through Ubiquiti's cloud proxy at `api.ui.com` instead of directly.   | `false`       |
 | `UNIFI_CLOUD_CONSOLE_ID`     | Console ID required when `UNIFI_CLOUD_CONNECTOR=true`.                               | N/A           |
-| `UNIFI_INTEGRATION_API`      | Use the new Integration API (`/proxy/network/integration/v1/…`) for DNS policies. Compatible with both local and cloud-connector modes. Requires `UNIFI_API_KEY`. | `false` |
+| `UNIFI_INTEGRATION_API`      | Enable the Integration API for DNS policies. Requires `UNIFI_API_KEY`; see Connection Modes. | `false`       |
 | `LOG_LEVEL`                  | Log verbosity (`debug`, `info`, `warn`, `error`).                                    | `info`        |
 
 *`UNIFI_EXTERNAL_CONTROLLER` selects the legacy external-controller path (`/v2/api/site/…`). Enable this when running the UniFi Network application on non-UniFi hardware (e.g. a generic Linux server) rather than a Dream Machine or Cloud Key.

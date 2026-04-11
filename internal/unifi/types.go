@@ -52,8 +52,6 @@ type UnifiErrorResponse struct {
 // (GET/POST/PUT /proxy/network/integration/v1/sites/{siteId}/dns/policies).
 // All record-type-specific fields are optional pointers; only the fields
 // relevant to the discriminated Type value will be populated.
-//
-//nolint:tagliatelle // Integration API field names cannot be changed
 type DNSPolicy struct {
 	ID               string  `json:"id,omitempty"`
 	Type             string  `json:"type"`

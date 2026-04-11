@@ -49,6 +49,7 @@ func (c *httpClient) getIntegrationPolicies(ctx context.Context) ([]DNSRecord, e
 		resp, err := c.doRequest(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			m.RecordUniFiAPICall("get_integration_policies", time.Since(start), 0, err)
+
 			return nil, errors.Wrap(err, "failed to fetch DNS policies from UniFi Integration API")
 		}
 
@@ -56,17 +57,20 @@ func (c *httpClient) getIntegrationPolicies(ctx context.Context) ([]DNSRecord, e
 		_ = resp.Body.Close()
 		if err != nil {
 			m.RecordUniFiAPICall("get_integration_policies", time.Since(start), 0, err)
+
 			return nil, NewDataError("read", "integration policies response body", err)
 		}
 
 		var page DNSPolicyPage
-		if err := json.Unmarshal(bodyBytes, &page); err != nil {
+		err = json.Unmarshal(bodyBytes, &page)
+		if err != nil {
 			m.RecordUniFiAPICall("get_integration_policies", time.Since(start), len(bodyBytes), err)
+
 			return nil, NewDataError("unmarshal", "DNS policies page", err)
 		}
 
 		for i := range page.Data {
-			record, ok := policyToDNSRecord(page.Data[i])
+			record, ok := policyToDNSRecord(&page.Data[i])
 			if ok {
 				allRecords = append(allRecords, record)
 			}
@@ -95,12 +99,14 @@ func (c *httpClient) createIntegrationPolicy(ctx context.Context, ep *externaldn
 		policy, err := endpointToDNSPolicy(ep, target)
 		if err != nil {
 			m.RecordUniFiAPICall("create_integration_policy", time.Since(start), 0, err)
+
 			return nil, err
 		}
 
 		jsonBody, err := json.Marshal(policy)
 		if err != nil {
 			m.RecordUniFiAPICall("create_integration_policy", time.Since(start), 0, err)
+
 			return nil, NewDataError("marshal", "DNS policy", err)
 		}
 
@@ -112,6 +118,7 @@ func (c *httpClient) createIntegrationPolicy(ctx context.Context, ep *externaldn
 		)
 		if err != nil {
 			m.RecordUniFiAPICall("create_integration_policy", time.Since(start), 0, err)
+
 			return nil, errors.Wrap(err, "failed to create DNS policy")
 		}
 
@@ -119,16 +126,19 @@ func (c *httpClient) createIntegrationPolicy(ctx context.Context, ep *externaldn
 		_ = resp.Body.Close()
 		if err != nil {
 			m.RecordUniFiAPICall("create_integration_policy", time.Since(start), 0, err)
+
 			return nil, NewDataError("read", "create policy response body", err)
 		}
 
 		var createdPolicy DNSPolicy
-		if err := json.Unmarshal(bodyBytes, &createdPolicy); err != nil {
+		err = json.Unmarshal(bodyBytes, &createdPolicy)
+		if err != nil {
 			m.RecordUniFiAPICall("create_integration_policy", time.Since(start), len(bodyBytes), err)
+
 			return nil, NewDataError("unmarshal", "created DNS policy", err)
 		}
 
-		record, ok := policyToDNSRecord(createdPolicy)
+		record, ok := policyToDNSRecord(&createdPolicy)
 		if ok {
 			createdRecords = append(createdRecords, &record)
 			log.Debug("created integration policy", "key", record.Key, "type", record.RecordType, "target", record.Value)
@@ -136,6 +146,7 @@ func (c *httpClient) createIntegrationPolicy(ctx context.Context, ep *externaldn
 	}
 
 	m.RecordUniFiAPICall("create_integration_policy", time.Since(start), 0, nil)
+
 	return createdRecords, nil
 }
 
@@ -148,6 +159,7 @@ func (c *httpClient) deleteIntegrationPolicy(ctx context.Context, ep *externaldn
 	records, err := c.getIntegrationPolicies(ctx)
 	if err != nil {
 		m.RecordUniFiAPICall("delete_integration_policy", time.Since(start), 0, err)
+
 		return errors.Wrap(err, "failed to fetch policies before deletion")
 	}
 
@@ -174,17 +186,19 @@ func (c *httpClient) deleteIntegrationPolicy(ctx context.Context, ep *externaldn
 			combined = errors.Wrap(e, combined.Error())
 		}
 		m.RecordUniFiAPICall("delete_integration_policy", duration, 0, combined)
+
 		return combined
 	}
 
 	m.RecordUniFiAPICall("delete_integration_policy", duration, 0, nil)
+
 	return nil
 }
 
 // policyToDNSRecord converts an Integration API DNSPolicy to the shared DNSRecord
 // format. Returns (record, false) for unsupported types (e.g. FORWARD_DOMAIN) so
 // the caller can skip them cleanly.
-func policyToDNSRecord(p DNSPolicy) (DNSRecord, bool) {
+func policyToDNSRecord(p *DNSPolicy) (DNSRecord, bool) {
 	switch p.Type {
 	case integrationTypeA:
 		return policyToARecord(p), true
@@ -204,7 +218,7 @@ func policyToDNSRecord(p DNSPolicy) (DNSRecord, bool) {
 	}
 }
 
-func policyToARecord(p DNSPolicy) DNSRecord {
+func policyToARecord(p *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeA}
 	if p.IPv4Address != nil {
 		rec.Value = *p.IPv4Address
@@ -212,10 +226,11 @@ func policyToARecord(p DNSPolicy) DNSRecord {
 	if p.TTLSeconds != nil {
 		rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
 	}
+
 	return rec
 }
 
-func policyToAAAARecord(p DNSPolicy) DNSRecord {
+func policyToAAAARecord(p *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeAAAA}
 	if p.IPv6Address != nil {
 		rec.Value = *p.IPv6Address
@@ -223,10 +238,11 @@ func policyToAAAARecord(p DNSPolicy) DNSRecord {
 	if p.TTLSeconds != nil {
 		rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
 	}
+
 	return rec
 }
 
-func policyToCNAMERecord(p DNSPolicy) DNSRecord {
+func policyToCNAMERecord(p *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeCNAME}
 	if p.TargetDomain != nil {
 		rec.Value = *p.TargetDomain
@@ -234,26 +250,29 @@ func policyToCNAMERecord(p DNSPolicy) DNSRecord {
 	if p.TTLSeconds != nil {
 		rec.TTL = externaldnsendpoint.TTL(*p.TTLSeconds)
 	}
+
 	return rec
 }
 
-func policyToMXRecord(p DNSPolicy) DNSRecord {
+func policyToMXRecord(p *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeMX}
 	if p.Priority != nil && p.MailServerDomain != nil {
 		rec.Value = fmt.Sprintf("%d %s", *p.Priority, *p.MailServerDomain)
 	}
+
 	return rec
 }
 
-func policyToTXTRecord(p DNSPolicy) DNSRecord {
+func policyToTXTRecord(p *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, Key: p.Domain, RecordType: recordTypeTXT}
 	if p.Text != nil {
 		rec.Value = *p.Text
 	}
+
 	return rec
 }
 
-func policyToSRVRecord(p DNSPolicy) DNSRecord {
+func policyToSRVRecord(p *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: p.ID, Enabled: p.Enabled, RecordType: recordTypeSRV}
 	// Reconstruct the canonical external-dns SRV name: _service._protocol.domain
 	if p.Service != nil && p.Protocol != nil {
@@ -265,6 +284,7 @@ func policyToSRVRecord(p DNSPolicy) DNSRecord {
 	if p.Priority != nil && p.Weight != nil && p.Port != nil && p.ServerDomain != nil {
 		rec.Value = fmt.Sprintf("%d %d %d %s", *p.Priority, *p.Weight, *p.Port, *p.ServerDomain)
 	}
+
 	return rec
 }
 
@@ -341,6 +361,7 @@ func fillSRVPolicy(ep *externaldnsendpoint.Endpoint, target string, policy *DNSP
 	policy.Weight = &weight
 	policy.Port = &port
 	policy.ServerDomain = strPtr(serverDomain)
+
 	return nil
 }
 
@@ -351,6 +372,7 @@ func parseSRVDNSName(name string) (service, protocol, domain string, err error) 
 	if len(parts) != srvDNSNameParts || !strings.HasPrefix(parts[0], "_") || !strings.HasPrefix(parts[1], "_") {
 		return "", "", "", NewDataError("parse", "SRV DNS name: "+name, nil)
 	}
+
 	return parts[0], parts[1], parts[2], nil
 }
 
@@ -359,6 +381,7 @@ func parseMXTarget(target string) (priority int, hostname string, err error) {
 	if _, scanErr := fmt.Sscanf(target, "%d %s", &priority, &hostname); scanErr != nil {
 		return 0, "", NewDataError("parse", "MX record target: "+target, scanErr)
 	}
+
 	return priority, hostname, nil
 }
 

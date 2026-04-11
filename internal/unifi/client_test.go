@@ -593,8 +593,8 @@ func TestSetHeaders(t *testing.T) {
 			config: &Config{
 				APIKey: "",
 			},
-			csrf: "csrf-token-123", //nolint:gosec // G101: test value, not a real credential
-			expectedHeaders: map[string]string{
+			csrf: "csrf-token-123",
+			expectedHeaders: map[string]string{ //nolint:gosec // G101: test header value, not a real credential
 				"X-Csrf-Token": "csrf-token-123",
 				"Accept":       "application/json",
 				"Content-Type": "application/json; charset=utf-8",

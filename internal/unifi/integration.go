@@ -16,6 +16,10 @@ import (
 	externaldnsendpoint "sigs.k8s.io/external-dns/endpoint"
 )
 
+// errUnsupportedRecordType is returned when the Integration API receives a record
+// type it does not support (e.g. NS).
+var errUnsupportedRecordType = errors.New("record type not supported by the Integration API")
+
 // Integration API record type discriminator values.
 const (
 	integrationTypeA     = "A_RECORD"
@@ -335,7 +339,7 @@ func endpointToDNSPolicy(endpoint *externaldnsendpoint.Endpoint, target string) 
 		}
 
 	default:
-		return DNSPolicy{}, fmt.Errorf("record type %q is not supported by the Integration API", endpoint.RecordType)
+		return DNSPolicy{}, fmt.Errorf("%w: %q", errUnsupportedRecordType, endpoint.RecordType)
 	}
 
 	return policy, nil

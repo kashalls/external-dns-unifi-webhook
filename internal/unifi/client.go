@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -18,8 +19,9 @@ import (
 )
 
 type ClientURLs struct {
-	Login   string
-	Records string
+	Login       string
+	Records     string // single-resource path (…/policies/{id}): used for DELETE
+	RecordsList string // collection path (…/policies): used for GET list and POST create
 }
 
 // httpClient is the DNS provider client.
@@ -40,9 +42,11 @@ const (
 	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 	unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
 
-	// unifiIntegrationRecordPath is the path for the new Integration API DNS policies endpoint.
-	// Works for both local (/proxy/network/integration/…) and cloud connector (host already
-	// contains the console prefix) by using the same FormatURL template mechanism.
+	// unifiIntegrationRecordsPath is the collection endpoint (list + create) for the Integration API.
+	// No trailing ID placeholder — avoids a trailing slash that causes 404s on the Integration API.
+	unifiIntegrationRecordsPath = "%s/proxy/network/integration/v1/sites/%s/dns/policies"
+
+	// unifiIntegrationRecordPath is the single-resource endpoint (delete) for the Integration API.
 	unifiIntegrationRecordPath = "%s/proxy/network/integration/v1/sites/%s/dns/policies/%s"
 
 	recordTypeA     = "A"
@@ -74,14 +78,16 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 			Jar: jar,
 		},
 		ClientURLs: &ClientURLs{
-			Login:   unifiLoginPath,
-			Records: unifiRecordPath,
+			Login:       unifiLoginPath,
+			Records:     unifiRecordPath,
+			RecordsList: unifiRecordPath,
 		},
 	}
 
 	if client.ExternalController {
 		client.ClientURLs.Login = unifiLoginPathExternal
 		client.ClientURLs.Records = unifiRecordPathExternal
+		client.ClientURLs.RecordsList = unifiRecordPathExternal
 	}
 
 	if client.UseCloudConnector {
@@ -92,6 +98,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		client.Host = fmt.Sprintf(unifiCloudAPIBaseURL, client.ConsoleID)
 		client.ClientURLs.Login = unifiLoginPath
 		client.ClientURLs.Records = unifiRecordPath
+		client.ClientURLs.RecordsList = unifiRecordPath
 	}
 
 	if client.UseIntegrationAPI {
@@ -99,6 +106,13 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 			return nil, errors.New("UNIFI_API_KEY is required when UNIFI_INTEGRATION_API is enabled; username/password auth is not supported by the Integration API")
 		}
 		client.ClientURLs.Records = unifiIntegrationRecordPath
+		client.ClientURLs.RecordsList = unifiIntegrationRecordsPath
+
+		// The Integration API requires a site UUID in the path; UNIFI_SITE is typically
+		// the site name ("default") so resolve it to the actual UUID at startup.
+		if err := client.resolveSiteID(context.Background()); err != nil {
+			return nil, errors.Wrap(err, "failed to resolve Integration API site UUID")
+		}
 	}
 
 	if client.APIKey != "" {
@@ -173,6 +187,12 @@ func transformSRVRecords(records []DNSRecord) {
 		if record.RecordType != recordTypeSRV {
 			continue
 		}
+
+		if record.Priority == nil || record.Weight == nil || record.Port == nil {
+			log.Warn("skipping SRV record with missing fields", "key", record.Key)
+			continue
+		}
+
 		records[i].Value = fmt.Sprintf("%d %d %d %s",
 			*record.Priority,
 			*record.Weight,
@@ -210,7 +230,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 
 		// SRV records need special parsing
 		if endpoint.RecordType == recordTypeSRV {
-			err := parseSRVTarget(&record, endpoint.Targets[0])
+			err := parseSRVTarget(&record, target)
 			if err != nil {
 				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
@@ -331,10 +351,12 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 
 	duration := time.Since(start)
 	if len(deleteErrors) > 0 {
-		err := errors.Newf("failed to delete %d records", len(deleteErrors))
+		msgs := make([]string, 0, len(deleteErrors))
 		for _, deleteErr := range deleteErrors {
-			err = errors.Wrap(deleteErr, err.Error())
+			msgs = append(msgs, deleteErr.Error())
 		}
+
+		err := fmt.Errorf("failed to delete %d records: %s", len(deleteErrors), strings.Join(msgs, "; "))
 		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
 
 		return err

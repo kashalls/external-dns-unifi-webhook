@@ -80,3 +80,18 @@ type DNSPolicyPage struct {
 	TotalCount int64       `json:"totalCount"`
 	Data       []DNSPolicy `json:"data"`
 }
+
+// IntegrationSite is a single site entry returned by the Integration API sites list.
+type IntegrationSite struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// IntegrationSitePage is the paginated response from GET /proxy/network/integration/v1/sites.
+type IntegrationSitePage struct {
+	Offset     int64             `json:"offset"`
+	Limit      int32             `json:"limit"`
+	Count      int32             `json:"count"`
+	TotalCount int64             `json:"totalCount"`
+	Data       []IntegrationSite `json:"data"`
+}

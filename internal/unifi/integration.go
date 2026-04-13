@@ -16,6 +16,53 @@ import (
 	externaldnsendpoint "sigs.k8s.io/external-dns/endpoint"
 )
 
+// resolveSiteID calls the Integration API sites endpoint and replaces c.Site with the
+// UUID that matches the configured site name or ID. This is necessary because the
+// Integration API requires a UUID in the path, whereas UNIFI_SITE is typically the
+// human-readable site name (e.g. "default"). Pagination is handled transparently.
+func (c *httpClient) resolveSiteID(ctx context.Context) error {
+	configured := c.Site
+	var offset int64
+
+	for {
+		sitesURL := fmt.Sprintf("%s/proxy/network/integration/v1/sites?offset=%d&limit=%d",
+			c.Host, offset, integrationMaxPageLimit)
+
+		resp, err := c.doRequest(ctx, http.MethodGet, sitesURL, nil)
+		if err != nil {
+			return errors.Wrap(err, "failed to list Integration API sites")
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			return NewDataError("read", "sites response body", err)
+		}
+
+		var page IntegrationSitePage
+		err = json.Unmarshal(bodyBytes, &page)
+		if err != nil {
+			return NewDataError("unmarshal", "sites response", err)
+		}
+
+		for _, site := range page.Data {
+			if site.ID == configured || strings.EqualFold(site.Name, configured) {
+				log.Debug("resolved Integration API site", "configured", configured, "uuid", site.ID, "name", site.Name)
+				c.Site = site.ID
+
+				return nil
+			}
+		}
+
+		offset += int64(page.Count)
+		if page.Count == 0 || offset >= page.TotalCount {
+			break
+		}
+	}
+
+	return fmt.Errorf("site %q not found among Integration API sites (check UNIFI_SITE)", configured)
+}
+
 // errUnsupportedRecordType is returned when the Integration API receives a record
 // type it does not support (e.g. NS).
 var errUnsupportedRecordType = errors.New("record type not supported by the Integration API")
@@ -45,7 +92,7 @@ func (c *httpClient) getIntegrationPolicies(ctx context.Context) ([]DNSRecord, e
 
 	for {
 		url := fmt.Sprintf("%s?offset=%d&limit=%d",
-			FormatURL(c.ClientURLs.Records, c.Host, c.Site),
+			FormatURL(c.ClientURLs.RecordsList, c.Host, c.Site),
 			offset,
 			integrationMaxPageLimit,
 		)
@@ -117,7 +164,7 @@ func (c *httpClient) createIntegrationPolicy(ctx context.Context, endpoint *exte
 		resp, err := c.doRequest(
 			ctx,
 			http.MethodPost,
-			FormatURL(c.ClientURLs.Records, c.Host, c.Site),
+			FormatURL(c.ClientURLs.RecordsList, c.Host, c.Site),
 			bytes.NewReader(jsonBody),
 		)
 		if err != nil {
@@ -167,9 +214,29 @@ func (c *httpClient) deleteIntegrationPolicy(ctx context.Context, endpoint *exte
 		return errors.Wrap(err, "failed to fetch policies before deletion")
 	}
 
+	// Build an ID→count index so we can detect "bucket" IDs shared by legacy
+	// (pre-Integration-API) records. Deleting a shared ID would remove all records
+	// under that bucket, which is catastrophic.
+	idCount := make(map[string]int, len(records))
+	for _, r := range records {
+		if r.ID != "" {
+			idCount[r.ID]++
+		}
+	}
+
 	var deleteErrors []error
 	for _, record := range records {
 		if record.Key != endpoint.DNSName || record.RecordType != endpoint.RecordType {
+			continue
+		}
+
+		if record.ID == "" {
+			log.Warn("skipping deletion of integration policy with empty ID", "key", record.Key, "type", record.RecordType)
+			continue
+		}
+		if idCount[record.ID] > 1 {
+			log.Warn("skipping deletion of integration policy with shared ID (legacy record?)",
+				"key", record.Key, "type", record.RecordType, "id", record.ID, "shared_count", idCount[record.ID])
 			continue
 		}
 
@@ -185,10 +252,12 @@ func (c *httpClient) deleteIntegrationPolicy(ctx context.Context, endpoint *exte
 
 	duration := time.Since(start)
 	if len(deleteErrors) > 0 {
-		combined := errors.Newf("failed to delete %d integration policies", len(deleteErrors))
+		msgs := make([]string, 0, len(deleteErrors))
 		for _, e := range deleteErrors {
-			combined = errors.Wrap(e, combined.Error())
+			msgs = append(msgs, e.Error())
 		}
+
+		combined := fmt.Errorf("failed to delete %d integration policies: %s", len(deleteErrors), strings.Join(msgs, "; "))
 		m.RecordUniFiAPICall("delete_integration_policy", duration, 0, combined)
 
 		return combined
@@ -260,9 +329,14 @@ func policyToCNAMERecord(policy *DNSPolicy) DNSRecord {
 
 func policyToMXRecord(policy *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: policy.ID, Enabled: policy.Enabled, Key: policy.Domain, RecordType: recordTypeMX}
-	if policy.Priority != nil && policy.MailServerDomain != nil {
-		rec.Value = fmt.Sprintf("%d %s", *policy.Priority, *policy.MailServerDomain)
+
+	if policy.Priority == nil || policy.MailServerDomain == nil {
+		log.Warn("MX policy missing required fields, record value will be empty", "id", policy.ID, "domain", policy.Domain)
+
+		return rec
 	}
+
+	rec.Value = fmt.Sprintf("%d %s", *policy.Priority, *policy.MailServerDomain)
 
 	return rec
 }
@@ -278,16 +352,22 @@ func policyToTXTRecord(policy *DNSPolicy) DNSRecord {
 
 func policyToSRVRecord(policy *DNSPolicy) DNSRecord {
 	rec := DNSRecord{ID: policy.ID, Enabled: policy.Enabled, RecordType: recordTypeSRV}
+
 	// Reconstruct the canonical external-dns SRV name: _service._protocol.domain
 	if policy.Service != nil && policy.Protocol != nil {
 		rec.Key = fmt.Sprintf("%s.%s.%s", *policy.Service, *policy.Protocol, policy.Domain)
 	} else {
 		rec.Key = policy.Domain
 	}
+
 	// Encode as "priority weight port target" matching the static-dns transformation.
-	if policy.Priority != nil && policy.Weight != nil && policy.Port != nil && policy.ServerDomain != nil {
-		rec.Value = fmt.Sprintf("%d %d %d %s", *policy.Priority, *policy.Weight, *policy.Port, *policy.ServerDomain)
+	if policy.Priority == nil || policy.Weight == nil || policy.Port == nil || policy.ServerDomain == nil {
+		log.Warn("SRV policy missing required fields, record value will be empty", "id", policy.ID, "domain", policy.Domain)
+
+		return rec
 	}
+
+	rec.Value = fmt.Sprintf("%d %d %d %s", *policy.Priority, *policy.Weight, *policy.Port, *policy.ServerDomain)
 
 	return rec
 }
@@ -306,17 +386,26 @@ func endpointToDNSPolicy(endpoint *externaldnsendpoint.Endpoint, target string) 
 	case recordTypeA:
 		policy.Type = integrationTypeA
 		policy.IPv4Address = strPtr(target)
-		policy.TTLSeconds = &ttl
+
+		if ttl > 0 {
+			policy.TTLSeconds = &ttl
+		}
 
 	case recordTypeAAAA:
 		policy.Type = integrationTypeAAAA
 		policy.IPv6Address = strPtr(target)
-		policy.TTLSeconds = &ttl
+
+		if ttl > 0 {
+			policy.TTLSeconds = &ttl
+		}
 
 	case recordTypeCNAME:
 		policy.Type = integrationTypeCNAME
 		policy.TargetDomain = strPtr(target)
-		policy.TTLSeconds = &ttl
+
+		if ttl > 0 {
+			policy.TTLSeconds = &ttl
+		}
 
 	case recordTypeMX:
 		policy.Type = integrationTypeMX
@@ -372,10 +461,11 @@ func fillSRVPolicy(endpoint *externaldnsendpoint.Endpoint, target string, policy
 }
 
 // parseSRVDNSName splits "_service._protocol.domain" into its three components.
-// Both service and protocol must start with an underscore per RFC 2782.
+// Both service and protocol must start with an underscore per RFC 2782, and
+// domain must be non-empty (trailing-dot names like "_svc._tcp." are rejected).
 func parseSRVDNSName(name string) (service, protocol, domain string, err error) {
 	parts := strings.SplitN(name, ".", srvDNSNameParts)
-	if len(parts) != srvDNSNameParts || !strings.HasPrefix(parts[0], "_") || !strings.HasPrefix(parts[1], "_") {
+	if len(parts) != srvDNSNameParts || !strings.HasPrefix(parts[0], "_") || !strings.HasPrefix(parts[1], "_") || parts[2] == "" {
 		return "", "", "", NewDataError("parse", "SRV DNS name: "+name, nil)
 	}
 

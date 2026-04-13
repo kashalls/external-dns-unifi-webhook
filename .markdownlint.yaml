@@ -8,3 +8,6 @@ MD029: false
 
 # MD033 - Inline HTML (allow for GitHub features like <details>, <div>)
 MD033: false
+
+# MD060 - Table column style (disabled: mixed aligned/compact tables are intentional)
+MD060: false

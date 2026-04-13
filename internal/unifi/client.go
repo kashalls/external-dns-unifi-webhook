@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -18,8 +19,9 @@ import (
 )
 
 type ClientURLs struct {
-	Login   string
-	Records string
+	Login       string
+	Records     string // single-resource path (…/policies/{id}): used for DELETE
+	RecordsList string // collection path (…/policies): used for GET list and POST create
 }
 
 // httpClient is the DNS provider client.
@@ -32,10 +34,20 @@ type httpClient struct {
 }
 
 const (
+	// unifiCloudAPIBaseURL is a fmt format string; substitute the console ID with fmt.Sprintf.
+	unifiCloudAPIBaseURL = "https://api.ui.com/v1/connector/consoles/%s"
+
 	unifiLoginPath          = "%s/api/auth/login"
 	unifiLoginPathExternal  = "%s/api/login"
 	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
 	unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
+
+	// unifiIntegrationRecordsPath is the collection endpoint (list + create) for the Integration API.
+	// No trailing ID placeholder — avoids a trailing slash that causes 404s on the Integration API.
+	unifiIntegrationRecordsPath = "%s/proxy/network/integration/v1/sites/%s/dns/policies"
+
+	// unifiIntegrationRecordPath is the single-resource endpoint (delete) for the Integration API.
+	unifiIntegrationRecordPath = "%s/proxy/network/integration/v1/sites/%s/dns/policies/%s"
 
 	recordTypeA     = "A"
 	recordTypeAAAA  = "AAAA"
@@ -66,21 +78,46 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 			Jar: jar,
 		},
 		ClientURLs: &ClientURLs{
-			Login:   unifiLoginPath,
-			Records: unifiRecordPath,
+			Login:       unifiLoginPath,
+			Records:     unifiRecordPath,
+			RecordsList: unifiRecordPath,
 		},
 	}
 
 	if client.ExternalController {
 		client.ClientURLs.Login = unifiLoginPathExternal
 		client.ClientURLs.Records = unifiRecordPathExternal
+		client.ClientURLs.RecordsList = unifiRecordPathExternal
+	}
+
+	if client.UseCloudConnector {
+		if client.ConsoleID == "" {
+			return nil, errors.New("UNIFI_CLOUD_CONSOLE_ID is required when UNIFI_CLOUD_CONNECTOR is enabled")
+		}
+		// Substitute the console ID into the base URL so FormatURL can treat it as a plain host prefix.
+		client.Host = fmt.Sprintf(unifiCloudAPIBaseURL, client.ConsoleID)
+		client.ClientURLs.Login = unifiLoginPath
+		client.ClientURLs.Records = unifiRecordPath
+		client.ClientURLs.RecordsList = unifiRecordPath
+	}
+
+	if client.UseIntegrationAPI {
+		if client.APIKey == "" {
+			return nil, errors.New("UNIFI_API_KEY is required when UNIFI_INTEGRATION_API is enabled; username/password auth is not supported by the Integration API")
+		}
+		client.ClientURLs.Records = unifiIntegrationRecordPath
+		client.ClientURLs.RecordsList = unifiIntegrationRecordsPath
+
+		// The Integration API requires a site UUID in the path; UNIFI_SITE is typically
+		// the site name ("default") so resolve it to the actual UUID at startup.
+		if err := client.resolveSiteID(context.Background()); err != nil {
+			return nil, errors.Wrap(err, "failed to resolve Integration API site UUID")
+		}
 	}
 
 	if client.APIKey != "" {
 		return client, nil
 	}
-
-	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
 
 	err = client.login(context.Background())
 	if err != nil {
@@ -92,6 +129,10 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 
 // GetEndpoints retrieves the list of DNS records from the UniFi controller.
 func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
+	if c.UseIntegrationAPI {
+		return c.getIntegrationPolicies(ctx)
+	}
+
 	m := metrics.Get()
 	start := time.Now()
 
@@ -131,13 +172,27 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 
 	m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), nil)
 
-	// Loop through records to modify SRV type
+	transformSRVRecords(records)
+
+	log.Debug("fetched records", "count", len(records))
+
+	return records, nil
+}
+
+// transformSRVRecords rewrites SRV records from the static-dns wire format
+// (Priority/Weight/Port fields) into the "priority weight port target" Value
+// string that external-dns expects, and nils out the separate pointer fields.
+func transformSRVRecords(records []DNSRecord) {
 	for i, record := range records {
 		if record.RecordType != recordTypeSRV {
 			continue
 		}
 
-		// Modify the Target for SRV records
+		if record.Priority == nil || record.Weight == nil || record.Port == nil {
+			log.Warn("skipping SRV record with missing fields", "key", record.Key)
+			continue
+		}
+
 		records[i].Value = fmt.Sprintf("%d %d %d %s",
 			*record.Priority,
 			*record.Weight,
@@ -148,23 +203,25 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 		records[i].Weight = nil
 		records[i].Port = nil
 	}
-
-	log.Debug("fetched records", "count", len(records))
-
-	return records, nil
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
 func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) ([]*DNSRecord, error) {
-	m := metrics.Get()
-	start := time.Now()
-
-	// CNAME records can only have one target
+	// CNAME records can only have one target regardless of which API is used.
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
-		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
+		metrics.Get().IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
 		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", "key", endpoint.DNSName, "ignored_targets", endpoint.Targets[1:])
 		endpoint.Targets = endpoint.Targets[:1]
 	}
+
+	if c.UseIntegrationAPI {
+		return c.createIntegrationPolicy(ctx, endpoint)
+	}
+
+	m := metrics.Get()
+	start := time.Now()
+
+	// CNAME warning already handled above; targets already truncated.
 
 	createdRecords := make([]*DNSRecord, 0, len(endpoint.Targets))
 
@@ -173,7 +230,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 
 		// SRV records need special parsing
 		if endpoint.RecordType == recordTypeSRV {
-			err := parseSRVTarget(&record, endpoint.Targets[0])
+			err := parseSRVTarget(&record, target)
 			if err != nil {
 				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
@@ -257,6 +314,10 @@ func (c *httpClient) createSingleDNSRecord(ctx context.Context, record *DNSRecor
 
 // DeleteEndpoint deletes a DNS record from the UniFi controller.
 func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) error {
+	if c.UseIntegrationAPI {
+		return c.deleteIntegrationPolicy(ctx, endpoint)
+	}
+
 	m := metrics.Get()
 	start := time.Now()
 
@@ -290,10 +351,12 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 
 	duration := time.Since(start)
 	if len(deleteErrors) > 0 {
-		err := errors.Newf("failed to delete %d records", len(deleteErrors))
+		msgs := make([]string, 0, len(deleteErrors))
 		for _, deleteErr := range deleteErrors {
-			err = errors.Wrap(deleteErr, err.Error())
+			msgs = append(msgs, deleteErr.Error())
 		}
+
+		err := fmt.Errorf("failed to delete %d records: %s", len(deleteErrors), strings.Join(msgs, "; "))
 		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
 
 		return err
@@ -305,7 +368,7 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 
 func (c *httpClient) login(ctx context.Context) error {
 	m := metrics.Get()
-	jsonBody, err := json.Marshal(Login{
+	jsonBody, err := json.Marshal(Login{ //nolint:gosec // G101: password is user-supplied config, not a hardcoded credential
 		Username: c.User,
 		Password: c.Password,
 		Remember: true,
@@ -385,8 +448,9 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body io
 		}
 	}
 
-	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
-	if resp.StatusCode != http.StatusOK {
+	// Accept any 2xx response. The static-dns API always returns 200, but the
+	// Integration API returns 201 Created for POST requests.
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= 300 {
 		return nil, c.handleErrorResponse(resp, method, path)
 	}
 
@@ -426,7 +490,7 @@ func (c *httpClient) handleUnauthorized(ctx context.Context, req *http.Request, 
 	// Retry the request
 	log.Debug("retrying request after re-login")
 
-	resp, err := c.Do(req)
+	resp, err := c.Do(req) //nolint:gosec // G107: URL is constructed from validated config (UNIFI_HOST), not user-controlled input
 	if err != nil {
 		log.Error("Retry request failed", "error", err)
 

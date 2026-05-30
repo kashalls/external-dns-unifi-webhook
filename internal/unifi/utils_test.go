@@ -14,157 +14,157 @@ func TestFormatURL(t *testing.T) {
 		{
 			name:     "login path",
 			path:     "%s/api/auth/login",
-			params:   []string{"https://unifi.local"},
-			expected: "https://unifi.local/api/auth/login",
+			params:   []string{testHost},
+			expected: testURLLoginInternal,
 		},
 		{
 			name:     "records path with site",
-			path:     "%s/proxy/network/v2/api/site/%s/static-dns/%s",
-			params:   []string{"https://unifi.local", "default"},
-			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/",
+			path:     unifiRecordPath,
+			params:   []string{testHost, testSite},
+			expected: testURLRecordsInternal,
 		},
 		{
 			name:     "records path with site and record ID",
-			path:     "%s/proxy/network/v2/api/site/%s/static-dns/%s",
-			params:   []string{"https://unifi.local", "default", "abc123"},
+			path:     unifiRecordPath,
+			params:   []string{testHost, testSite, "abc123"},
 			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/abc123",
 		},
 		{
 			name:     "external controller login",
-			path:     "%s/api/login",
-			params:   []string{"https://ui.com"},
+			path:     unifiLoginPathExternal,
+			params:   []string{testHostExt},
 			expected: "https://ui.com/api/login",
 		},
 		{
 			name:     "external controller records",
-			path:     "%s/v2/api/site/%s/static-dns/%s",
-			params:   []string{"https://ui.com", "site-id", "record-id"},
+			path:     unifiRecordPathExternal,
+			params:   []string{testHostExt, "site-id", "record-id"},
 			expected: "https://ui.com/v2/api/site/site-id/static-dns/record-id",
 		},
 		{
 			name:     "no placeholders - appends params",
 			path:     "/api/login",
-			params:   []string{"https://example.com"},
+			params:   []string{testURLExample},
 			expected: "/api/loginhttps://example.com",
 		},
 		{
 			name:     "empty params",
-			path:     "%s/api/%s",
+			path:     testPathHostParam,
 			params:   []string{},
-			expected: "/api/",
+			expected: testPathAPISlash,
 		},
 		{
 			name:     "empty string params",
 			path:     "%s/api/%s/data",
-			params:   []string{"https://example.com", ""},
+			params:   []string{testURLExample, ""},
 			expected: "https://example.com/api//data",
 		},
 		{
 			name:     "more placeholders than params",
 			path:     "%s/api/%s/site/%s",
-			params:   []string{"https://example.com"},
+			params:   []string{testURLExample},
 			expected: "https://example.com/api//site/",
 		},
 		{
 			name:     "URL with port",
-			path:     "%s/api/login",
+			path:     unifiLoginPathExternal,
 			params:   []string{"https://unifi.local:8443"},
 			expected: "https://unifi.local:8443/api/login",
 		},
 		{
 			name:     "URL with query params",
 			path:     "%s/api/site/%s?filter=active",
-			params:   []string{"https://unifi.local", "default"},
+			params:   []string{testHost, testSite},
 			expected: "https://unifi.local/api/site/default?filter=active",
 		},
 		{
 			name:     "special characters in params",
-			path:     "%s/api/%s",
-			params:   []string{"https://example.com", "special-chars_123"},
+			path:     testPathHostParam,
+			params:   []string{testURLExample, "special-chars_123"},
 			expected: "https://example.com/api/special-chars_123",
 		},
 		{
 			name:     "unicode in params",
-			path:     "%s/api/%s",
+			path:     testPathHostParam,
 			params:   []string{"https://пример.рф", "сайт"},
 			expected: "https://пример.рф/api/сайт",
 		},
 		{
 			name:     "empty path - appends params",
 			path:     "",
-			params:   []string{"https://example.com"},
-			expected: "https://example.com",
+			params:   []string{testURLExample},
+			expected: testURLExample,
 		},
 		{
 			name:     "single placeholder",
-			path:     "%s",
-			params:   []string{"https://example.com"},
-			expected: "https://example.com",
+			path:     testPathSingle,
+			params:   []string{testURLExample},
+			expected: testURLExample,
 		},
 		{
 			name:     "consecutive placeholders",
-			path:     "%s%s%s",
+			path:     testPathTriple,
 			params:   []string{"a", "b", "c"},
 			expected: "abc",
 		},
 		{
 			name:     "path with trailing slash",
 			path:     "%s/api/%s/",
-			params:   []string{"https://example.com", "v1"},
+			params:   []string{testURLExample, "v1"},
 			expected: "https://example.com/api/v1/",
 		},
 		{
 			name:     "path with multiple slashes",
 			path:     "%s//api//%s",
-			params:   []string{"https://example.com", "endpoint"},
+			params:   []string{testURLExample, "endpoint"},
 			expected: "https://example.com//api//endpoint",
 		},
 		{
 			name:     "nil params equivalent",
-			path:     "%s/api/%s",
+			path:     testPathHostParam,
 			params:   nil,
-			expected: "/api/",
+			expected: testPathAPISlash,
 		},
 		{
 			name:     "IPv4 address",
-			path:     "%s/api/login",
+			path:     unifiLoginPathExternal,
 			params:   []string{"https://192.168.1.1"},
 			expected: "https://192.168.1.1/api/login",
 		},
 		{
 			name:     "IPv6 address",
-			path:     "%s/api/login",
+			path:     unifiLoginPathExternal,
 			params:   []string{"https://[2001:db8::1]"},
 			expected: "https://[2001:db8::1]/api/login",
 		},
 		{
 			name:     "path injection attempt",
-			path:     "%s/api/%s",
-			params:   []string{"https://example.com", "../../../etc/passwd"},
+			path:     testPathHostParam,
+			params:   []string{testURLExample, "../../../etc/passwd"},
 			expected: "https://example.com/api/../../../etc/passwd",
 		},
 		{
 			name:     "URL with fragment",
 			path:     "%s/api/%s#section",
-			params:   []string{"https://example.com", "resource"},
+			params:   []string{testURLExample, "resource"},
 			expected: "https://example.com/api/resource#section",
 		},
 		{
 			name:     "URL with credentials",
-			path:     "%s/api",
-			params:   []string{"https://user:pass@example.com"},
-			expected: "https://user:pass@example.com/api",
+			path:     testPathHost,
+			params:   []string{testURLCreds},
+			expected: testURLCreds + "/api",
 		},
 		{
 			name:     "long record ID",
 			path:     "%s/api/site/%s/static-dns/%s",
-			params:   []string{"https://example.com", "default", "abcdef0123456789abcdef0123456789abcdef01"},
+			params:   []string{testURLExample, testSite, "abcdef0123456789abcdef0123456789abcdef01"},
 			expected: "https://example.com/api/site/default/static-dns/abcdef0123456789abcdef0123456789abcdef01",
 		},
 		{
 			name:     "whitespace in params",
-			path:     "%s/api/%s",
-			params:   []string{"https://example.com", "my site"},
+			path:     testPathHostParam,
+			params:   []string{testURLExample, "my site"},
 			expected: "https://example.com/api/my site",
 		},
 	}
@@ -181,16 +181,6 @@ func TestFormatURL(t *testing.T) {
 
 // TestFormatURLRealWorldUsage tests actual usage patterns from the codebase.
 func TestFormatURLRealWorldUsage(t *testing.T) {
-	const (
-		host                    = "https://unifi.local"
-		site                    = "default"
-		recordID                = "507f1f77bcf86cd799439011"
-		unifiLoginPath          = "%s/api/auth/login"
-		unifiLoginPathExternal  = "%s/api/login"
-		unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
-		unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
-	)
-
 	tests := []struct {
 		name     string
 		path     string
@@ -200,49 +190,49 @@ func TestFormatURLRealWorldUsage(t *testing.T) {
 		{
 			name:     "internal controller login",
 			path:     unifiLoginPath,
-			params:   []string{host},
-			expected: "https://unifi.local/api/auth/login",
+			params:   []string{testHost},
+			expected: testURLLoginInternal,
 		},
 		{
-			name:     "external controller login",
+			name:     testNameExtCtrlLogin,
 			path:     unifiLoginPathExternal,
-			params:   []string{"https://ui.com"},
-			expected: "https://ui.com/api/login",
+			params:   []string{testHostExt},
+			expected: testURLLoginExternal,
 		},
 		{
 			name:     "get all records (internal)",
 			path:     unifiRecordPath,
-			params:   []string{host, site},
-			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/",
+			params:   []string{testHost, testSite},
+			expected: testURLRecordsInternal,
 		},
 		{
 			name:     "get specific record (internal)",
 			path:     unifiRecordPath,
-			params:   []string{host, site, recordID},
+			params:   []string{testHost, testSite, testRecordID},
 			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
 		},
 		{
 			name:     "get all records (external)",
 			path:     unifiRecordPathExternal,
-			params:   []string{"https://ui.com", site},
+			params:   []string{testHostExt, testSite},
 			expected: "https://ui.com/v2/api/site/default/static-dns/",
 		},
 		{
 			name:     "get specific record (external)",
 			path:     unifiRecordPathExternal,
-			params:   []string{"https://ui.com", site, recordID},
+			params:   []string{testHostExt, testSite, testRecordID},
 			expected: "https://ui.com/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
 		},
 		{
 			name:     "custom site name",
 			path:     unifiRecordPath,
-			params:   []string{host, "my-custom-site"},
+			params:   []string{testHost, "my-custom-site"},
 			expected: "https://unifi.local/proxy/network/v2/api/site/my-custom-site/static-dns/",
 		},
 		{
 			name:     "controller with port",
 			path:     unifiLoginPath,
-			params:   []string{"https://192.168.1.1:8443"},
+			params:   []string{testHostPort},
 			expected: "https://192.168.1.1:8443/api/auth/login",
 		},
 	}
@@ -267,8 +257,8 @@ func TestFormatURLEdgeCases(t *testing.T) {
 	}{
 		{
 			name:     "extremely long URL",
-			path:     "%s/api/%s",
-			params:   []string{"https://example.com", string(make([]byte, 10000))},
+			path:     testPathHostParam,
+			params:   []string{testURLExample, string(make([]byte, 10000))},
 			expected: "https://example.com/api/" + string(make([]byte, 10000)),
 		},
 		{
@@ -279,7 +269,7 @@ func TestFormatURLEdgeCases(t *testing.T) {
 		},
 		{
 			name:     "only placeholders",
-			path:     "%s%s%s",
+			path:     testPathTriple,
 			params:   []string{"", "", ""},
 			expected: "",
 		},
@@ -317,7 +307,7 @@ func TestFormatURLPanic(t *testing.T) {
 		{
 			name:   "more params than placeholders - causes panic",
 			path:   "%s/api",
-			params: []string{"https://example.com", "extra", "params"},
+			params: []string{testURLExample, "extra", "params"},
 		},
 		{
 			name:   "three extra params",

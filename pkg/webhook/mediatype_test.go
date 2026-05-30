@@ -7,6 +7,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Shared test fixtures, declared as constants to satisfy the goconst linter.
+const (
+	mtV1              = "application/external.dns.webhook+json;version=1"
+	mtV2              = "application/external.dns.webhook+json;version=2"
+	mtAppJSON         = "application/json"
+	mtV1Spaced        = " application/external.dns.webhook+json;version=1 "
+	mtV1Upper         = "Application/external.dns.webhook+json;version=1"
+	errMsgUnsupported = "unsupported media type version"
+)
+
 func TestMediaTypeVersion(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -16,12 +26,12 @@ func TestMediaTypeVersion(t *testing.T) {
 		{
 			name:     "version 1",
 			version:  "1",
-			expected: "application/external.dns.webhook+json;version=1",
+			expected: mtV1,
 		},
 		{
 			name:     "version 2",
 			version:  "2",
-			expected: "application/external.dns.webhook+json;version=2",
+			expected: mtV2,
 		},
 		{
 			name:     "empty version",
@@ -54,44 +64,44 @@ func TestMediaType_Is(t *testing.T) {
 	}{
 		{
 			name:        "exact match",
-			mediaType:   "application/external.dns.webhook+json;version=1",
-			headerValue: "application/external.dns.webhook+json;version=1",
+			mediaType:   mtV1,
+			headerValue: mtV1,
 			expected:    true,
 		},
 		{
 			name:        "no match - different version",
-			mediaType:   "application/external.dns.webhook+json;version=1",
-			headerValue: "application/external.dns.webhook+json;version=2",
+			mediaType:   mtV1,
+			headerValue: mtV2,
 			expected:    false,
 		},
 		{
 			name:        "no match - missing version",
-			mediaType:   "application/external.dns.webhook+json;version=1",
-			headerValue: "application/external.dns.webhook+json;",
+			mediaType:   mtV1,
+			headerValue: mediaTypeFormat,
 			expected:    false,
 		},
 		{
 			name:        "no match - empty string",
-			mediaType:   "application/external.dns.webhook+json;version=1",
+			mediaType:   mtV1,
 			headerValue: "",
 			expected:    false,
 		},
 		{
 			name:        "no match - completely different",
-			mediaType:   "application/external.dns.webhook+json;version=1",
-			headerValue: "application/json",
+			mediaType:   mtV1,
+			headerValue: mtAppJSON,
 			expected:    false,
 		},
 		{
 			name:        "no match - extra whitespace",
-			mediaType:   "application/external.dns.webhook+json;version=1",
-			headerValue: " application/external.dns.webhook+json;version=1 ",
+			mediaType:   mtV1,
+			headerValue: mtV1Spaced,
 			expected:    false,
 		},
 		{
 			name:        "no match - case difference",
-			mediaType:   "application/external.dns.webhook+json;version=1",
-			headerValue: "Application/external.dns.webhook+json;version=1",
+			mediaType:   mtV1,
+			headerValue: mtV1Upper,
 			expected:    false,
 		},
 	}
@@ -116,100 +126,100 @@ func TestCheckAndGetMediaTypeHeaderValue(t *testing.T) {
 	}{
 		{
 			name:        "valid version 1",
-			value:       "application/external.dns.webhook+json;version=1",
+			value:       mtV1,
 			wantVersion: "1",
 			wantErr:     false,
 		},
 		{
 			name:        "unsupported version 2",
-			value:       "application/external.dns.webhook+json;version=2",
+			value:       mtV2,
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "unsupported version 0",
 			value:       "application/external.dns.webhook+json;version=0",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "missing version parameter",
-			value:       "application/external.dns.webhook+json;",
+			value:       mediaTypeFormat,
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "empty string",
 			value:       "",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "completely wrong media type",
-			value:       "application/json",
+			value:       mtAppJSON,
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "wrong format with version",
 			value:       "application/json;version=1",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "extra whitespace",
-			value:       " application/external.dns.webhook+json;version=1 ",
+			value:       mtV1Spaced,
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "case sensitive - uppercase",
-			value:       "Application/external.dns.webhook+json;version=1",
+			value:       mtV1Upper,
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "malformed - missing semicolon",
 			value:       "application/external.dns.webhook+jsonversion=1",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "malformed - extra parameters",
 			value:       "application/external.dns.webhook+json;version=1;charset=utf-8",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "version with leading zero",
 			value:       "application/external.dns.webhook+json;version=01",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "negative version",
 			value:       "application/external.dns.webhook+json;version=-1",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 		{
 			name:        "decimal version",
 			value:       "application/external.dns.webhook+json;version=1.0",
 			wantVersion: "",
 			wantErr:     true,
-			errContains: "unsupported media type version",
+			errContains: errMsgUnsupported,
 		},
 	}
 
@@ -244,7 +254,7 @@ func TestCheckAndGetMediaTypeHeaderValue(t *testing.T) {
 }
 
 func TestMediaTypeVersion1Constant(t *testing.T) {
-	expected := mediaType("application/external.dns.webhook+json;version=1")
+	expected := mediaType(mtV1)
 	if mediaTypeVersion1 != expected {
 		t.Errorf("mediaTypeVersion1 = %q, want %q", mediaTypeVersion1, expected)
 	}
@@ -255,7 +265,7 @@ func TestErrUnsupportedMediaType(t *testing.T) {
 		t.Error("errUnsupportedMediaType should not be nil")
 	}
 
-	expected := "unsupported media type version"
+	expected := errMsgUnsupported
 	if errUnsupportedMediaType.Error() != expected {
 		t.Errorf("errUnsupportedMediaType.Error() = %q, want %q", errUnsupportedMediaType.Error(), expected)
 	}
@@ -263,7 +273,7 @@ func TestErrUnsupportedMediaType(t *testing.T) {
 
 // TestCheckAndGetMediaTypeHeaderValueErrorMessage verifies error message format.
 func TestCheckAndGetMediaTypeHeaderValueErrorMessage(t *testing.T) {
-	value := "application/json"
+	value := mtAppJSON
 	_, err := checkAndGetMediaTypeHeaderValue(value)
 
 	if err == nil {
@@ -278,7 +288,7 @@ func TestCheckAndGetMediaTypeHeaderValueErrorMessage(t *testing.T) {
 	}
 
 	// Error should mention supported media types
-	if !strings.Contains(errMsg, "application/external.dns.webhook+json;version=1") {
+	if !strings.Contains(errMsg, mtV1) {
 		t.Errorf("error message should contain supported media type, got: %s", errMsg)
 	}
 

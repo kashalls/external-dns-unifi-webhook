@@ -13,6 +13,13 @@ const (
 	ProviderName = "unifi"
 
 	histogramBucketCount = 8
+
+	// Prometheus label names reused across metric definitions.
+	labelProvider   = "provider"
+	labelEndpoint   = "endpoint"
+	labelRecordType = "record_type"
+	labelOperation  = "operation"
+	labelMethod     = "method"
 )
 
 // Metrics holds all Prometheus metrics for the webhook.
@@ -74,7 +81,7 @@ func New(version string) *Metrics {
 				Name:      "http_requests_total",
 				Help:      "Total number of HTTP requests",
 			},
-			[]string{"provider", "method", "endpoint", "status_code"},
+			[]string{labelProvider, labelMethod, labelEndpoint, "status_code"},
 		),
 		HTTPRequestDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -83,7 +90,7 @@ func New(version string) *Metrics {
 				Help:      "HTTP request duration in seconds",
 				Buckets:   prometheus.DefBuckets,
 			},
-			[]string{"provider", "method", "endpoint"},
+			[]string{labelProvider, labelMethod, labelEndpoint},
 		),
 		HTTPRequestsInFlight: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -91,7 +98,7 @@ func New(version string) *Metrics {
 				Name:      "http_requests_in_flight",
 				Help:      "Number of HTTP requests currently being processed",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		HTTPResponseSizeBytes: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -100,7 +107,7 @@ func New(version string) *Metrics {
 				Help:      "HTTP response size in bytes",
 				Buckets:   prometheus.ExponentialBuckets(100, 10, histogramBucketCount),
 			},
-			[]string{"provider", "method", "endpoint"},
+			[]string{labelProvider, labelMethod, labelEndpoint},
 		),
 		HTTPValidationErrorsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -108,7 +115,7 @@ func New(version string) *Metrics {
 				Name:      "http_validation_errors_total",
 				Help:      "Total number of HTTP header validation errors",
 			},
-			[]string{"provider", "header_type"},
+			[]string{labelProvider, "header_type"},
 		),
 		HTTPJSONErrorsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -116,7 +123,7 @@ func New(version string) *Metrics {
 				Name:      "http_json_errors_total",
 				Help:      "Total number of JSON decoding errors",
 			},
-			[]string{"provider", "endpoint"},
+			[]string{labelProvider, labelEndpoint},
 		),
 
 		// Business metrics
@@ -126,7 +133,7 @@ func New(version string) *Metrics {
 				Name:      "records",
 				Help:      "Current number of DNS records by type",
 			},
-			[]string{"provider", "record_type"},
+			[]string{labelProvider, labelRecordType},
 		),
 		ChangesTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -134,7 +141,7 @@ func New(version string) *Metrics {
 				Name:      "changes_total",
 				Help:      "Total number of DNS changes",
 			},
-			[]string{"provider", "operation"},
+			[]string{labelProvider, labelOperation},
 		),
 		ChangesByTypeTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -142,7 +149,7 @@ func New(version string) *Metrics {
 				Name:      "changes_by_type_total",
 				Help:      "Total number of DNS changes by record type",
 			},
-			[]string{"provider", "operation", "record_type"},
+			[]string{labelProvider, labelOperation, labelRecordType},
 		),
 		CNAMEConflictsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -150,7 +157,7 @@ func New(version string) *Metrics {
 				Name:      "cname_conflicts_total",
 				Help:      "Total number of CNAME conflicts detected",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		IgnoredCNAMETargetsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -158,7 +165,7 @@ func New(version string) *Metrics {
 				Name:      "ignored_cname_targets_total",
 				Help:      "Total number of ignored CNAME targets (only first target is used)",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		SRVParsingErrorsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -166,7 +173,7 @@ func New(version string) *Metrics {
 				Name:      "srv_parsing_errors_total",
 				Help:      "Total number of SRV record parsing errors",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		BatchSize: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -175,7 +182,7 @@ func New(version string) *Metrics {
 				Help:      "Size of change batches",
 				Buckets:   prometheus.ExponentialBuckets(1, 2, 10),
 			},
-			[]string{"provider", "operation"},
+			[]string{labelProvider, labelOperation},
 		),
 
 		// Endpoint operations
@@ -185,7 +192,7 @@ func New(version string) *Metrics {
 				Name:      "adjust_endpoints_total",
 				Help:      "Total number of adjust endpoints calls",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		NegotiateTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -193,7 +200,7 @@ func New(version string) *Metrics {
 				Name:      "negotiate_total",
 				Help:      "Total number of negotiate calls",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 
 		// UniFi API metrics
@@ -203,7 +210,7 @@ func New(version string) *Metrics {
 				Name:      "unifi_api_errors_total",
 				Help:      "Total number of UniFi API errors",
 			},
-			[]string{"provider", "operation"},
+			[]string{labelProvider, labelOperation},
 		),
 		UniFiAPIDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -212,7 +219,7 @@ func New(version string) *Metrics {
 				Help:      "UniFi API request duration in seconds",
 				Buckets:   prometheus.DefBuckets,
 			},
-			[]string{"provider", "operation"},
+			[]string{labelProvider, labelOperation},
 		),
 		UniFiLoginTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -220,7 +227,7 @@ func New(version string) *Metrics {
 				Name:      "unifi_login_total",
 				Help:      "Total number of UniFi login attempts",
 			},
-			[]string{"provider", "status"},
+			[]string{labelProvider, "status"},
 		),
 		UniFiReloginTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -228,7 +235,7 @@ func New(version string) *Metrics {
 				Name:      "unifi_relogin_total",
 				Help:      "Total number of UniFi re-login attempts after 401",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		UniFiCSRFRefreshesTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -236,7 +243,7 @@ func New(version string) *Metrics {
 				Name:      "unifi_csrf_refreshes_total",
 				Help:      "Total number of CSRF token refreshes",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		UniFiConnected: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -244,7 +251,7 @@ func New(version string) *Metrics {
 				Name:      "unifi_connected",
 				Help:      "UniFi connection status (1 = connected, 0 = disconnected)",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		UniFiResponseSizeBytes: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -253,7 +260,7 @@ func New(version string) *Metrics {
 				Help:      "UniFi API response size in bytes",
 				Buckets:   prometheus.ExponentialBuckets(100, 10, histogramBucketCount),
 			},
-			[]string{"operation"},
+			[]string{labelOperation},
 		),
 
 		// Quality metrics
@@ -263,7 +270,7 @@ func New(version string) *Metrics {
 				Name:      "consecutive_errors",
 				Help:      "Number of consecutive errors",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		LastSuccessTimestamp: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -271,7 +278,7 @@ func New(version string) *Metrics {
 				Name:      "last_success_timestamp",
 				Help:      "Timestamp of last successful operation",
 			},
-			[]string{"provider"},
+			[]string{labelProvider},
 		),
 		OperationSuccessRate: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -279,7 +286,7 @@ func New(version string) *Metrics {
 				Name:      "operation_success_rate",
 				Help:      "Success rate of operations (0-1)",
 			},
-			[]string{"operation"},
+			[]string{labelOperation},
 		),
 
 		// Info metric
@@ -289,7 +296,7 @@ func New(version string) *Metrics {
 				Name:      "info",
 				Help:      "Information about the webhook instance",
 			},
-			[]string{"version", "provider"},
+			[]string{"version", labelProvider},
 		),
 	}
 

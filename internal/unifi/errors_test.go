@@ -24,27 +24,27 @@ func TestAuthError(t *testing.T) {
 	}{
 		{
 			name:       "auth error with wrapped error",
-			operation:  "login",
+			operation:  testOperationLogin,
 			status:     401,
-			message:    "invalid credentials",
+			message:    testMsgInvalidAuth,
 			wrappedErr: errors.New("connection timeout"),
 			expectedContain: []string{
-				"authentication failed during login",
-				"status 401",
-				"invalid credentials",
+				testAuthFailedLogin,
+				testStatus401,
+				testMsgInvalidAuth,
 				"connection timeout",
 			},
 		},
 		{
 			name:       "auth error without wrapped error",
-			operation:  "login",
+			operation:  testOperationLogin,
 			status:     403,
-			message:    "forbidden",
+			message:    testMsgForbidden,
 			wrappedErr: nil,
 			expectedContain: []string{
-				"authentication failed during login",
+				testAuthFailedLogin,
 				"status 403",
-				"forbidden",
+				testMsgForbidden,
 			},
 		},
 		{
@@ -55,31 +55,31 @@ func TestAuthError(t *testing.T) {
 			wrappedErr: nil,
 			expectedContain: []string{
 				"authentication failed during refresh",
-				"status 401",
+				testStatus401,
 			},
 		},
 		{
 			name:       "auth error with status 0",
 			operation:  "verify",
 			status:     0,
-			message:    "no response",
+			message:    testMsgNoResponse,
 			wrappedErr: nil,
 			expectedContain: []string{
 				"authentication failed during verify",
-				"status 0",
-				"no response",
+				testStatus0,
+				testMsgNoResponse,
 			},
 		},
 		{
 			name:       "auth error with negative status",
 			operation:  "test",
 			status:     -1,
-			message:    "invalid",
+			message:    testMsgInvalid,
 			wrappedErr: nil,
 			expectedContain: []string{
 				"authentication failed during test",
 				"status -1",
-				"invalid",
+				testMsgInvalid,
 			},
 		},
 	}
@@ -127,29 +127,29 @@ func TestNetworkError(t *testing.T) {
 	}{
 		{
 			name:       "network error with connection timeout",
-			operation:  "GET",
-			url:        "https://unifi.example.com/api/login",
+			operation:  http.MethodGet,
+			url:        testURLLoginExample,
 			wrappedErr: errors.New("dial tcp: connection timeout"),
 			expectedContain: []string{
 				"network error during GET",
-				"https://unifi.example.com/api/login",
+				testURLLoginExample,
 				"dial tcp: connection timeout",
 			},
 		},
 		{
 			name:       "network error with DNS failure",
-			operation:  "POST",
-			url:        "https://invalid.local/api",
+			operation:  http.MethodPost,
+			url:        testURLInvalid,
 			wrappedErr: errors.New("no such host"),
 			expectedContain: []string{
 				"network error during POST",
-				"https://invalid.local/api",
+				testURLInvalid,
 				"no such host",
 			},
 		},
 		{
 			name:       "network error with empty URL",
-			operation:  "DELETE",
+			operation:  http.MethodDelete,
 			url:        "",
 			wrappedErr: errors.New("empty URL"),
 			expectedContain: []string{
@@ -160,11 +160,11 @@ func TestNetworkError(t *testing.T) {
 		{
 			name:       "network error with special characters in URL",
 			operation:  "PUT",
-			url:        "https://unifi.local/api?param=value&key=секрет",
+			url:        testURLSpecialChars,
 			wrappedErr: errors.New("invalid character"),
 			expectedContain: []string{
 				"network error during PUT",
-				"https://unifi.local/api?param=value&key=секрет",
+				testURLSpecialChars,
 				"invalid character",
 			},
 		},
@@ -211,32 +211,32 @@ func TestAPIError(t *testing.T) {
 	}{
 		{
 			name:       "API error 404",
-			operation:  "GET",
-			url:        "https://unifi.local/api/site/default/static-dns/missing",
+			operation:  http.MethodGet,
+			url:        testURLMissingRecord,
 			statusCode: 404,
-			message:    "Record not found",
+			message:    testMsgRecordNotFound,
 			expectedContain: []string{
 				"API error during GET",
-				"https://unifi.local/api/site/default/static-dns/missing",
+				testURLMissingRecord,
 				"status 404",
-				"Record not found",
+				testMsgRecordNotFound,
 			},
 		},
 		{
 			name:       "API error 500",
-			operation:  "POST",
+			operation:  http.MethodPost,
 			url:        "https://unifi.local/api/login",
 			statusCode: 500,
-			message:    "Internal server error",
+			message:    testMsgInternalServer,
 			expectedContain: []string{
-				"API error during POST",
+				testAPIErrPost,
 				"status 500",
-				"Internal server error",
+				testMsgInternalServer,
 			},
 		},
 		{
 			name:       "API error with empty message",
-			operation:  "DELETE",
+			operation:  http.MethodDelete,
 			url:        "https://unifi.local/api/record/123",
 			statusCode: 400,
 			message:    "",
@@ -250,21 +250,21 @@ func TestAPIError(t *testing.T) {
 			operation:  "PATCH",
 			url:        "https://unifi.local/api",
 			statusCode: 0,
-			message:    "Unknown error",
+			message:    testMsgUnknownError,
 			expectedContain: []string{
 				"API error during PATCH",
-				"status 0",
-				"Unknown error",
+				testStatus0,
+				testMsgUnknownError,
 			},
 		},
 		{
 			name:       "API error with long message",
-			operation:  "POST",
+			operation:  http.MethodPost,
 			url:        "https://unifi.local/api/dns",
 			statusCode: 422,
 			message:    strings.Repeat("Very long error message with lots of details. ", 10),
 			expectedContain: []string{
-				"API error during POST",
+				testAPIErrPost,
 				"status 422",
 				"Very long error message",
 			},
@@ -301,45 +301,45 @@ func TestDataError(t *testing.T) {
 	}{
 		{
 			name:       "data error marshaling JSON",
-			operation:  "marshal",
-			dataType:   "DNS record",
+			operation:  testOpMarshal,
+			dataType:   testDataDNSRecord,
 			wrappedErr: errors.New("json: unsupported type"),
 			expectedContain: []string{
 				"data error during marshal",
-				"DNS record",
+				testDataDNSRecord,
 				"json: unsupported type",
 			},
 		},
 		{
 			name:       "data error unmarshaling JSON",
 			operation:  "unmarshal",
-			dataType:   "API response",
+			dataType:   testDataAPIResp,
 			wrappedErr: errors.New("json: cannot unmarshal"),
 			expectedContain: []string{
 				"data error during unmarshal",
-				"API response",
+				testDataAPIResp,
 				"json: cannot unmarshal",
 			},
 		},
 		{
 			name:       "data error reading body",
 			operation:  "read",
-			dataType:   "response body",
+			dataType:   testDataRespBody,
 			wrappedErr: errors.New("unexpected EOF"),
 			expectedContain: []string{
 				"data error during read",
-				"response body",
+				testDataRespBody,
 				"unexpected EOF",
 			},
 		},
 		{
 			name:       "data error parsing SRV record",
 			operation:  "parse",
-			dataType:   "SRV record target",
+			dataType:   testDataSRVTarget,
 			wrappedErr: errors.New("invalid format"),
 			expectedContain: []string{
 				"data error during parse",
-				"SRV record target",
+				testDataSRVTarget,
 				"invalid format",
 			},
 		},
@@ -387,7 +387,7 @@ func TestDataError(t *testing.T) {
 // TestNewAuthError tests NewAuthError helper.
 func TestNewAuthError(t *testing.T) {
 	wrappedErr := errors.New("underlying error")
-	err := NewAuthError("login", 401, "unauthorized", wrappedErr)
+	err := NewAuthError(testOperationLogin, 401, "unauthorized", wrappedErr)
 
 	if err == nil {
 		t.Fatal("NewAuthError returned nil")
@@ -416,7 +416,7 @@ func TestNewAuthError(t *testing.T) {
 // TestNewNetworkError tests NewNetworkError helper.
 func TestNewNetworkError(t *testing.T) {
 	wrappedErr := errors.New("connection refused")
-	err := NewNetworkError("POST", "https://example.com", wrappedErr)
+	err := NewNetworkError(http.MethodPost, testURLExample, wrappedErr)
 
 	if err == nil {
 		t.Fatal("NewNetworkError returned nil")
@@ -428,11 +428,11 @@ func TestNewNetworkError(t *testing.T) {
 		t.Fatalf("NewNetworkError returned %T, want *NetworkError", err)
 	}
 
-	if netErr.Operation != "POST" {
-		t.Errorf("Operation = %q, want %q", netErr.Operation, "POST")
+	if netErr.Operation != http.MethodPost {
+		t.Errorf("Operation = %q, want %q", netErr.Operation, http.MethodPost)
 	}
-	if netErr.URL != "https://example.com" {
-		t.Errorf("URL = %q, want %q", netErr.URL, "https://example.com")
+	if netErr.URL != testURLExample {
+		t.Errorf("URL = %q, want %q", netErr.URL, testURLExample)
 	}
 	if !errors.Is(netErr.Err, wrappedErr) {
 		t.Errorf("Err = %v, want %v", netErr.Err, wrappedErr)
@@ -441,7 +441,7 @@ func TestNewNetworkError(t *testing.T) {
 
 // TestNewAPIError tests NewAPIError helper.
 func TestNewAPIError(t *testing.T) {
-	err := NewAPIError("GET", "https://api.example.com", 404, "not found")
+	err := NewAPIError(http.MethodGet, "https://api.example.com", 404, "not found")
 
 	if err == nil {
 		t.Fatal("NewAPIError returned nil")
@@ -453,8 +453,8 @@ func TestNewAPIError(t *testing.T) {
 		t.Fatalf("NewAPIError returned %T, want *APIError", err)
 	}
 
-	if apiErr.Operation != "GET" {
-		t.Errorf("Operation = %q, want %q", apiErr.Operation, "GET")
+	if apiErr.Operation != http.MethodGet {
+		t.Errorf("Operation = %q, want %q", apiErr.Operation, http.MethodGet)
 	}
 	if apiErr.URL != "https://api.example.com" {
 		t.Errorf("URL = %q, want %q", apiErr.URL, "https://api.example.com")
@@ -470,7 +470,7 @@ func TestNewAPIError(t *testing.T) {
 // TestNewDataError tests NewDataError helper.
 func TestNewDataError(t *testing.T) {
 	wrappedErr := errors.New("json error")
-	err := NewDataError("marshal", "user data", wrappedErr)
+	err := NewDataError(testOpMarshal, "user data", wrappedErr)
 
 	if err == nil {
 		t.Fatal("NewDataError returned nil")
@@ -482,8 +482,8 @@ func TestNewDataError(t *testing.T) {
 		t.Fatalf("NewDataError returned %T, want *DataError", err)
 	}
 
-	if dataErr.Operation != "marshal" {
-		t.Errorf("Operation = %q, want %q", dataErr.Operation, "marshal")
+	if dataErr.Operation != testOpMarshal {
+		t.Errorf("Operation = %q, want %q", dataErr.Operation, testOpMarshal)
 	}
 	if dataErr.DataType != "user data" {
 		t.Errorf("DataType = %q, want %q", dataErr.DataType, "user data")
@@ -502,26 +502,26 @@ func TestIsAuthError(t *testing.T) {
 	}{
 		{
 			name:     "actual AuthError",
-			err:      NewAuthError("login", 401, "fail", nil),
+			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
 			expected: true,
 		},
 		{
 			name:     "wrapped AuthError",
-			err:      errors.Wrap(NewAuthError("login", 401, "fail", nil), "additional context"),
+			err:      errors.Wrap(NewAuthError(testOperationLogin, 401, "fail", nil), "additional context"),
 			expected: true,
 		},
 		{
 			name:     "NetworkError",
-			err:      NewNetworkError("GET", "url", errors.New("error")),
+			err:      NewNetworkError(http.MethodGet, "url", errors.New("error")),
 			expected: false,
 		},
 		{
-			name:     "generic error",
+			name:     testMsgGenericError,
 			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
-			name:     "nil error",
+			name:     testNameNilError,
 			err:      nil,
 			expected: false,
 		},
@@ -546,26 +546,26 @@ func TestIsNetworkError(t *testing.T) {
 	}{
 		{
 			name:     "actual NetworkError",
-			err:      NewNetworkError("GET", "url", errors.New("error")),
+			err:      NewNetworkError(http.MethodGet, "url", errors.New("error")),
 			expected: true,
 		},
 		{
 			name:     "wrapped NetworkError",
-			err:      errors.Wrap(NewNetworkError("GET", "url", errors.New("error")), "context"),
+			err:      errors.Wrap(NewNetworkError(http.MethodGet, "url", errors.New("error")), "context"),
 			expected: true,
 		},
 		{
-			name:     "AuthError",
-			err:      NewAuthError("login", 401, "fail", nil),
+			name:     testNameAuthError,
+			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
 			expected: false,
 		},
 		{
-			name:     "generic error",
+			name:     testMsgGenericError,
 			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
-			name:     "nil error",
+			name:     testNameNilError,
 			err:      nil,
 			expected: false,
 		},
@@ -590,26 +590,26 @@ func TestIsAPIError(t *testing.T) {
 	}{
 		{
 			name:     "actual APIError",
-			err:      NewAPIError("GET", "url", 404, "not found"),
+			err:      NewAPIError(http.MethodGet, "url", 404, "not found"),
 			expected: true,
 		},
 		{
 			name:     "wrapped APIError",
-			err:      errors.Wrap(NewAPIError("GET", "url", 404, "not found"), "context"),
+			err:      errors.Wrap(NewAPIError(http.MethodGet, "url", 404, "not found"), "context"),
 			expected: true,
 		},
 		{
-			name:     "AuthError",
-			err:      NewAuthError("login", 401, "fail", nil),
+			name:     testNameAuthError,
+			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
 			expected: false,
 		},
 		{
-			name:     "generic error",
+			name:     testMsgGenericError,
 			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
-			name:     "nil error",
+			name:     testNameNilError,
 			err:      nil,
 			expected: false,
 		},
@@ -634,26 +634,26 @@ func TestIsDataError(t *testing.T) {
 	}{
 		{
 			name:     "actual DataError",
-			err:      NewDataError("marshal", "data", errors.New("error")),
+			err:      NewDataError(testOpMarshal, "data", errors.New("error")),
 			expected: true,
 		},
 		{
 			name:     "wrapped DataError",
-			err:      errors.Wrap(NewDataError("marshal", "data", errors.New("error")), "context"),
+			err:      errors.Wrap(NewDataError(testOpMarshal, "data", errors.New("error")), "context"),
 			expected: true,
 		},
 		{
-			name:     "AuthError",
-			err:      NewAuthError("login", 401, "fail", nil),
+			name:     testNameAuthError,
+			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
 			expected: false,
 		},
 		{
-			name:     "generic error",
+			name:     testMsgGenericError,
 			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
-			name:     "nil error",
+			name:     testNameNilError,
 			err:      nil,
 			expected: false,
 		},
@@ -695,7 +695,7 @@ func TestErrorChaining(t *testing.T) {
 
 // TestErrorAs tests errors.As with custom error types.
 func TestErrorAs(t *testing.T) {
-	authErr := NewAuthError("login", 401, "unauthorized", nil)
+	authErr := NewAuthError(testOperationLogin, 401, "unauthorized", nil)
 	wrappedErr := errors.Wrap(authErr, "wrapped")
 
 	var targetErr *AuthError
@@ -703,8 +703,8 @@ func TestErrorAs(t *testing.T) {
 		t.Fatal("errors.As failed to extract AuthError")
 	}
 
-	if targetErr.Operation != "login" {
-		t.Errorf("extracted AuthError has Operation = %q, want %q", targetErr.Operation, "login")
+	if targetErr.Operation != testOperationLogin {
+		t.Errorf("extracted AuthError has Operation = %q, want %q", targetErr.Operation, testOperationLogin)
 	}
 	if targetErr.Status != 401 {
 		t.Errorf("extracted AuthError has Status = %d, want %d", targetErr.Status, 401)

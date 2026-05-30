@@ -305,7 +305,7 @@ func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsen
 
 func (c *httpClient) login(ctx context.Context) error {
 	m := metrics.Get()
-	jsonBody, err := json.Marshal(Login{
+	jsonBody, err := json.Marshal(Login{ //nolint:gosec // G117: login must marshal credentials to authenticate
 		Username: c.User,
 		Password: c.Password,
 		Remember: true,

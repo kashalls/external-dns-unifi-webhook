@@ -38,18 +38,18 @@ func TestGetEndpoints(t *testing.T) {
 			name: "successful fetch with A records",
 			responseBody: []DNSRecord{
 				{
-					ID:         "record1",
-					Key:        "test.example.com",
+					ID:         testDNSID1,
+					Key:        testDomain,
 					RecordType: recordTypeA,
-					Value:      "192.168.1.1",
+					Value:      testIPv4A,
 					TTL:        300,
 					Enabled:    true,
 				},
 				{
-					ID:         "record2",
+					ID:         testDNSID2,
 					Key:        "test2.example.com",
 					RecordType: recordTypeA,
-					Value:      "192.168.1.2",
+					Value:      testIPv4B,
 					TTL:        600,
 					Enabled:    true,
 				},
@@ -72,9 +72,9 @@ func TestGetEndpoints(t *testing.T) {
 			responseBody: []DNSRecord{
 				{
 					ID:         "srv1",
-					Key:        "_service._tcp.example.com",
+					Key:        testSRVName,
 					RecordType: recordTypeSRV,
-					Value:      "target.example.com",
+					Value:      testTarget,
 					TTL:        300,
 					Priority:   intPtr(10),
 					Weight:     intPtr(20),
@@ -118,7 +118,7 @@ func TestGetEndpoints(t *testing.T) {
 		},
 		{
 			name:           "HTTP 500 error",
-			responseBody:   UnifiErrorResponse{Code: "ERROR", Message: "Internal server error"},
+			responseBody:   UnifiErrorResponse{Code: testErrCode, Message: testMsgInternalServer},
 			responseStatus: http.StatusInternalServerError,
 			expectedLen:    0,
 			expectedErr:    true,
@@ -135,10 +135,10 @@ func TestGetEndpoints(t *testing.T) {
 					Enabled:    true,
 				},
 				{
-					ID:         "cname1",
+					ID:         testCNAMEID,
 					Key:        "cname.example.com",
 					RecordType: recordTypeCNAME,
-					Value:      "target.example.com",
+					Value:      testTarget,
 					TTL:        300,
 					Enabled:    true,
 				},
@@ -176,13 +176,13 @@ func TestGetEndpoints(t *testing.T) {
 			client := &httpClient{
 				Config: &Config{
 					Host:          server.URL,
-					Site:          "default",
-					APIKey:        "test-key",
+					Site:          testSite,
+					APIKey:        testKeyA,
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
 				ClientURLs: &ClientURLs{
-					Records: "%s/v2/api/site/%s/static-dns/%s",
+					Records: unifiRecordPathExternal,
 				},
 			}
 
@@ -219,16 +219,16 @@ func TestCreateEndpoint(t *testing.T) {
 		{
 			name: "create A record",
 			endpoint: endpoint.NewEndpointWithTTL(
-				"test.example.com",
+				testDomain,
 				"A",
 				300,
-				"192.168.1.1",
+				testIPv4A,
 			),
 			responseBody: DNSRecord{
 				ID:         "new-record-1",
-				Key:        "test.example.com",
+				Key:        testDomain,
 				RecordType: recordTypeA,
-				Value:      "192.168.1.1",
+				Value:      testIPv4A,
 				TTL:        300,
 				Enabled:    true,
 			},
@@ -241,13 +241,13 @@ func TestCreateEndpoint(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to decode request body: %v", err)
 				}
-				if record.Key != "test.example.com" {
+				if record.Key != testDomain {
 					t.Errorf("Request Key = %q, want test.example.com", record.Key)
 				}
 				if record.RecordType != recordTypeA {
 					t.Errorf("Request RecordType = %q, want A", record.RecordType)
 				}
-				if record.Value != "192.168.1.1" {
+				if record.Value != testIPv4A {
 					t.Errorf("Request Value = %q, want 192.168.1.1", record.Value)
 				}
 			},
@@ -255,16 +255,16 @@ func TestCreateEndpoint(t *testing.T) {
 		{
 			name: "create CNAME record",
 			endpoint: endpoint.NewEndpointWithTTL(
-				"alias.example.com",
+				testAlias,
 				"CNAME",
 				600,
-				"target.example.com",
+				testTarget,
 			),
 			responseBody: DNSRecord{
 				ID:         "new-cname-1",
-				Key:        "alias.example.com",
+				Key:        testAlias,
 				RecordType: recordTypeCNAME,
-				Value:      "target.example.com",
+				Value:      testTarget,
 				TTL:        600,
 				Enabled:    true,
 			},
@@ -274,16 +274,16 @@ func TestCreateEndpoint(t *testing.T) {
 		{
 			name: "create SRV record",
 			endpoint: endpoint.NewEndpointWithTTL(
-				"_service._tcp.example.com",
+				testSRVName,
 				"SRV",
 				300,
 				"10 20 8080 target.example.com",
 			),
 			responseBody: DNSRecord{
 				ID:         "new-srv-1",
-				Key:        "_service._tcp.example.com",
+				Key:        testSRVName,
 				RecordType: recordTypeSRV,
-				Value:      "target.example.com",
+				Value:      testTarget,
 				TTL:        300,
 				Priority:   intPtr(10),
 				Weight:     intPtr(20),
@@ -313,7 +313,7 @@ func TestCreateEndpoint(t *testing.T) {
 		{
 			name: "create multiple CNAME targets - uses only first",
 			endpoint: endpoint.NewEndpointWithTTL(
-				"multi.example.com",
+				testMultiName,
 				"CNAME",
 				300,
 				"target1.example.com",
@@ -321,7 +321,7 @@ func TestCreateEndpoint(t *testing.T) {
 			),
 			responseBody: DNSRecord{
 				ID:         "new-record",
-				Key:        "multi.example.com",
+				Key:        testMultiName,
 				RecordType: recordTypeCNAME,
 				Value:      "target1.example.com",
 				TTL:        300,
@@ -333,10 +333,10 @@ func TestCreateEndpoint(t *testing.T) {
 		{
 			name: "HTTP 400 error",
 			endpoint: endpoint.NewEndpointWithTTL(
-				"test.example.com",
+				testDomain,
 				"A",
 				300,
-				"192.168.1.1",
+				testIPv4A,
 			),
 			responseBody:   UnifiErrorResponse{Code: "INVALID", Message: "Invalid record"},
 			responseStatus: http.StatusBadRequest,
@@ -345,7 +345,7 @@ func TestCreateEndpoint(t *testing.T) {
 		{
 			name: "invalid SRV format",
 			endpoint: endpoint.NewEndpointWithTTL(
-				"_service._tcp.example.com",
+				testSRVName,
 				"SRV",
 				300,
 				"invalid srv format",
@@ -371,13 +371,13 @@ func TestCreateEndpoint(t *testing.T) {
 			client := &httpClient{
 				Config: &Config{
 					Host:          server.URL,
-					Site:          "default",
-					APIKey:        "test-key",
+					Site:          testSite,
+					APIKey:        testKeyA,
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
 				ClientURLs: &ClientURLs{
-					Records: "%s/v2/api/site/%s/static-dns/%s",
+					Records: unifiRecordPathExternal,
 				},
 			}
 
@@ -414,16 +414,16 @@ func TestDeleteEndpoint(t *testing.T) {
 		{
 			name: "delete single A record",
 			endpoint: endpoint.NewEndpoint(
-				"test.example.com",
+				testDomain,
 				"A",
-				"192.168.1.1",
+				testIPv4A,
 			),
 			existingRecords: []DNSRecord{
 				{
-					ID:         "record1",
-					Key:        "test.example.com",
+					ID:         testDNSID1,
+					Key:        testDomain,
 					RecordType: recordTypeA,
-					Value:      "192.168.1.1",
+					Value:      testIPv4A,
 					TTL:        300,
 					Enabled:    true,
 				},
@@ -435,23 +435,23 @@ func TestDeleteEndpoint(t *testing.T) {
 		{
 			name: "delete multiple A records with same name",
 			endpoint: endpoint.NewEndpoint(
-				"multi.example.com",
+				testMultiName,
 				"A",
 			),
 			existingRecords: []DNSRecord{
 				{
-					ID:         "record1",
-					Key:        "multi.example.com",
+					ID:         testDNSID1,
+					Key:        testMultiName,
 					RecordType: recordTypeA,
-					Value:      "192.168.1.1",
+					Value:      testIPv4A,
 					TTL:        300,
 					Enabled:    true,
 				},
 				{
-					ID:         "record2",
-					Key:        "multi.example.com",
+					ID:         testDNSID2,
+					Key:        testMultiName,
 					RecordType: recordTypeA,
-					Value:      "192.168.1.2",
+					Value:      testIPv4B,
 					TTL:        300,
 					Enabled:    true,
 				},
@@ -465,7 +465,7 @@ func TestDeleteEndpoint(t *testing.T) {
 			endpoint: endpoint.NewEndpoint(
 				"nonexistent.example.com",
 				"A",
-				"192.168.1.1",
+				testIPv4A,
 			),
 			existingRecords: []DNSRecord{},
 			responseStatus:  http.StatusOK,
@@ -475,16 +475,16 @@ func TestDeleteEndpoint(t *testing.T) {
 		{
 			name: "delete CNAME record",
 			endpoint: endpoint.NewEndpoint(
-				"alias.example.com",
+				testAlias,
 				"CNAME",
-				"target.example.com",
+				testTarget,
 			),
 			existingRecords: []DNSRecord{
 				{
-					ID:         "cname1",
-					Key:        "alias.example.com",
+					ID:         testCNAMEID,
+					Key:        testAlias,
 					RecordType: recordTypeCNAME,
-					Value:      "target.example.com",
+					Value:      testTarget,
 					TTL:        300,
 					Enabled:    true,
 				},
@@ -496,16 +496,16 @@ func TestDeleteEndpoint(t *testing.T) {
 		{
 			name: "HTTP 404 error on delete",
 			endpoint: endpoint.NewEndpoint(
-				"test.example.com",
+				testDomain,
 				"A",
-				"192.168.1.1",
+				testIPv4A,
 			),
 			existingRecords: []DNSRecord{
 				{
-					ID:         "record1",
-					Key:        "test.example.com",
+					ID:         testDNSID1,
+					Key:        testDomain,
 					RecordType: recordTypeA,
-					Value:      "192.168.1.1",
+					Value:      testIPv4A,
 					TTL:        300,
 					Enabled:    true,
 				},
@@ -531,7 +531,7 @@ func TestDeleteEndpoint(t *testing.T) {
 					w.WriteHeader(tt.responseStatus)
 					if tt.responseStatus != http.StatusOK {
 						_ = json.NewEncoder(w).Encode(UnifiErrorResponse{
-							Code:    "ERROR",
+							Code:    testErrCode,
 							Message: "Delete failed",
 						})
 					}
@@ -542,13 +542,13 @@ func TestDeleteEndpoint(t *testing.T) {
 			client := &httpClient{
 				Config: &Config{
 					Host:          server.URL,
-					Site:          "default",
-					APIKey:        "test-key",
+					Site:          testSite,
+					APIKey:        testKeyA,
 					SkipTLSVerify: true,
 				},
 				Client: server.Client(),
 				ClientURLs: &ClientURLs{
-					Records: "%s/v2/api/site/%s/static-dns/%s",
+					Records: unifiRecordPathExternal,
 				},
 			}
 
@@ -579,13 +579,13 @@ func TestSetHeaders(t *testing.T) {
 		{
 			name: "with API key",
 			config: &Config{
-				APIKey: "test-api-key",
+				APIKey: testKeyB,
 			},
 			csrf: "",
 			expectedHeaders: map[string]string{
-				"X-Api-Key":    "test-api-key",
-				"Accept":       "application/json",
-				"Content-Type": "application/json; charset=utf-8",
+				"X-Api-Key":       "test-api-key",
+				headerAccept:      contentTypeJSON,
+				headerContentType: contentTypeJSONUTF8,
 			},
 		},
 		{
@@ -593,11 +593,11 @@ func TestSetHeaders(t *testing.T) {
 			config: &Config{
 				APIKey: "",
 			},
-			csrf: "csrf-token-123",
+			csrf: testCSRF,
 			expectedHeaders: map[string]string{
-				"X-Csrf-Token": "csrf-token-123",
-				"Accept":       "application/json",
-				"Content-Type": "application/json; charset=utf-8",
+				"X-Csrf-Token":    testCSRF,
+				headerAccept:      contentTypeJSON,
+				headerContentType: contentTypeJSONUTF8,
 			},
 		},
 	}
@@ -636,21 +636,21 @@ func TestFormatURL_ClientUsage(t *testing.T) {
 		{
 			name: "internal controller - list records",
 			urls: &ClientURLs{
-				Records: "%s/proxy/network/v2/api/site/%s/static-dns/%s",
+				Records: unifiRecordPath,
 			},
-			host:      "https://192.168.1.1:8443",
-			site:      "default",
+			host:      testHostPort,
+			site:      testSite,
 			recordID:  "",
-			operation: "list",
+			operation: testOpList,
 			expected:  "https://192.168.1.1:8443/proxy/network/v2/api/site/default/static-dns/",
 		},
 		{
 			name: "internal controller - get specific record",
 			urls: &ClientURLs{
-				Records: "%s/proxy/network/v2/api/site/%s/static-dns/%s",
+				Records: unifiRecordPath,
 			},
-			host:      "https://192.168.1.1:8443",
-			site:      "default",
+			host:      testHostPort,
+			site:      testSite,
 			recordID:  "507f1f77bcf86cd799439011",
 			operation: "get",
 			expected:  "https://192.168.1.1:8443/proxy/network/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
@@ -658,12 +658,12 @@ func TestFormatURL_ClientUsage(t *testing.T) {
 		{
 			name: "external controller - list records",
 			urls: &ClientURLs{
-				Records: "%s/v2/api/site/%s/static-dns/%s",
+				Records: unifiRecordPathExternal,
 			},
-			host:      "https://ui.com",
+			host:      testHostExt,
 			site:      "site-abc123",
 			recordID:  "",
-			operation: "list",
+			operation: testOpList,
 			expected:  "https://ui.com/v2/api/site/site-abc123/static-dns/",
 		},
 	}

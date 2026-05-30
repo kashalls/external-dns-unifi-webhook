@@ -76,9 +76,9 @@ func TestGetEndpoints(t *testing.T) {
 					RecordType: recordTypeSRV,
 					Value:      testTarget,
 					TTL:        300,
-					Priority:   intPtr(10),
-					Weight:     intPtr(20),
-					Port:       intPtr(8080),
+					Priority:   new(10),
+					Weight:     new(20),
+					Port:       new(8080),
 					Enabled:    true,
 				},
 			},
@@ -285,9 +285,9 @@ func TestCreateEndpoint(t *testing.T) {
 				RecordType: recordTypeSRV,
 				Value:      testTarget,
 				TTL:        300,
-				Priority:   intPtr(10),
-				Weight:     intPtr(20),
-				Port:       intPtr(8080),
+				Priority:   new(10),
+				Weight:     new(20),
+				Port:       new(8080),
 				Enabled:    true,
 			},
 			responseStatus: http.StatusOK,
@@ -682,9 +682,4 @@ func TestFormatURL_ClientUsage(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function for tests.
-func intPtr(i int) *int {
-	return &i
 }

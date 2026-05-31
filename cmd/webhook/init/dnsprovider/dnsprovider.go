@@ -7,9 +7,9 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	"github.com/cockroachdb/errors"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-unifi-webhook/internal/unifi"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/configuration"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/home-operations/external-dns-unifi-webhook/internal/unifi"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/provider"
 )

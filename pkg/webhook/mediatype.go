@@ -43,5 +43,10 @@ func checkAndGetMediaTypeHeaderValue(value string) (string, error) {
 	}
 	supportedMediaTypesString += supportedMediaTypesStringSb36.String()
 
-	return "", errors.Wrapf(errUnsupportedMediaType, "received '%s', supported media types are: '%s'", value, supportedMediaTypesString)
+	return "", errors.Wrapf(
+		errUnsupportedMediaType,
+		"received '%s', supported media types are: '%s'",
+		value,
+		supportedMediaTypesString,
+	)
 }

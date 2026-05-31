@@ -1,4 +1,4 @@
-module github.com/kashalls/external-dns-unifi-webhook
+module github.com/home-operations/external-dns-unifi-webhook
 
 go 1.26.1
 

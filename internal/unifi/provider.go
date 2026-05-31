@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
@@ -106,27 +106,27 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	m.BatchSize.WithLabelValues(metrics.ProviderName, "delete").Observe(float64(len(changes.Delete)))
 
 	// Process deletions and updates (delete old)
-	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
-		err := p.client.DeleteEndpoint(ctx, endpoint)
+	for _, ep := range append(changes.UpdateOld, changes.Delete...) {
+		err := p.client.DeleteEndpoint(ctx, ep)
 		if err != nil {
-			log.Error("failed to delete endpoint", "data", endpoint, "error", err)
+			log.Error("failed to delete endpoint", "data", ep, "error", err)
 
-			return errors.Wrapf(err, "failed to delete endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
+			return errors.Wrapf(err, "failed to delete endpoint %s (%s)", ep.DNSName, ep.RecordType)
 		}
-		m.RecordChange("delete", endpoint.RecordType)
+		m.RecordChange("delete", ep.RecordType)
 	}
 
 	// Process creates and updates (create new)
-	for _, endpoint := range append(changes.Create, changes.UpdateNew...) {
+	for _, ep := range append(changes.Create, changes.UpdateNew...) {
 		operation := "create"
 		// Check for CNAME conflicts
-		if endpoint.RecordType == recordTypeCNAME {
+		if ep.RecordType == recordTypeCNAME {
 			for _, record := range existingRecords {
 				if record.RecordType != recordTypeCNAME {
 					continue
 				}
 
-				if record.DNSName != endpoint.DNSName {
+				if record.DNSName != ep.DNSName {
 					continue
 				}
 
@@ -139,13 +139,13 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 				}
 			}
 		}
-		_, err := p.client.CreateEndpoint(ctx, endpoint)
+		_, err := p.client.CreateEndpoint(ctx, ep)
 		if err != nil {
-			log.Error("failed to create endpoint", "data", endpoint, "error", err)
+			log.Error("failed to create endpoint", "data", ep, "error", err)
 
-			return errors.Wrapf(err, "failed to create endpoint %s (%s)", endpoint.DNSName, endpoint.RecordType)
+			return errors.Wrapf(err, "failed to create endpoint %s (%s)", ep.DNSName, ep.RecordType)
 		}
-		m.RecordChange(operation, endpoint.RecordType)
+		m.RecordChange(operation, ep.RecordType)
 	}
 
 	return nil

@@ -1,11 +1,11 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: Release
+name: Build
 
 on:
-  release:
-    types:
-      - published
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -81,7 +81,6 @@ jobs:
       contents: read
       packages: write
     outputs:
-      version: ${{ steps.meta.outputs.version }}
       digest: ${{ steps.digest.outputs.digest }}
     steps:
       - name: Download digests
@@ -107,7 +106,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
+            type=sha,prefix={{branch}}-
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests

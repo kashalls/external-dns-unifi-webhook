@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
 )
 
 // Config struct for configuration environmental variables.

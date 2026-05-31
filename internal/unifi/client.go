@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
 	externaldnsendpoint "sigs.k8s.io/external-dns/endpoint"
 )
 

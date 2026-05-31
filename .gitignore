@@ -1,7 +1,26 @@
-### IntelliJ IDEA ###
+# OS generated files
+.DS_Store*
+.Spotlight-V100
+.Trashes
+._*
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.claude
 .idea
-###
-.private/
-external-dns-unifi-webhook
-.DS_Store
-coverage.out
+.private
+.vscode
+
+# Others
+.dev/
+.run/
+bin/
+dist/
+tmp/
+
+# Preserve files
+!.gitkeep
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out

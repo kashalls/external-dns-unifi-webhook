@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/webhook"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/configuration"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/pkg/webhook"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -49,7 +49,12 @@ func Init(config *configuration.Config, whk *webhook.Webhook) (mainServer, healt
 	mainRouter.Post("/records", whk.ApplyChanges)
 	mainRouter.Post("/adjustendpoints", whk.AdjustEndpoints)
 
-	mainServer = createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	mainServer = createHTTPServer(
+		fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort),
+		mainRouter,
+		config.ServerReadTimeout,
+		config.ServerWriteTimeout,
+	)
 	go func() {
 		log.Info("starting webhook server", "address", mainServer.Addr)
 		err := mainServer.ListenAndServe()

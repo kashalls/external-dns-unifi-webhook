@@ -70,22 +70,6 @@ Fix auto-fixable issues:
 golangci-lint run --fix
 ```
 
-## Linting Documentation
-
-Check markdown documentation files:
-
-```bash
-npx markdownlint-cli2 "**/*.md"
-```
-
-Auto-fix markdown issues:
-
-```bash
-npx markdownlint-cli2 "**/*.md" --fix
-```
-
-Configuration is in `.markdownlint.yaml`.
-
 ## Building the Binary
 
 Build for your current platform:
@@ -117,19 +101,19 @@ GOOS=linux GOARCH=arm64 go build -o external-dns-unifi-webhook-linux-arm64 ./cmd
 Build with Docker:
 
 ```bash
-docker build -t external-dns-unifi-webhook:local -f Containerfile .
+docker build -t external-dns-unifi-webhook:local .
 ```
 
 Build with Podman:
 
 ```bash
-podman build -t external-dns-unifi-webhook:local -f Containerfile .
+podman build -t external-dns-unifi-webhook:local .
 ```
 
 Build for multiple platforms:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t external-dns-unifi-webhook:local -f Containerfile .
+docker buildx build --platform linux/amd64,linux/arm64 -t external-dns-unifi-webhook:local .
 ```
 
 ## Testing Container Images

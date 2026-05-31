@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
 	"sigs.k8s.io/external-dns/endpoint"
 )
 

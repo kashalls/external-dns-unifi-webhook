@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/configuration"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/dnsprovider"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/kashalls/external-dns-unifi-webhook/cmd/webhook/init/server"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/metrics"
-	"github.com/kashalls/external-dns-unifi-webhook/pkg/webhook"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/configuration"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/dnsprovider"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
+	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/server"
+	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/pkg/webhook"
 )
 
 const banner = `

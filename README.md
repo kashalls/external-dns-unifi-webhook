@@ -79,7 +79,7 @@ Create a values file (`external-dns-unifi-values.yaml`):
 
 ```yaml
 fullnameOverride: external-dns-unifi
-logLevel: &logLevel debug
+logLevel: debug
 provider:
     name: webhook
     webhook:
@@ -94,8 +94,6 @@ provider:
                   secretKeyRef:
                       name: external-dns-unifi-secret
                       key: api-key
-            - name: LOG_LEVEL
-              value: *logLevel
         livenessProbe:
             httpGet:
                 path: /healthz

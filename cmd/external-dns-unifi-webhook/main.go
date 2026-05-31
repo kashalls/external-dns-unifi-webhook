@@ -71,7 +71,13 @@ func initLogger() {
 		level = slog.LevelInfo
 	}
 
-	opts := &slog.HandlerOptions{AddSource: true, Level: level}
+	// AddSource emits the calling function/file/line on every record. That's
+	// useful for debugging but doubles the size of routine logs and the same
+	// access-log call site appears on every request. Only opt in at debug.
+	opts := &slog.HandlerOptions{
+		AddSource: level == slog.LevelDebug,
+		Level:     level,
+	}
 
 	var handler slog.Handler
 	if os.Getenv("LOG_FORMAT") == "text" {

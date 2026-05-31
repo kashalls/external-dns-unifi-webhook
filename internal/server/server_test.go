@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/home-operations/external-dns-unifi-webhook/internal/config"
 )
 
 func TestCachedProbe_CachesResultWithinTTL(t *testing.T) {
@@ -80,6 +82,24 @@ func TestReadyzHandler_OK(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+// TestBuildMainHandler_MountsHealthEndpoints locks in that /healthz and
+// /readyz are reachable on the webhook port, not just the health port.
+// Operators rely on this so Kubernetes probes can target the webhook port
+// directly (most Helm charts expose only one container port per sidecar).
+func TestBuildMainHandler_MountsHealthEndpoints(t *testing.T) {
+	cfg := &config.Config{ServerMaxBodyBytes: 1 << 20}
+	readyz := readyzHandler(NoopProbe, time.Minute)
+	h := buildMainHandler(cfg, nil, readyz)
+
+	for _, path := range []string{"/healthz", "/readyz"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s on main handler = %d, want 200", path, rec.Code)
+		}
 	}
 }
 

@@ -28,12 +28,16 @@ func Run(ctx context.Context, cfg *config.Config, whk *webhook.Webhook, probe Pr
 		probe = noopProbe
 	}
 
+	// One cached readyz handler shared across both muxes so probes from either
+	// port hit the same upstream-result cache.
+	readyz := readyzHandler(probe, cfg.ReadinessCacheTTL)
+
 	mainSrv := newServer(
 		fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort),
-		buildMainHandler(cfg, whk),
+		buildMainHandler(cfg, whk, readyz),
 		cfg,
 	)
-	healthSrv := newServer(cfg.HealthServerAddr, buildHealthHandler(cfg, probe), cfg)
+	healthSrv := newServer(cfg.HealthServerAddr, buildHealthHandler(cfg, readyz), cfg)
 
 	group, ctx := errgroup.WithContext(ctx)
 
@@ -47,12 +51,19 @@ func Run(ctx context.Context, cfg *config.Config, whk *webhook.Webhook, probe Pr
 // satisfy the Run signature.
 var NoopProbe ProbeFunc = noopProbe
 
-func buildMainHandler(cfg *config.Config, whk *webhook.Webhook) http.Handler {
+func buildMainHandler(cfg *config.Config, whk *webhook.Webhook, readyz http.HandlerFunc) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", whk.Negotiate)
 	mux.HandleFunc("GET /records", whk.Records)
 	mux.HandleFunc("POST /records", whk.ApplyChanges)
 	mux.HandleFunc("POST /adjustendpoints", whk.AdjustEndpoints)
+
+	// Health endpoints are mounted here too so Kubernetes probes can target
+	// the webhook port. The external-dns Helm chart only exposes one
+	// container port for the webhook sidecar, so probes pointed at the
+	// health server's port would need extra chart wiring to work.
+	mux.HandleFunc("GET /healthz", okHandler)
+	mux.HandleFunc("GET /readyz", readyz)
 
 	// Middleware order (outermost first): recovery+log -> metrics -> body limit -> mux.
 	// recovery must be outermost so it catches panics in any inner layer, and
@@ -66,11 +77,11 @@ func buildMainHandler(cfg *config.Config, whk *webhook.Webhook) http.Handler {
 	return h
 }
 
-func buildHealthHandler(cfg *config.Config, probe ProbeFunc) http.Handler {
+func buildHealthHandler(cfg *config.Config, readyz http.HandlerFunc) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", promhttp.Handler())
 	mux.HandleFunc("GET /healthz", okHandler)
-	mux.HandleFunc("GET /readyz", readyzHandler(probe, cfg.ReadinessCacheTTL))
+	mux.HandleFunc("GET /readyz", readyz)
 
 	if cfg.PprofEnabled {
 		slog.Warn("pprof endpoints enabled on health server — disable in production unless investigating")

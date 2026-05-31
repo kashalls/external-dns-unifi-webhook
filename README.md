@@ -16,12 +16,24 @@
 
 ## 🚫 Limitations
 
-_UniFi uses [dnsmasq](https://dnsmasq.org) as the backend of it's dns resolver and dhcp server._
+_UniFi uses [dnsmasq](https://dnsmasq.org) as the backend of its DNS resolver and DHCP server._
 _This project is subject to the limitations of dnsmasq. Please report any issues you encounter utilizing this provider._
 
-- Wildcard and Duplicate CNAME Records are not supported by UniFi.
-    - \*.example.com 0 IN CNAME internal.example.com
-    - deployment.example.com 0 IN CNAME external.example.com internal.example.com
+- **Wildcards** (`*.example.com`) are not supported by dnsmasq.
+- **Only one CNAME per name** is allowed by dnsmasq. The webhook handles this transparently:
+    - If a CNAME already exists at the target name when a new one is created, the existing record is evicted first.
+    - If external-dns sends multiple targets for a CNAME (e.g. `deployment.example.com 0 IN CNAME external.example.com internal.example.com`), only the first target is used and the rest are dropped with a warning.
+
+## 🔁 Upgrading from earlier versions
+
+The migration to UniFi Network 10.3.58's [Integration API](https://developer.ui.com/network/) introduced several breaking changes:
+
+| Setting                                                                                            | Old                                                             | New                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UNIFI_EXTERNAL_CONTROLLER`                                                                        | Toggle for non-Ubiquiti hardware                                | **Removed.** Point `UNIFI_HOST` at the controller directly; only internal connections are supported.                                                     |
+| `DOMAIN_FILTER`, `EXCLUDE_DOMAIN_FILTER`, `REGEXP_DOMAIN_FILTER`, `REGEXP_DOMAIN_FILTER_EXCLUSION` | Provider-side filter                                            | **Removed.** Configure `--domain-filter` (and friends) on the external-dns controller instead. See the [Domain filtering](#domain-filtering) note below. |
+| `LOG_FORMAT=test`                                                                                  | Switched to text output                                         | **Renamed** to `LOG_FORMAT=text`.                                                                                                                        |
+| API endpoint                                                                                       | `/proxy/network/v2/api/site/{site}/static-dns/*` (undocumented) | `/proxy/network/integration/v1/sites/{siteId}/dns/policies/*` (official, requires Network 10.3.58+).                                                     |
 
 ## ⛵ Deployment
 
@@ -152,20 +164,27 @@ You should now follow the [Installing the provider](#installing-the-provider) in
 
 ## Configuration
 
-### Unifi Controller Configuration
+### UniFi controller
 
-| Environment Variable    | Description                                                                           | Default Value |
-| ----------------------- | ------------------------------------------------------------------------------------- | ------------- |
-| `UNIFI_API_KEY`         | The local API key provided for your user (required).                                  | N/A           |
-| `UNIFI_SKIP_TLS_VERIFY` | Whether to skip TLS verification (true or false).                                     | `true`        |
-| `UNIFI_CA_CERT`         | Path to a PEM file with extra trusted CAs (alternative to skipping verification).     | N/A           |
-| `UNIFI_SITE`            | Unifi site name (e.g. `default`) or site UUID. Resolved to the API's UUID at startup. | `default`     |
-| `UNIFI_HOST`            | Host of the Unifi Controller (must be provided).                                      | N/A           |
-| `LOG_LEVEL`             | Change the verbosity of logs (used when making a bug report)                          | `info`        |
+| Environment Variable        | Description                                                                           | Default Value |
+| --------------------------- | ------------------------------------------------------------------------------------- | ------------- |
+| `UNIFI_HOST`                | Host of the UniFi controller (required).                                              | N/A           |
+| `UNIFI_API_KEY`             | The local API key provided for your user (required).                                  | N/A           |
+| `UNIFI_SITE`                | UniFi site name (e.g. `default`) or site UUID. Resolved to the API's UUID at startup. | `default`     |
+| `UNIFI_SKIP_TLS_VERIFY`     | Whether to skip TLS verification.                                                     | `true`        |
+| `UNIFI_CA_CERT`             | Path to a PEM file with extra trusted CAs (alternative to skipping verification).     | N/A           |
+| `UNIFI_APPLY_WORKERS`       | Maximum concurrent record operations during `ApplyChanges`.                           | `5`           |
+| `UNIFI_RETRY_ATTEMPTS`      | Total attempts per request (including the first).                                     | `3`           |
+| `UNIFI_RETRY_INITIAL_DELAY` | Initial backoff before the first retry.                                               | `500ms`       |
+| `UNIFI_RETRY_MAX_DELAY`     | Maximum backoff between retries (also caps `Retry-After`).                            | `10s`         |
 
 The webhook talks to the UniFi Network [Integration API](https://developer.ui.com/network/) over the controller's local `/proxy/network/integration/v1/...` paths. External / cloud-proxied controllers are not supported — point `UNIFI_HOST` at the controller directly.
 
-### Server Configuration
+#### Domain filtering
+
+Configure `--domain-filter` (and friends) on the external-dns controller itself, not on this webhook. UniFi has no zone concept the webhook could narrow against, so we follow the [external-dns `GetDomainFilter` contract](https://github.com/kubernetes-sigs/external-dns/blob/v0.21.0/docs/contributing/sources-and-providers.md#implementing-getdomainfilter) and leave the filter to the controller.
+
+### Webhook server
 
 | Environment Variable         | Description                                                         | Default Value     |
 | ---------------------------- | ------------------------------------------------------------------- | ----------------- |
@@ -177,17 +196,26 @@ The webhook talks to the UniFi Network [Integration API](https://developer.ui.co
 | `SERVER_IDLE_TIMEOUT`        | Keep-alive idle timeout.                                            | `120s`            |
 | `SERVER_MAX_HEADER_BYTES`    | Maximum request header size.                                        | `65536`           |
 | `SERVER_MAX_BODY_BYTES`      | Maximum POST body size before returning 413.                        | `5242880` (5 MiB) |
-| `HEALTH_SERVER_ADDR`         | Address for the /metrics, /healthz, /readyz server.                 | `0.0.0.0:8080`    |
-| `READINESS_CACHE_TTL`        | How long /readyz caches the upstream probe result.                  | `30s`             |
-| `PPROF_ENABLED`              | Mount /debug/pprof/\* on the health server (do not enable in prod). | `false`           |
-| `UNIFI_APPLY_WORKERS`        | Maximum concurrent record operations during ApplyChanges.           | `5`               |
-| `UNIFI_RETRY_ATTEMPTS`       | Total attempts per request (including the first).                   | `3`               |
-| `UNIFI_RETRY_INITIAL_DELAY`  | Initial backoff before the first retry.                             | `500ms`           |
-| `UNIFI_RETRY_MAX_DELAY`      | Maximum backoff between retries (also caps Retry-After).            | `10s`             |
-| `LOG_LEVEL`                  | Log verbosity (debug / info / warn / error).                        | `info`            |
-| `LOG_FORMAT`                 | Set to `text` for human-readable text output instead of JSON.       | JSON              |
+| `HEALTH_SERVER_ADDR`         | Address for the secondary `/metrics`, `/healthz`, `/readyz` server. | `0.0.0.0:8080`    |
+| `READINESS_CACHE_TTL`        | How long `/readyz` caches the upstream probe result.                | `30s`             |
+| `PPROF_ENABLED`              | Mount `/debug/pprof/*` on the health server (don't enable in prod). | `false`           |
+| `LOG_LEVEL`                  | Log verbosity (`debug` / `info` / `warn` / `error`).                | `info`            |
+| `LOG_FORMAT`                 | Set to `text` for human-readable output instead of JSON.            | JSON              |
 
-> **Domain filtering**: configure `--domain-filter` (and friends) on the external-dns controller itself, not on this webhook. UniFi has no zone concept the webhook could narrow against, so we follow the [external-dns `GetDomainFilter` contract](https://github.com/kubernetes-sigs/external-dns/blob/v0.21.0/docs/contributing/sources-and-providers.md#implementing-getdomainfilter) and leave the filter to the controller.
+### Observability endpoints
+
+The webhook exposes operational endpoints on two listeners:
+
+| Endpoint        | Port (default) | Purpose                                                                                    |
+| --------------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `/`             | `8888`         | External-DNS Negotiate (returns the provider's media type).                                |
+| `/records`      | `8888`         | External-DNS `GET` (list) and `POST` (apply changes).                                      |
+| `/healthz`      | `8888`, `8080` | Liveness — always `200 OK` while the process is running.                                   |
+| `/readyz`       | `8888`, `8080` | Readiness — probes the UniFi controller via `Records()`. Cached for `READINESS_CACHE_TTL`. |
+| `/metrics`      | `8080`         | Prometheus metrics.                                                                        |
+| `/debug/pprof/` | `8080`         | Go pprof endpoints. Only mounted when `PPROF_ENABLED=true`.                                |
+
+`/healthz` and `/readyz` are mounted on both ports so Kubernetes probes can target the webhook port directly without exposing a second container port through the chart.
 
 ## ⭐ Stargazers
 

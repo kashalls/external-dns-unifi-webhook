@@ -189,6 +189,18 @@ func TestNewHTTPTransport_SkipTLSVerify(t *testing.T) {
 	}
 }
 
+func TestNewHTTPTransport_CloudIgnoresSkipTLSVerify(t *testing.T) {
+	// In cloud mode UNIFI_SKIP_TLS_VERIFY must not weaken verification — the
+	// connector terminates at api.ui.com behind a public CA.
+	tr, err := newHTTPTransport(&Config{SkipTLSVerify: true, ConsoleID: testConsoleID})
+	if err != nil {
+		t.Fatalf("newHTTPTransport: %v", err)
+	}
+	if tr.TLSClientConfig.InsecureSkipVerify {
+		t.Error("cloud mode must not honour UNIFI_SKIP_TLS_VERIFY")
+	}
+}
+
 func TestNewHTTPTransport_CACertFromFile(t *testing.T) {
 	// httptest's TLS cert is a good stand-in CA for this test — we just need
 	// some valid PEM the file loader can parse.

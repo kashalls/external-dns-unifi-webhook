@@ -9,6 +9,7 @@ const (
 	testURLExample = "https://example.com"
 	testSite       = "default"
 	testSiteUUID   = "11111111-2222-3333-4444-555555555555"
+	testConsoleID  = "aabbccddeeff00112233445566778899"
 	testRecordID   = "507f1f77bcf86cd799439011"
 
 	// DNS record field values.

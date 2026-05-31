@@ -43,6 +43,11 @@ func newHTTPTransport(cfg *Config) (*http.Transport, error) {
 		if cfg.SkipTLSVerify {
 			slog.Warn("UNIFI_CA_CERT is set; ignoring UNIFI_SKIP_TLS_VERIFY")
 		}
+	case cfg.SkipTLSVerify && cfg.isCloud():
+		// The cloud connector terminates at api.ui.com, which presents a
+		// publicly-trusted certificate. Skipping verification there would
+		// expose the API key to a trivial MITM, so we never honour it.
+		slog.Warn("ignoring UNIFI_SKIP_TLS_VERIFY for the cloud connector; api.ui.com presents a publicly-trusted certificate")
 	case cfg.SkipTLSVerify:
 		//nolint:gosec // Explicit opt-in via UNIFI_SKIP_TLS_VERIFY for self-signed controllers.
 		tlsCfg.InsecureSkipVerify = true

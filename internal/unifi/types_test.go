@@ -32,6 +32,12 @@ func TestConfigValidate(t *testing.T) {
 		{"apply workers zero", func(c *Config) { c.ApplyWorkers = 0 }, true},
 		{"initial delay zero", func(c *Config) { c.RetryInitialDelay = 0 }, true},
 		{"max delay below initial", func(c *Config) { c.RetryMaxDelay = 100 * time.Millisecond }, true},
+		{"cloud host without console id", func(c *Config) { c.Host = "https://api.ui.com" }, true},
+		{"cloud host with console id", func(c *Config) {
+			c.Host = "https://api.ui.com"
+			c.ConsoleID = testConsoleID
+		}, false},
+		{"console id with local host is fine", func(c *Config) { c.ConsoleID = testConsoleID }, false},
 	}
 
 	for _, tt := range tests {
@@ -41,6 +47,50 @@ func TestConfigValidate(t *testing.T) {
 			err := cfg.Validate()
 			if tt.wantErr != (err != nil) {
 				t.Errorf("Validate() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConfigBaseURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		host      string
+		consoleID string
+		want      string
+	}{
+		{
+			name: "local controller",
+			host: "https://unifi.local",
+			want: "https://unifi.local",
+		},
+		{
+			name: "local controller trailing slash trimmed",
+			host: "https://unifi.local/",
+			want: "https://unifi.local",
+		},
+		{
+			name:      "cloud connector",
+			host:      "https://api.ui.com",
+			consoleID: testConsoleID,
+			want:      "https://api.ui.com/v1/connector/consoles/" + testConsoleID,
+		},
+		{
+			name:      "cloud connector trailing slash trimmed",
+			host:      "https://api.ui.com/",
+			consoleID: testConsoleID,
+			want:      "https://api.ui.com/v1/connector/consoles/" + testConsoleID,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{Host: tt.host, ConsoleID: tt.consoleID}
+			if got := cfg.baseURL(); got != tt.want {
+				t.Errorf("baseURL() = %q, want %q", got, tt.want)
+			}
+			if got := cfg.isCloud(); got != (tt.consoleID != "") {
+				t.Errorf("isCloud() = %v, want %v", got, tt.consoleID != "")
 			}
 		})
 	}

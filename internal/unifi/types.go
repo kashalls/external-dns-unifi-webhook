@@ -3,6 +3,7 @@ package unifi
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/external-dns/endpoint"
@@ -13,12 +14,40 @@ type Config struct {
 	Host              string        `env:"UNIFI_HOST,notEmpty"`
 	APIKey            string        `env:"UNIFI_API_KEY,notEmpty"`
 	Site              string        `env:"UNIFI_SITE"                envDefault:"default"`
+	ConsoleID         string        `env:"UNIFI_CONSOLE_ID"          envDefault:""`
 	SkipTLSVerify     bool          `env:"UNIFI_SKIP_TLS_VERIFY"     envDefault:"true"`
 	CACertPath        string        `env:"UNIFI_CA_CERT"             envDefault:""`
 	RetryAttempts     int           `env:"UNIFI_RETRY_ATTEMPTS"      envDefault:"3"`
 	RetryInitialDelay time.Duration `env:"UNIFI_RETRY_INITIAL_DELAY" envDefault:"500ms"`
 	RetryMaxDelay     time.Duration `env:"UNIFI_RETRY_MAX_DELAY"     envDefault:"10s"`
 	ApplyWorkers      int           `env:"UNIFI_APPLY_WORKERS"       envDefault:"5"`
+}
+
+// isCloud reports whether requests route through the Ubiquiti cloud connector
+// (api.ui.com) rather than directly to a local controller. A console ID is the
+// operator's explicit opt-in to the cloud path.
+func (c Config) isCloud() bool { return c.ConsoleID != "" }
+
+// baseURL returns the URL prefix that every Integration API path is appended
+// to. In cloud mode the request is routed through api.ui.com's per-console
+// connector proxy; otherwise it hits the controller's own reverse proxy. The
+// Integration API surface past this prefix is identical for both.
+func (c Config) baseURL() string {
+	host := strings.TrimRight(c.Host, "/")
+	if !c.isCloud() {
+		return host
+	}
+
+	return host + "/v1/connector/consoles/" + c.ConsoleID
+}
+
+// cloudAPIHosts are the Ubiquiti cloud connector endpoints. Pointing UNIFI_HOST
+// at one of these without a console ID can't work — the connector needs to know
+// which console to proxy to.
+var cloudAPIHosts = map[string]bool{
+	"api.ui.com":     true,
+	"api.dev.ui.com": true,
+	"api.stg.ui.com": true,
 }
 
 // Validate checks that the UniFi configuration is internally consistent. It is
@@ -31,6 +60,9 @@ func (c Config) Validate() error {
 	}
 	if u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("UNIFI_HOST %q must include a scheme and host (e.g. https://unifi.local)", c.Host)
+	}
+	if cloudAPIHosts[u.Host] && c.ConsoleID == "" {
+		return fmt.Errorf("UNIFI_CONSOLE_ID is required when UNIFI_HOST points at the Ubiquiti cloud API (%q)", u.Host)
 	}
 	if c.RetryAttempts < 1 {
 		return fmt.Errorf("UNIFI_RETRY_ATTEMPTS must be at least 1, got %d", c.RetryAttempts)

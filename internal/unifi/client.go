@@ -24,7 +24,9 @@ type httpClient struct {
 	siteID string
 }
 
-// API paths (Network Integration API, internal connection only).
+// API paths (Network Integration API). The leading %s is the base URL, which
+// is either the local controller or the api.ui.com cloud connector prefix; see
+// Config.baseURL. The Integration API surface is identical for both.
 const (
 	pathSites    = "%s/proxy/network/integration/v1/sites"
 	pathPolicies = "%s/proxy/network/integration/v1/sites/%s/dns/policies"
@@ -92,7 +94,7 @@ func (c *httpClient) resolveSite(ctx context.Context, ref string) (string, error
 	}
 
 	filter := fmt.Sprintf("%s.eq('%s')", field, ref)
-	u := formatURL(pathSites, c.cfg.Host) + "?filter=" + url.QueryEscape(filter)
+	u := formatURL(pathSites, c.cfg.baseURL()) + "?filter=" + url.QueryEscape(filter)
 
 	var page sitePage
 	if _, err := c.getJSON(ctx, u, "sites", &page); err != nil {
@@ -175,7 +177,7 @@ func (c *httpClient) GetEndpoints(ctx context.Context) (records []DNSRecord, err
 
 func (c *httpClient) fetchPolicyPage(ctx context.Context, offset, limit int) (dnsPolicyPage, int, error) {
 	u := fmt.Sprintf("%s?offset=%d&limit=%d",
-		formatURL(pathPolicies, c.cfg.Host, c.siteID), offset, limit)
+		formatURL(pathPolicies, c.cfg.baseURL(), c.siteID), offset, limit)
 
 	var page dnsPolicyPage
 	n, err := c.getJSON(ctx, u, "DNS policies", &page)
@@ -242,7 +244,7 @@ func (c *httpClient) createOne(ctx context.Context, r DNSRecord) (*DNSRecord, er
 		return nil, NewDataError("marshal", "DNS record", err)
 	}
 
-	resp, err := c.doRequest(ctx, http.MethodPost, formatURL(pathPolicies, c.cfg.Host, c.siteID), body)
+	resp, err := c.doRequest(ctx, http.MethodPost, formatURL(pathPolicies, c.cfg.baseURL(), c.siteID), body)
 	if err != nil {
 		return nil, fmt.Errorf("creating DNS record: %w", err)
 	}
@@ -273,7 +275,7 @@ func (c *httpClient) DeleteRecord(ctx context.Context, id string) (err error) {
 		metrics.Get().RecordUniFiAPICall("delete_record", time.Since(start), 0, err)
 	}()
 
-	u := formatURL(pathPolicy, c.cfg.Host, c.siteID, id)
+	u := formatURL(pathPolicy, c.cfg.baseURL(), c.siteID, id)
 	resp, derr := c.doRequest(ctx, http.MethodDelete, u, nil)
 	if derr != nil {
 		if apiErr, ok := errors.AsType[*APIError](derr); ok && apiErr.StatusCode == http.StatusNotFound {

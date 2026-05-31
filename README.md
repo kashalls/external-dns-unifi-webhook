@@ -62,9 +62,9 @@ Every request authenticates with an API key; username/password auth is not suppo
 apiVersion: v1
 kind: Secret
 metadata:
-    name: external-dns-unifi-secret
+    name: unifi-dns-secret
 stringData:
-    api-key: <your-api-key>
+    UNIFI_API_KEY: <your-api-key>
 ```
 
 ### 3. Install with Helm
@@ -79,7 +79,6 @@ Create a values file (`external-dns-unifi-values.yaml`):
 
 ```yaml
 fullnameOverride: external-dns-unifi
-logLevel: debug
 provider:
     name: webhook
     webhook:
@@ -88,12 +87,12 @@ provider:
             tag: main # replace with a versioned release tag
         env:
             - name: UNIFI_HOST
-              value: https://192.168.1.1 # your UniFi router/controller address
+              value: https://unifi.internal # your UniFi controller, or https://api.ui.com for the cloud connector
             - name: UNIFI_API_KEY
               valueFrom:
                   secretKeyRef:
-                      name: external-dns-unifi-secret
-                      key: api-key
+                      name: unifi-dns-secret
+                      key: UNIFI_API_KEY
         livenessProbe:
             httpGet:
                 path: /healthz
@@ -106,11 +105,17 @@ provider:
                 port: http-webhook
             initialDelaySeconds: 10
             timeoutSeconds: 5
-policy: create-only
-sources: ["gateway-httproute", "service"]
-txtOwnerId: default
-txtPrefix: k8s.%{record_type}-
-domainFilters: ["example.com"] # replace with your domain
+triggerLoopOnEvent: true
+policy: sync
+sources:
+    - gateway-httproute
+    - service
+txtOwnerId: main
+txtPrefix: k8s.main.%{record_type}-
+domainFilters:
+    - example.com # replace with your domain
+serviceMonitor:
+    enabled: true
 ```
 
 Install:

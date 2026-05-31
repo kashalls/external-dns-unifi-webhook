@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
+	extdnshttp "sigs.k8s.io/external-dns/pkg/http"
 )
 
 const errorBodyBufferSize = 512
@@ -85,8 +86,7 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body []
 		// We're going to retry — drain and close so the connection can be
 		// reused while we wait. Network errors have no body to drain.
 		if resp != nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
+			extdnshttp.DrainAndClose(resp.Body)
 		}
 
 		status := "network"
@@ -216,15 +216,20 @@ func parseRetryAfter(value string) time.Duration {
 // metric label. Real-record IDs would explode label cardinality, so we
 // collapse the trailing segment.
 func opLabel(path string) string {
-	if strings.Contains(path, "/static-dns") {
-		return "static_dns"
+	switch {
+	case strings.Contains(path, "/dns/policies"):
+		return "dns_policies"
+	case strings.Contains(path, "/sites"):
+		return "sites"
 	}
 
 	return "other"
 }
 
 func (c *httpClient) errorResponse(resp *http.Response, method, path string) (*http.Response, error) {
-	defer func() { _ = resp.Body.Close() }()
+	// DrainAndClose ensures the rest of the body (beyond errorBodyBufferSize)
+	// is drained so the underlying connection can be returned to the pool.
+	defer extdnshttp.DrainAndClose(resp.Body)
 	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, errorBodyBufferSize))
 	if err != nil {
 		return nil, NewDataError("read", "error response body", err)
@@ -233,18 +238,39 @@ func (c *httpClient) errorResponse(resp *http.Response, method, path string) (*h
 	// The Network API returns JSON for most error cases, but some status codes
 	// (e.g. 405 from the Tomcat layer) come back as HTML. Fall back to the raw
 	// body so callers still get a useful APIError instead of a parse failure.
-	var apiError UnifiErrorResponse
+	var apiError apiErrorResponse
 	message := strings.TrimSpace(string(bodyBytes))
 	if err := json.Unmarshal(bodyBytes, &apiError); err == nil && apiError.Message != "" {
-		message = apiError.Message
+		message = formatAPIError(&apiError)
 	}
 
 	return nil, NewAPIError(method, path, resp.StatusCode, message)
 }
 
-// setHeaders applies the X-Api-Key auth header and the standard JSON headers.
+// formatAPIError pulls the human-useful pieces (statusName + code + message)
+// out of the new error envelope into one line. Timestamp / requestPath /
+// requestId are dropped — they're only useful when correlating with server
+// logs, and we already log status + URL ourselves.
+func formatAPIError(e *apiErrorResponse) string {
+	var prefix string
+	switch {
+	case e.StatusName != "" && e.Code != "":
+		prefix = e.StatusName + " (" + e.Code + ")"
+	case e.StatusName != "":
+		prefix = e.StatusName
+	case e.Code != "":
+		prefix = e.Code
+	}
+	if prefix == "" {
+		return e.Message
+	}
+
+	return prefix + ": " + e.Message
+}
+
+// setHeaders applies the X-API-KEY auth header and the standard JSON headers.
 func (c *httpClient) setHeaders(req *http.Request) {
-	req.Header.Set("X-Api-Key", c.APIKey)
+	req.Header.Set("X-API-KEY", c.APIKey)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 }

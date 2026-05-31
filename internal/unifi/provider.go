@@ -2,6 +2,7 @@ package unifi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -21,15 +22,18 @@ const defaultApplyWorkers = 5
 type UnifiProvider struct {
 	provider.BaseProvider
 
-	client       *httpClient
-	domainFilter endpoint.DomainFilter
-	workers      int
+	client  *httpClient
+	workers int
 }
 
-// NewUnifiProvider initializes a new DNSProvider.
+// NewUnifiProvider initializes a new DNSProvider. The --domain-filter CLI flag
+// is applied at the controller level via the registry; UniFi has no zones to
+// further constrain against, so we inherit BaseProvider.GetDomainFilter
+// (returns an empty filter — matches everything). See the GetDomainFilter
+// contract in sigs.k8s.io/external-dns/docs/contributing/sources-and-providers.md.
 //
 //nolint:ireturn // Must return provider.Provider interface as required by external-dns API
-func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
+func NewUnifiProvider(config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("creating unifi client: %w", err)
@@ -41,9 +45,8 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provi
 	}
 
 	return &UnifiProvider{
-		client:       c,
-		domainFilter: domainFilter,
-		workers:      workers,
+		client:  c,
+		workers: workers,
 	}, nil
 }
 
@@ -89,10 +92,17 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 }
 
 // ApplyChanges applies a given set of changes in the DNS provider.
+//
+// The full record set is fetched once at the top and indexed by Key+RecordType
+// so per-endpoint deletes and CNAME-conflict cleanup can resolve target
+// record IDs locally instead of re-fetching the list per call (which used to
+// produce 1+N paginated round trips per reconcile). DeleteRecord tolerates
+// 404 so the snapshot index is safe even if a record disappears between
+// snapshot and delete.
 func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
 	m := metrics.Get()
 
-	existingRecords, err := p.Records(ctx)
+	rawRecords, err := p.client.GetEndpoints(ctx)
 	if err != nil {
 		slog.Error("failed to get records while applying", "error", err)
 
@@ -103,13 +113,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	m.BatchSize.WithLabelValues(metrics.ProviderName, "update").Observe(float64(len(changes.UpdateNew)))
 	m.BatchSize.WithLabelValues(metrics.ProviderName, "delete").Observe(float64(len(changes.Delete)))
 
-	// Index existing CNAMEs by DNSName so conflict detection on create is O(1).
-	existingCNAMEs := make(map[string]*endpoint.Endpoint)
-	for _, r := range existingRecords {
-		if r.RecordType == recordTypeCNAME {
-			existingCNAMEs[r.DNSName] = r
-		}
-	}
+	byKeyType := indexRecordIDs(rawRecords)
 
 	// Deletes (UpdateOld + Delete) and creates (Create + UpdateNew) each run
 	// under their own errgroup with SetLimit so we get bounded concurrency
@@ -118,7 +122,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	// parallelise within each phase.
 	deleteEPs := slices.Concat(changes.UpdateOld, changes.Delete)
 	if err := p.runBounded(ctx, deleteEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
-		if err := p.client.DeleteEndpoint(ctx, ep); err != nil {
+		if err := p.deleteByIDs(ctx, byKeyType[ep.DNSName+ep.RecordType]); err != nil {
 			slog.Error("failed to delete endpoint", "data", ep, "error", err)
 
 			return fmt.Errorf("deleting endpoint %s (%s): %w", ep.DNSName, ep.RecordType, err)
@@ -133,12 +137,12 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	createEPs := slices.Concat(changes.Create, changes.UpdateNew)
 	if err := p.runBounded(ctx, createEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
 		if ep.RecordType == recordTypeCNAME {
-			if existing, ok := existingCNAMEs[ep.DNSName]; ok {
+			if ids := byKeyType[ep.DNSName+recordTypeCNAME]; len(ids) > 0 {
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				if err := p.client.DeleteEndpoint(ctx, existing); err != nil {
-					slog.Error("failed to delete conflicting CNAME", "data", existing, "error", err)
+				if err := p.deleteByIDs(ctx, ids); err != nil {
+					slog.Error("failed to delete conflicting CNAME", "name", ep.DNSName, "error", err)
 
-					return fmt.Errorf("deleting conflicting CNAME %s: %w", existing.DNSName, err)
+					return fmt.Errorf("deleting conflicting CNAME %s: %w", ep.DNSName, err)
 				}
 			}
 		}
@@ -155,6 +159,31 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	}
 
 	return nil
+}
+
+// indexRecordIDs groups record IDs by Key+RecordType so the delete path can
+// resolve "all IDs for endpoint X" in O(1) without re-listing.
+func indexRecordIDs(records []DNSRecord) map[string][]string {
+	out := make(map[string][]string, len(records))
+	for _, r := range records {
+		key := r.Key + r.RecordType
+		out[key] = append(out[key], r.ID)
+	}
+
+	return out
+}
+
+// deleteByIDs deletes every record in ids, tolerating per-record failures and
+// joining them into a single error if any fail. An empty slice is a no-op.
+func (p *UnifiProvider) deleteByIDs(ctx context.Context, ids []string) error {
+	var errs []error
+	for _, id := range ids {
+		if err := p.client.DeleteRecord(ctx, id); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 // runBounded executes fn(ctx, ep) for every entry in eps with at most
@@ -177,11 +206,4 @@ func (p *UnifiProvider) runBounded(
 	}
 
 	return group.Wait()
-}
-
-// GetDomainFilter returns the domain filter for the provider.
-//
-//nolint:ireturn // Must return endpoint.DomainFilterInterface as required by external-dns API
-func (p *UnifiProvider) GetDomainFilter() endpoint.DomainFilterInterface {
-	return &p.domainFilter
 }

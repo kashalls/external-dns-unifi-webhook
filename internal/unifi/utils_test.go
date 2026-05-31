@@ -18,28 +18,16 @@ func TestFormatURL(t *testing.T) {
 			expected: testURLLoginInternal,
 		},
 		{
-			name:     "records path with site",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite},
-			expected: testURLRecordsInternal,
+			name:     "policies path with site UUID",
+			path:     pathPolicies,
+			params:   []string{testHost, testSiteUUID},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies",
 		},
 		{
-			name:     "records path with site and record ID",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite, "abc123"},
-			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/abc123",
-		},
-		{
-			name:     "external controller login",
-			path:     "%s/api/login",
-			params:   []string{testHostExt},
-			expected: "https://ui.com/api/login",
-		},
-		{
-			name:     "external controller records",
-			path:     unifiRecordPathExternal,
-			params:   []string{testHostExt, "site-id", "record-id"},
-			expected: "https://ui.com/v2/api/site/site-id/static-dns/record-id",
+			name:     "policy path with site UUID and record ID",
+			path:     pathPolicy,
+			params:   []string{testHost, testSiteUUID, "abc123"},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies/abc123",
 		},
 		{
 			name:     "no placeholders - appends params",
@@ -188,52 +176,28 @@ func TestFormatURLRealWorldUsage(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "internal controller login",
-			path:     "%s/api/auth/login",
+			name:     "list policies",
+			path:     pathPolicies,
+			params:   []string{testHost, testSiteUUID},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies",
+		},
+		{
+			name:     "get specific policy",
+			path:     pathPolicy,
+			params:   []string{testHost, testSiteUUID, testRecordID},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies/" + testRecordID,
+		},
+		{
+			name:     "sites listing",
+			path:     pathSites,
 			params:   []string{testHost},
-			expected: testURLLoginInternal,
-		},
-		{
-			name:     testNameExtCtrlLogin,
-			path:     "%s/api/login",
-			params:   []string{testHostExt},
-			expected: testURLLoginExternal,
-		},
-		{
-			name:     "get all records (internal)",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite},
-			expected: testURLRecordsInternal,
-		},
-		{
-			name:     "get specific record (internal)",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite, testRecordID},
-			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
-		},
-		{
-			name:     "get all records (external)",
-			path:     unifiRecordPathExternal,
-			params:   []string{testHostExt, testSite},
-			expected: "https://ui.com/v2/api/site/default/static-dns/",
-		},
-		{
-			name:     "get specific record (external)",
-			path:     unifiRecordPathExternal,
-			params:   []string{testHostExt, testSite, testRecordID},
-			expected: "https://ui.com/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
-		},
-		{
-			name:     "custom site name",
-			path:     unifiRecordPath,
-			params:   []string{testHost, "my-custom-site"},
-			expected: "https://unifi.local/proxy/network/v2/api/site/my-custom-site/static-dns/",
+			expected: "https://unifi.local/proxy/network/integration/v1/sites",
 		},
 		{
 			name:     "controller with port",
-			path:     "%s/api/auth/login",
-			params:   []string{testHostPort},
-			expected: "https://192.168.1.1:8443/api/auth/login",
+			path:     pathPolicies,
+			params:   []string{testHostPort, testSiteUUID},
+			expected: "https://192.168.1.1:8443/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies",
 		},
 	}
 

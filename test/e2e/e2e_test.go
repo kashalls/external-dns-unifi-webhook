@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,6 +30,10 @@ import (
 const (
 	mediaType   = "application/external.dns.webhook+json;version=1"
 	startupWait = 10 * time.Second
+
+	mockSiteUUID = "11111111-2222-3333-4444-555555555555"
+	sitesPath    = "/proxy/network/integration/v1/sites"
+	policiesPath = "/proxy/network/integration/v1/sites/" + mockSiteUUID + "/dns/policies"
 )
 
 type harness struct {
@@ -63,14 +68,14 @@ func newHarness(t *testing.T) *harness {
 	ctx, cancel := context.WithCancel(context.Background())
 	h.cmd = exec.CommandContext(ctx, h.bin)
 	h.cmd.Env = append(os.Environ(),
-		fmt.Sprintf("SERVER_HOST=127.0.0.1"),
+		"SERVER_HOST=127.0.0.1",
 		fmt.Sprintf("SERVER_PORT=%d", webhookPort),
 		fmt.Sprintf("HEALTH_SERVER_ADDR=127.0.0.1:%d", healthPort),
 		"LOG_LEVEL=warn",
-		"LOG_FORMAT=test",
+		"LOG_FORMAT=text",
 		"UNIFI_HOST="+h.upstream.URL,
 		"UNIFI_API_KEY=e2e-key",
-		"UNIFI_EXTERNAL_CONTROLLER=true", // mock serves /v2/api/...
+		"UNIFI_SITE=default",
 		"UNIFI_SKIP_TLS_VERIFY=true",
 		"UNIFI_APPLY_WORKERS=2",
 		"UNIFI_RETRY_INITIAL_DELAY=10ms",
@@ -124,54 +129,98 @@ func pickFreePort(t *testing.T) int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
-// startMockUniFi returns a httptest server that mimics the UniFi external
-// controller's /v2/api/site/{site}/static-dns/ endpoints. It tracks every
-// request via hits so tests can assert the binary actually called upstream.
+// startMockUniFi returns a httptest server that mimics the UniFi Network
+// v10.3.58 Integration API: /v1/sites for site resolution, and the paginated
+// /dns/policies endpoints for the actual record store. Hits are tracked so
+// tests can assert the binary actually called upstream.
 func startMockUniFi(t *testing.T, hits *atomic.Int32) *httptest.Server {
 	t.Helper()
 
-	store := map[string]map[string]any{}
-	nextID := 0
+	var (
+		mu     sync.Mutex
+		store  = map[string]map[string]any{}
+		nextID int
+	)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v2/api/site/default/static-dns/", func(w http.ResponseWriter, r *http.Request) {
+
+	// Site resolution — return one site whose internalReference is "default".
+	mux.HandleFunc(sitesPath, func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"offset": 0, "limit": 25, "count": 1, "totalCount": 1,
+			"data": []map[string]any{
+				{"id": mockSiteUUID, "internalReference": "default", "name": "Default"},
+			},
+		})
+	})
+
+	// List/create — at the collection URL.
+	mux.HandleFunc(policiesPath, func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 
 		switch r.Method {
 		case http.MethodGet:
+			mu.Lock()
 			records := make([]map[string]any, 0, len(store))
 			for _, v := range store {
 				records = append(records, v)
 			}
-			_ = json.NewEncoder(w).Encode(records)
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"offset": 0, "limit": 200,
+				"count": len(records), "totalCount": len(records),
+				"data": records,
+			})
 
 		case http.MethodPost:
-			var record map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&record); err != nil {
+			var env map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 
 				return
 			}
+			mu.Lock()
 			nextID++
-			id := fmt.Sprintf("rec-%03d", nextID)
-			record["_id"] = id
-			store[id] = record
-			_ = json.NewEncoder(w).Encode(record)
-
-		case http.MethodDelete:
-			id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v2/api/site/default/static-dns/"), "/")
-			if _, ok := store[id]; !ok {
-				w.WriteHeader(http.StatusNotFound)
-
-				return
-			}
-			delete(store, id)
-			w.WriteHeader(http.StatusOK)
+			id := fmt.Sprintf("00000000-0000-0000-0000-%012d", nextID)
+			env["id"] = id
+			store[id] = env
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(env)
 
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
+	})
+
+	// Delete — at the per-record URL.
+	mux.HandleFunc(policiesPath+"/", func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+
+			return
+		}
+
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, policiesPath+"/"), "/")
+		mu.Lock()
+		_, ok := store[id]
+		if ok {
+			delete(store, id)
+		}
+		mu.Unlock()
+
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	})
 
 	return httptest.NewServer(mux)

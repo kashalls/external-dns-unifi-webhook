@@ -37,9 +37,9 @@ func newRetryClient(t *testing.T, srv *httptest.Server, cfg *Config) *httpClient
 	}
 
 	return &httpClient{
-		Config:     cfg,
-		Client:     srv.Client(),
-		recordsURL: unifiRecordPathExternal,
+		Config: cfg,
+		Client: srv.Client(),
+		siteID: testSiteUUID,
 	}
 }
 

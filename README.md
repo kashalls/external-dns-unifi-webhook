@@ -114,8 +114,6 @@ You should now follow the [Installing the provider](#installing-the-provider) in
             env:
                 - name: UNIFI_HOST
                   value: https://192.168.1.1 # replace with the address to your UniFi router/controller
-                - name: UNIFI_EXTERNAL_CONTROLLER
-                  value: "false"
                 - name: UNIFI_API_KEY
                   valueFrom:
                       secretKeyRef:
@@ -156,43 +154,40 @@ You should now follow the [Installing the provider](#installing-the-provider) in
 
 ### Unifi Controller Configuration
 
-| Environment Variable          | Description                                                                       | Default Value |
-| ----------------------------- | --------------------------------------------------------------------------------- | ------------- |
-| `UNIFI_API_KEY`               | The local API key provided for your user (required).                              | N/A           |
-| `UNIFI_SKIP_TLS_VERIFY`       | Whether to skip TLS verification (true or false).                                 | `true`        |
-| `UNIFI_CA_CERT`               | Path to a PEM file with extra trusted CAs (alternative to skipping verification). | N/A           |
-| `UNIFI_SITE`                  | Unifi Site Identifier (used in multi-site installations)                          | `default`     |
-| `UNIFI_HOST`                  | Host of the Unifi Controller (must be provided).                                  | N/A           |
-| `UNIFI_EXTERNAL_CONTROLLER`\* | Toggles support for non-UniFi Hardware                                            | `false`       |
-| `LOG_LEVEL`                   | Change the verbosity of logs (used when making a bug report)                      | `info`        |
+| Environment Variable    | Description                                                                           | Default Value |
+| ----------------------- | ------------------------------------------------------------------------------------- | ------------- |
+| `UNIFI_API_KEY`         | The local API key provided for your user (required).                                  | N/A           |
+| `UNIFI_SKIP_TLS_VERIFY` | Whether to skip TLS verification (true or false).                                     | `true`        |
+| `UNIFI_CA_CERT`         | Path to a PEM file with extra trusted CAs (alternative to skipping verification).     | N/A           |
+| `UNIFI_SITE`            | Unifi site name (e.g. `default`) or site UUID. Resolved to the API's UUID at startup. | `default`     |
+| `UNIFI_HOST`            | Host of the Unifi Controller (must be provided).                                      | N/A           |
+| `LOG_LEVEL`             | Change the verbosity of logs (used when making a bug report)                          | `info`        |
 
-\*`UNIFI_EXTERNAL_CONTROLLER` is used to toggle between two versions of the Network Controller API. If you are running the UniFi software outside of UniFi's official hardware (e.g., Cloud Key or Dream Machine), you'll need to set `UNIFI_EXTERNAL_CONTROLLER` to `true`
+The webhook talks to the UniFi Network [Integration API](https://developer.ui.com/network/) over the controller's local `/proxy/network/integration/v1/...` paths. External / cloud-proxied controllers are not supported — point `UNIFI_HOST` at the controller directly.
 
 ### Server Configuration
 
-| Environment Variable             | Description                                                         | Default Value     |
-| -------------------------------- | ------------------------------------------------------------------- | ----------------- |
-| `SERVER_HOST`                    | Host address for the webhook server.                                | `localhost`       |
-| `SERVER_PORT`                    | Port for the webhook server.                                        | `8888`            |
-| `SERVER_READ_TIMEOUT`            | Read timeout for the webhook server.                                | `60s`             |
-| `SERVER_READ_HEADER_TIMEOUT`     | Read-header timeout (Slowloris mitigation).                         | `5s`              |
-| `SERVER_WRITE_TIMEOUT`           | Write timeout for the webhook server.                               | `60s`             |
-| `SERVER_IDLE_TIMEOUT`            | Keep-alive idle timeout.                                            | `120s`            |
-| `SERVER_MAX_HEADER_BYTES`        | Maximum request header size.                                        | `65536`           |
-| `SERVER_MAX_BODY_BYTES`          | Maximum POST body size before returning 413.                        | `5242880` (5 MiB) |
-| `HEALTH_SERVER_ADDR`             | Address for the /metrics, /healthz, /readyz server.                 | `0.0.0.0:8080`    |
-| `READINESS_CACHE_TTL`            | How long /readyz caches the upstream probe result.                  | `30s`             |
-| `PPROF_ENABLED`                  | Mount /debug/pprof/\* on the health server (do not enable in prod). | `false`           |
-| `UNIFI_APPLY_WORKERS`            | Maximum concurrent record operations during ApplyChanges.           | `5`               |
-| `UNIFI_RETRY_ATTEMPTS`           | Total attempts per request (including the first).                   | `3`               |
-| `UNIFI_RETRY_INITIAL_DELAY`      | Initial backoff before the first retry.                             | `500ms`           |
-| `UNIFI_RETRY_MAX_DELAY`          | Maximum backoff between retries (also caps Retry-After).            | `10s`             |
-| `DOMAIN_FILTER`                  | List of domains to include in the filter.                           | Empty             |
-| `EXCLUDE_DOMAIN_FILTER`          | List of domains to exclude from filtering.                          | Empty             |
-| `REGEXP_DOMAIN_FILTER`           | Regular expression for filtering domains.                           | Empty             |
-| `REGEXP_DOMAIN_FILTER_EXCLUSION` | Regular expression for excluding domains from the filter.           | Empty             |
-| `LOG_LEVEL`                      | Log verbosity (debug / info / warn / error).                        | `info`            |
-| `LOG_FORMAT`                     | Set to `test` for human-readable text output instead of JSON.       | JSON              |
+| Environment Variable         | Description                                                         | Default Value     |
+| ---------------------------- | ------------------------------------------------------------------- | ----------------- |
+| `SERVER_HOST`                | Host address for the webhook server.                                | `localhost`       |
+| `SERVER_PORT`                | Port for the webhook server.                                        | `8888`            |
+| `SERVER_READ_TIMEOUT`        | Read timeout for the webhook server.                                | `60s`             |
+| `SERVER_READ_HEADER_TIMEOUT` | Read-header timeout (Slowloris mitigation).                         | `5s`              |
+| `SERVER_WRITE_TIMEOUT`       | Write timeout for the webhook server.                               | `60s`             |
+| `SERVER_IDLE_TIMEOUT`        | Keep-alive idle timeout.                                            | `120s`            |
+| `SERVER_MAX_HEADER_BYTES`    | Maximum request header size.                                        | `65536`           |
+| `SERVER_MAX_BODY_BYTES`      | Maximum POST body size before returning 413.                        | `5242880` (5 MiB) |
+| `HEALTH_SERVER_ADDR`         | Address for the /metrics, /healthz, /readyz server.                 | `0.0.0.0:8080`    |
+| `READINESS_CACHE_TTL`        | How long /readyz caches the upstream probe result.                  | `30s`             |
+| `PPROF_ENABLED`              | Mount /debug/pprof/\* on the health server (do not enable in prod). | `false`           |
+| `UNIFI_APPLY_WORKERS`        | Maximum concurrent record operations during ApplyChanges.           | `5`               |
+| `UNIFI_RETRY_ATTEMPTS`       | Total attempts per request (including the first).                   | `3`               |
+| `UNIFI_RETRY_INITIAL_DELAY`  | Initial backoff before the first retry.                             | `500ms`           |
+| `UNIFI_RETRY_MAX_DELAY`      | Maximum backoff between retries (also caps Retry-After).            | `10s`             |
+| `LOG_LEVEL`                  | Log verbosity (debug / info / warn / error).                        | `info`            |
+| `LOG_FORMAT`                 | Set to `text` for human-readable text output instead of JSON.       | JSON              |
+
+> **Domain filtering**: configure `--domain-filter` (and friends) on the external-dns controller itself, not on this webhook. UniFi has no zone concept the webhook could narrow against, so we follow the [external-dns `GetDomainFilter` contract](https://github.com/kubernetes-sigs/external-dns/blob/v0.21.0/docs/contributing/sources-and-providers.md#implementing-getdomainfilter) and leave the filter to the controller.
 
 ## ⭐ Stargazers
 

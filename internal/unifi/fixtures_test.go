@@ -8,13 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"sigs.k8s.io/external-dns/endpoint"
 )
 
-// fixture reads a captured response from internal/unifi/testdata. The files
-// are real responses from a UniFi Network controller, exercised end-to-end so
-// the wire format stays in sync with what the controller actually returns.
+// fixture reads a captured response from internal/unifi/testdata. Files were
+// originally captured from a real UniFi Network controller and then rewritten
+// into the v10.3.58 Integration API page envelope shape.
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
 	path := filepath.Join("testdata", name)
@@ -33,12 +31,12 @@ func fixtureClient(t *testing.T, handler http.HandlerFunc) (*httpClient, func())
 	c := &httpClient{
 		Config: &Config{
 			Host:          srv.URL,
-			Site:          "default",
-			APIKey:        "test-key",
+			Site:          testSite,
+			APIKey:        testKeyA,
 			SkipTLSVerify: true,
 		},
-		Client:     srv.Client(),
-		recordsURL: unifiRecordPathExternal,
+		Client: srv.Client(),
+		siteID: testSiteUUID,
 	}
 
 	return c, srv.Close
@@ -46,6 +44,7 @@ func fixtureClient(t *testing.T, handler http.HandlerFunc) (*httpClient, func())
 
 // TestGetEndpoints_RealFixture replays a captured response from a real UniFi
 // controller and asserts that the client parses every entry without loss.
+// FORWARD_DOMAIN entries are filtered out by the converter.
 func TestGetEndpoints_RealFixture(t *testing.T) {
 	body := fixture(t, "records_list.json")
 
@@ -103,7 +102,7 @@ func TestProviderRecords_RealFixture(t *testing.T) {
 	})
 	defer cleanup()
 
-	p := &UnifiProvider{client: c, domainFilter: *endpoint.NewDomainFilter([]string{"example.com"})}
+	p := &UnifiProvider{client: c}
 
 	endpoints, err := p.Records(context.Background())
 	if err != nil {
@@ -111,7 +110,7 @@ func TestProviderRecords_RealFixture(t *testing.T) {
 	}
 
 	// Each fixture row maps to exactly one endpoint (no multi-target keys in
-	// the real data), so the count should match the raw record count.
+	// the real data), so the count should match the converted-record count.
 	if got, want := len(endpoints), 82; got != want {
 		t.Errorf("endpoint count = %d, want %d", got, want)
 	}
@@ -129,6 +128,28 @@ func TestProviderRecords_RealFixture(t *testing.T) {
 	}
 	if !sawHeritage {
 		t.Errorf("no TXT endpoint carried external-dns heritage payload")
+	}
+}
+
+// TestSitesFixture verifies resolveSite parses a real-shaped sites response.
+func TestSitesFixture(t *testing.T) {
+	body := fixture(t, "sites_list.json")
+
+	c, cleanup := fixtureClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	})
+	// Clear pre-set siteID so we exercise the resolver path.
+	c.siteID = ""
+	defer cleanup()
+
+	id, err := c.resolveSite(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("resolveSite: %v", err)
+	}
+	if id != testSiteUUID {
+		t.Errorf("siteID = %q, want %q", id, testSiteUUID)
 	}
 }
 

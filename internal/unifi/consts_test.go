@@ -5,10 +5,10 @@ package unifi
 const (
 	// Hosts and base URLs.
 	testHost       = "https://unifi.local"
-	testHostExt    = "https://ui.com"
 	testHostPort   = "https://192.168.1.1:8443"
 	testURLExample = "https://example.com"
 	testSite       = "default"
+	testSiteUUID   = "11111111-2222-3333-4444-555555555555"
 	testRecordID   = "507f1f77bcf86cd799439011"
 
 	// DNS record field values.
@@ -22,7 +22,6 @@ const (
 	// HTTP headers.
 	headerAccept      = "Accept"
 	headerContentType = "Content-Type"
-	testCSRF          = "csrf-token-123"
 
 	// Error message fragments.
 	testMsgInternalServer = "Internal server error"
@@ -39,17 +38,14 @@ const (
 	testDataSRVTarget = "SRV record target"
 
 	// URLs used in error and FormatURL tests.
-	testURLLoginExample    = "https://unifi.example.com/api/login"
-	testURLInvalid         = "https://invalid.local/api"
-	testURLSpecialChars    = "https://unifi.local/api?param=value&key=секрет"
-	testURLMissingRecord   = "https://unifi.local/api/site/default/static-dns/missing"
-	testURLLoginInternal   = "https://unifi.local/api/auth/login"
-	testURLRecordsInternal = "https://unifi.local/proxy/network/v2/api/site/default/static-dns/"
-	testURLLoginExternal   = "https://ui.com/api/login"
+	testURLLoginExample  = "https://unifi.example.com/api/login"
+	testURLInvalid       = "https://invalid.local/api"
+	testURLSpecialChars  = "https://unifi.local/api?param=value&key=секрет"
+	testURLMissingRecord = "https://unifi.local/api/site/default/static-dns/missing"
+	testURLLoginInternal = "https://unifi.local/api/auth/login"
 
 	// Subtest names.
-	testNameAuthError    = "AuthError"
-	testNameExtCtrlLogin = "external controller login"
+	testNameAuthError = "AuthError"
 
 	// FormatURL path fragments.
 	testPathHostParam = "%s/api/%s"
@@ -71,7 +67,6 @@ const (
 	contentTypeJSONUTF8 = "application/json; charset=utf-8"
 
 	// Operations, statuses and messages.
-	testOpList         = "list"
 	testOpMarshal      = "marshal"
 	testMsgInvalidAuth = "invalid credentials"
 	testMsgInvalid     = "invalid"

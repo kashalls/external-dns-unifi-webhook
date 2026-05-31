@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/errors"
+	"errors"
 )
 
 // Shared test fixtures, declared as constants to satisfy the goconst linter.

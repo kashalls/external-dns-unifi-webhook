@@ -1,10 +1,9 @@
 package metrics
 
 import (
+	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/cockroachdb/errors"
 )
 
 type responseWriter struct {
@@ -30,32 +29,26 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	n, err := rw.ResponseWriter.Write(b)
 	rw.written += n
 	if err != nil {
-		return n, errors.Wrap(err, "failed to write response")
+		return n, fmt.Errorf("writing response: %w", err)
 	}
 
 	return n, nil
 }
 
-// HTTPMetricsMiddleware is a middleware that records HTTP metrics.
+// HTTPMetricsMiddleware records request count, duration, in-flight count and
+// response size for every wrapped HTTP handler.
 func HTTPMetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m := Get()
 
-		// Increment in-flight requests
 		m.HTTPRequestsInFlight.WithLabelValues(ProviderName).Inc()
 		defer m.HTTPRequestsInFlight.WithLabelValues(ProviderName).Dec()
 
-		// Wrap the response writer to capture status code and size
 		rw := newResponseWriter(w)
-
-		// Record start time
 		start := time.Now()
 
-		// Call the next handler
 		next.ServeHTTP(rw, r)
 
-		// Record metrics
-		duration := time.Since(start)
-		m.RecordHTTPRequest(r.Method, r.URL.Path, rw.statusCode, duration, rw.written)
+		m.RecordHTTPRequest(r.Method, r.URL.Path, rw.statusCode, time.Since(start), rw.written)
 	})
 }

@@ -33,7 +33,7 @@ go tool cover -html=coverage.out
 Run tests for a specific package:
 
 ```bash
-go test ./pkg/webhook/
+go test ./internal/webhook/
 go test ./internal/unifi/
 ```
 
@@ -75,7 +75,7 @@ golangci-lint run --fix
 Build for your current platform:
 
 ```bash
-go build -o external-dns-unifi-webhook ./cmd/webhook
+go build -o external-dns-unifi-webhook ./cmd/external-dns-unifi-webhook
 ```
 
 Build with version information:
@@ -83,17 +83,17 @@ Build with version information:
 ```bash
 VERSION=$(git describe --tags --always --dirty)
 REVISION=$(git rev-parse HEAD)
-go build -ldflags "-X main.Version=${VERSION} -X main.Revision=${REVISION}" -o external-dns-unifi-webhook ./cmd/webhook
+go build -ldflags "-X main.Version=${VERSION} -X main.Revision=${REVISION}" -o external-dns-unifi-webhook ./cmd/external-dns-unifi-webhook
 ```
 
 Cross-compile for different platforms:
 
 ```bash
 # Linux AMD64
-GOOS=linux GOARCH=amd64 go build -o external-dns-unifi-webhook-linux-amd64 ./cmd/webhook
+GOOS=linux GOARCH=amd64 go build -o external-dns-unifi-webhook-linux-amd64 ./cmd/external-dns-unifi-webhook
 
 # Linux ARM64
-GOOS=linux GOARCH=arm64 go build -o external-dns-unifi-webhook-linux-arm64 ./cmd/webhook
+GOOS=linux GOARCH=arm64 go build -o external-dns-unifi-webhook-linux-arm64 ./cmd/external-dns-unifi-webhook
 ```
 
 ## Building Container Images
@@ -174,7 +174,7 @@ export LOG_LEVEL=debug
 2. Run the webhook provider:
 
 ```bash
-go run ./cmd/webhook
+go run ./cmd/external-dns-unifi-webhook
 ```
 
 3. Test the endpoints:
@@ -208,7 +208,7 @@ Enable debug logging for detailed output:
 
 ```bash
 export LOG_LEVEL=debug
-go run ./cmd/webhook
+go run ./cmd/external-dns-unifi-webhook
 ```
 
 ### Common Issues

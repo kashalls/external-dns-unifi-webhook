@@ -1,0 +1,299 @@
+//go:build integration
+
+// Package integration drives the unifi.UnifiProvider library directly against
+// a real UniFi Network controller. Excluded from normal `go test ./...` by the
+// `integration` build tag; run with:
+//
+//	UNIFI_HOST=https://192.168.1.1 \
+//	UNIFI_API_KEY=... \
+//	go test -tags integration -timeout 120s ./test/integration/...
+//
+// Optional env:
+//
+//	UNIFI_SITE=default          # site name or UUID (default: "default")
+//	UNIFI_SKIP_TLS_VERIFY=true  # default true for self-signed controllers
+//	UNIFI_CA_CERT=/path/to/ca   # alternative to skipping verification
+//
+// Safety: every record this suite creates has a `extdns-itest-` prefix and a
+// random suffix. At startup we sweep any leftover records with that prefix
+// (in case a previous run was killed) before running the suite. t.Cleanup
+// handlers tear down records this run created so a successful run is a no-op
+// on your controller.
+package integration
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/caarlos0/env/v11"
+	"github.com/home-operations/external-dns-unifi-webhook/internal/unifi"
+	"sigs.k8s.io/external-dns/endpoint"
+	"sigs.k8s.io/external-dns/plan"
+	"sigs.k8s.io/external-dns/provider"
+)
+
+const (
+	// recordPrefix tags every record this suite touches. Records that don't
+	// start with it are never modified, never deleted.
+	recordPrefix = "extdns-itest-"
+
+	// recordDomain is the parent zone we create records under. .example.com
+	// is reserved per RFC 2606 and never resolves publicly, so even if the
+	// suite leaks a record it can't accidentally point at real infrastructure.
+	recordDomain = ".example.com"
+)
+
+func newSuffix(t *testing.T) string {
+	t.Helper()
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+
+	return hex.EncodeToString(b[:])
+}
+
+// itestName returns a unique throwaway DNS name for the given label.
+func itestName(t *testing.T, label string) string {
+	return recordPrefix + label + "-" + newSuffix(t) + recordDomain
+}
+
+// newProvider constructs a UnifiProvider from env, identical to how the
+// binary would. Returns nil/skip if required env is missing.
+func newProvider(t *testing.T) provider.Provider {
+	t.Helper()
+
+	if os.Getenv("UNIFI_HOST") == "" || os.Getenv("UNIFI_API_KEY") == "" {
+		t.Skip("UNIFI_HOST and UNIFI_API_KEY must be set for integration tests")
+	}
+
+	cfg := unifi.Config{}
+	if err := env.Parse(&cfg); err != nil {
+		t.Fatalf("parsing UNIFI_* env: %v", err)
+	}
+
+	p, err := unifi.NewUnifiProvider(&cfg)
+	if err != nil {
+		t.Fatalf("NewUnifiProvider: %v", err)
+	}
+
+	return p
+}
+
+// sweepLeftovers deletes every record on the controller whose DNS name starts
+// with the integration prefix. Runs once at suite start so a previously
+// killed test doesn't leave records that mask real bugs.
+func sweepLeftovers(t *testing.T, p provider.Provider) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	endpoints, err := p.Records(ctx)
+	if err != nil {
+		t.Fatalf("sweep: Records: %v", err)
+	}
+
+	leftovers := make([]*endpoint.Endpoint, 0)
+	for _, ep := range endpoints {
+		if strings.HasPrefix(ep.DNSName, recordPrefix) {
+			leftovers = append(leftovers, ep)
+		}
+	}
+	if len(leftovers) == 0 {
+		return
+	}
+	t.Logf("sweeping %d leftover %s records from prior runs", len(leftovers), recordPrefix)
+
+	if err := p.ApplyChanges(ctx, &plan.Changes{Delete: leftovers}); err != nil {
+		t.Fatalf("sweep delete: %v", err)
+	}
+}
+
+// cleanup queues a deferred delete for every endpoint passed in. Used so each
+// subtest's records are torn down even if assertions fail.
+func cleanup(t *testing.T, p provider.Provider, eps ...*endpoint.Endpoint) {
+	t.Helper()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := p.ApplyChanges(ctx, &plan.Changes{Delete: eps}); err != nil {
+			t.Errorf("cleanup delete: %v", err)
+		}
+	})
+}
+
+// findEndpoint returns the first record matching name+type, or nil.
+func findEndpoint(eps []*endpoint.Endpoint, name, recordType string) *endpoint.Endpoint {
+	for _, ep := range eps {
+		if ep.DNSName == name && ep.RecordType == recordType {
+			return ep
+		}
+	}
+
+	return nil
+}
+
+// TestIntegration exercises the provider against a real UniFi controller.
+// Each subtest is independent and self-cleaning; ordering doesn't matter.
+func TestIntegration(t *testing.T) {
+	p := newProvider(t)
+	sweepLeftovers(t, p)
+
+	t.Run("ListRecordsParses", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Just succeeding here proves: TLS handshake, X-API-KEY auth, site
+		// UUID resolution against /v1/sites, paginated /dns/policies fetch,
+		// and per-type envelope unmarshal for every record on the controller.
+		eps, err := p.Records(ctx)
+		if err != nil {
+			t.Fatalf("Records: %v", err)
+		}
+		t.Logf("parsed %d existing records from the controller", len(eps))
+	})
+
+	t.Run("CreateAndDeleteA", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		ep := endpoint.NewEndpointWithTTL(itestName(t, "a"), "A", 300, "192.0.2.1")
+		cleanup(t, p, ep)
+
+		if err := p.ApplyChanges(ctx, &plan.Changes{Create: []*endpoint.Endpoint{ep}}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+
+		eps, err := p.Records(ctx)
+		if err != nil {
+			t.Fatalf("list after create: %v", err)
+		}
+		got := findEndpoint(eps, ep.DNSName, "A")
+		if got == nil {
+			t.Fatalf("expected record %s/A to exist after create", ep.DNSName)
+		}
+		if got.Targets[0] != "192.0.2.1" {
+			t.Errorf("target = %q, want 192.0.2.1", got.Targets[0])
+		}
+
+		if err := p.ApplyChanges(ctx, &plan.Changes{Delete: []*endpoint.Endpoint{ep}}); err != nil {
+			t.Fatalf("delete: %v", err)
+		}
+
+		eps, err = p.Records(ctx)
+		if err != nil {
+			t.Fatalf("list after delete: %v", err)
+		}
+		if got := findEndpoint(eps, ep.DNSName, "A"); got != nil {
+			t.Errorf("expected record %s/A to be gone after delete, still found %+v", ep.DNSName, got)
+		}
+	})
+
+	t.Run("CreateCNAME", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		ep := endpoint.NewEndpointWithTTL(itestName(t, "cname"), "CNAME", 300, "target.example.com")
+		cleanup(t, p, ep)
+
+		if err := p.ApplyChanges(ctx, &plan.Changes{Create: []*endpoint.Endpoint{ep}}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+
+		eps, err := p.Records(ctx)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		got := findEndpoint(eps, ep.DNSName, "CNAME")
+		if got == nil {
+			t.Fatalf("expected CNAME %s to exist", ep.DNSName)
+		}
+		if got.Targets[0] != "target.example.com" {
+			t.Errorf("target = %q, want target.example.com", got.Targets[0])
+		}
+	})
+
+	t.Run("CNAMEConflictReplacesExisting", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		name := itestName(t, "cnameconflict")
+		first := endpoint.NewEndpointWithTTL(name, "CNAME", 300, "first.example.com")
+		second := endpoint.NewEndpointWithTTL(name, "CNAME", 300, "second.example.com")
+		cleanup(t, p, second) // only the survivor needs cleanup
+
+		if err := p.ApplyChanges(ctx, &plan.Changes{Create: []*endpoint.Endpoint{first}}); err != nil {
+			t.Fatalf("create first: %v", err)
+		}
+		if err := p.ApplyChanges(ctx, &plan.Changes{Create: []*endpoint.Endpoint{second}}); err != nil {
+			t.Fatalf("create second (should evict first): %v", err)
+		}
+
+		eps, err := p.Records(ctx)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		got := findEndpoint(eps, name, "CNAME")
+		if got == nil {
+			t.Fatalf("expected CNAME %s to exist after conflict", name)
+		}
+		if got.Targets[0] != "second.example.com" {
+			t.Errorf("after conflict, target = %q, want second.example.com (first should have been evicted)", got.Targets[0])
+		}
+	})
+
+	t.Run("TTLClampedAtSpecMaximum", func(t *testing.T) {
+		// A-record TTL ceiling per the spec is 86400. We send 999999 and
+		// confirm what the controller stored; the converter clamps to 86400
+		// before sending, so we expect to read back 86400.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		ep := endpoint.NewEndpointWithTTL(itestName(t, "ttl"), "A", 999999, "192.0.2.2")
+		cleanup(t, p, ep)
+
+		if err := p.ApplyChanges(ctx, &plan.Changes{Create: []*endpoint.Endpoint{ep}}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+
+		eps, err := p.Records(ctx)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		got := findEndpoint(eps, ep.DNSName, "A")
+		if got == nil {
+			t.Fatalf("expected record %s/A to exist", ep.DNSName)
+		}
+		if got.RecordTTL != 86400 {
+			t.Errorf("stored TTL = %d, want 86400 (clamp)", got.RecordTTL)
+		}
+	})
+
+	t.Run("DeleteOfMissingIsNoOp", func(t *testing.T) {
+		// Create, delete, then ask to delete again. The second delete
+		// should succeed cleanly: the provider's snapshot finds no
+		// matching IDs (so no DELETE is even issued). 404 tolerance at
+		// the client layer is covered by TestDeleteRecord; this verifies
+		// the higher-level provider semantics.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		ep := endpoint.NewEndpointWithTTL(itestName(t, "noop"), "A", 300, "192.0.2.3")
+
+		if err := p.ApplyChanges(ctx, &plan.Changes{Create: []*endpoint.Endpoint{ep}}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+		if err := p.ApplyChanges(ctx, &plan.Changes{Delete: []*endpoint.Endpoint{ep}}); err != nil {
+			t.Fatalf("first delete: %v", err)
+		}
+		if err := p.ApplyChanges(ctx, &plan.Changes{Delete: []*endpoint.Endpoint{ep}}); err != nil {
+			t.Errorf("second delete should be a no-op, got: %v", err)
+		}
+	})
+}

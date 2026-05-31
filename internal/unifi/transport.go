@@ -1,0 +1,276 @@
+package unifi
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"math/rand/v2"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
+	extdnshttp "sigs.k8s.io/external-dns/pkg/http"
+)
+
+const errorBodyBufferSize = 512
+
+// newHTTPTransport builds the http.Transport used by the UniFi client.
+// CACertPath wins over SkipTLSVerify when both are set — operators with a
+// proper internal CA should not also be running with verification off.
+func newHTTPTransport(cfg *Config) (*http.Transport, error) {
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+
+	switch {
+	case cfg.CACertPath != "":
+		pem, err := os.ReadFile(cfg.CACertPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading UNIFI_CA_CERT %q: %w", cfg.CACertPath, err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("UNIFI_CA_CERT %q: no certificates parsed", cfg.CACertPath)
+		}
+		tlsCfg.RootCAs = pool
+		if cfg.SkipTLSVerify {
+			slog.Warn("UNIFI_CA_CERT is set; ignoring UNIFI_SKIP_TLS_VERIFY")
+		}
+	case cfg.SkipTLSVerify:
+		//nolint:gosec // Explicit opt-in via UNIFI_SKIP_TLS_VERIFY for self-signed controllers.
+		tlsCfg.InsecureSkipVerify = true
+	}
+
+	return &http.Transport{TLSClientConfig: tlsCfg}, nil
+}
+
+// doRequest issues an HTTP request and applies exponential backoff retries
+// on 5xx and 429 responses (honouring Retry-After when present). body is the
+// raw JSON payload (nil for GET/DELETE) — it is re-read on every retry
+// attempt so the caller does not need a rewindable reader.
+func (c *httpClient) doRequest(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
+	attempts := c.RetryAttempts
+	if attempts < 1 {
+		attempts = 1
+	}
+
+	var lastErr error
+	for attempt := range attempts {
+		if attempt > 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+
+		resp, err := c.doOnce(ctx, method, path, body)
+		if err == nil && resp.StatusCode < 400 {
+			return resp, nil
+		}
+
+		retryable, wait := c.retryAfter(resp, err, attempt)
+		if !retryable || attempt == attempts-1 {
+			if err != nil {
+				return nil, err
+			}
+
+			// errorResponse reads and closes resp.Body itself.
+			return c.errorResponse(resp, method, path)
+		}
+
+		// We're going to retry — drain and close so the connection can be
+		// reused while we wait. Network errors have no body to drain.
+		if resp != nil {
+			extdnshttp.DrainAndClose(resp.Body)
+		}
+
+		status := "network"
+		if resp != nil {
+			status = strconv.Itoa(resp.StatusCode)
+			if resp.StatusCode == http.StatusTooManyRequests {
+				metrics.Get().UniFiRateLimitsTotal.WithLabelValues(metrics.ProviderName, opLabel(path)).Inc()
+			}
+		}
+		metrics.Get().UniFiRetriesTotal.WithLabelValues(metrics.ProviderName, opLabel(path), status).Inc()
+		slog.Debug("retrying upstream request", "attempt", attempt+1, "wait", wait, "status", status)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+		lastErr = err
+	}
+
+	return nil, lastErr
+}
+
+// doOnce performs a single request attempt. The caller decides whether to
+// retry based on the returned status code.
+func (c *httpClient) doOnce(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, path, reader)
+	if err != nil {
+		return nil, fmt.Errorf("creating HTTP request: %w", err)
+	}
+	c.setHeaders(req)
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, NewNetworkError(method, path, err)
+	}
+
+	return resp, nil
+}
+
+// retryAfter returns whether a request should be retried and how long to
+// wait. 429 honours the server-supplied Retry-After header (clamped to
+// RetryMaxDelay); 5xx and network errors use exponential backoff with jitter.
+func (c *httpClient) retryAfter(resp *http.Response, err error, attempt int) (bool, time.Duration) {
+	// Network errors are retryable if they aren't context cancellations.
+	if err != nil {
+		if IsNetworkError(err) {
+			return true, c.backoff(attempt, 0)
+		}
+
+		return false, 0
+	}
+
+	if resp == nil {
+		return false, 0
+	}
+
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests:
+		hint := parseRetryAfter(resp.Header.Get("Retry-After"))
+
+		return true, c.backoff(attempt, hint)
+	case resp.StatusCode >= 500 && resp.StatusCode < 600:
+		return true, c.backoff(attempt, 0)
+	}
+
+	return false, 0
+}
+
+// backoff returns initial * 2^attempt + jitter, clamped to max. If hint is
+// non-zero (Retry-After from the server) it is used as the floor — we never
+// retry sooner than the server asked us to.
+func (c *httpClient) backoff(attempt int, hint time.Duration) time.Duration {
+	initial := c.RetryInitialDelay
+	if initial <= 0 {
+		initial = 500 * time.Millisecond
+	}
+	maxDelay := c.RetryMaxDelay
+	if maxDelay <= 0 {
+		maxDelay = 10 * time.Second
+	}
+
+	base := initial << attempt
+	if base <= 0 || base > maxDelay {
+		base = maxDelay
+	}
+	// 0-50% jitter so concurrent workers don't all retry on the same tick.
+	jitter := time.Duration(rand.Int64N(int64(base) / 2))
+	wait := base + jitter
+
+	if hint > 0 && hint > wait {
+		wait = hint
+	}
+	if wait > maxDelay {
+		wait = maxDelay
+	}
+
+	return wait
+}
+
+// parseRetryAfter understands both numeric-seconds and HTTP-date forms of
+// the Retry-After header. Unparseable values produce zero, which lets the
+// caller fall through to ordinary backoff.
+func parseRetryAfter(value string) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(value); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if when, err := http.ParseTime(value); err == nil {
+		if d := time.Until(when); d > 0 {
+			return d
+		}
+	}
+
+	return 0
+}
+
+// opLabel reduces a UniFi URL path to a coarse operation tag suitable for a
+// metric label. Real-record IDs would explode label cardinality, so we
+// collapse the trailing segment.
+func opLabel(path string) string {
+	switch {
+	case strings.Contains(path, "/dns/policies"):
+		return "dns_policies"
+	case strings.Contains(path, "/sites"):
+		return "sites"
+	}
+
+	return "other"
+}
+
+func (c *httpClient) errorResponse(resp *http.Response, method, path string) (*http.Response, error) {
+	// DrainAndClose ensures the rest of the body (beyond errorBodyBufferSize)
+	// is drained so the underlying connection can be returned to the pool.
+	defer extdnshttp.DrainAndClose(resp.Body)
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, errorBodyBufferSize))
+	if err != nil {
+		return nil, NewDataError("read", "error response body", err)
+	}
+
+	// The Network API returns JSON for most error cases, but some status codes
+	// (e.g. 405 from the Tomcat layer) come back as HTML. Fall back to the raw
+	// body so callers still get a useful APIError instead of a parse failure.
+	var apiError apiErrorResponse
+	message := strings.TrimSpace(string(bodyBytes))
+	if err := json.Unmarshal(bodyBytes, &apiError); err == nil && apiError.Message != "" {
+		message = formatAPIError(&apiError)
+	}
+
+	return nil, NewAPIError(method, path, resp.StatusCode, message)
+}
+
+// formatAPIError pulls the human-useful pieces (statusName + code + message)
+// out of the new error envelope into one line. Timestamp / requestPath /
+// requestId are dropped — they're only useful when correlating with server
+// logs, and we already log status + URL ourselves.
+func formatAPIError(e *apiErrorResponse) string {
+	var prefix string
+	switch {
+	case e.StatusName != "" && e.Code != "":
+		prefix = e.StatusName + " (" + e.Code + ")"
+	case e.StatusName != "":
+		prefix = e.StatusName
+	case e.Code != "":
+		prefix = e.Code
+	}
+	if prefix == "" {
+		return e.Message
+	}
+
+	return prefix + ": " + e.Message
+}
+
+// setHeaders applies the X-API-KEY auth header and the standard JSON headers.
+func (c *httpClient) setHeaders(req *http.Request) {
+	req.Header.Set("X-API-KEY", c.APIKey)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+}

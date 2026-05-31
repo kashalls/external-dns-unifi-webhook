@@ -1,0 +1,7 @@
+status:       200
+content_type: application/json
+url:          https://unifi.example.com/proxy/network/integration/v1/sites/{siteId}/dns/policies
+note:         Originally captured from /v2/api/.../static-dns on a live UniFi
+              controller, then mechanically rewritten into the v10.3.58
+              Integration API page envelope shape. Includes one trailing
+              FORWARD_DOMAIN entry that the converter must filter out.

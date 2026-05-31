@@ -1,157 +1,185 @@
 package unifi
 
 import (
-	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
-	"net/http/cookiejar"
+	"net/url"
+	"regexp"
 	"time"
 
-	"github.com/cockroachdb/errors"
-	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
 	externaldnsendpoint "sigs.k8s.io/external-dns/endpoint"
+	extdnshttp "sigs.k8s.io/external-dns/pkg/http"
 )
-
-type ClientURLs struct {
-	Login   string
-	Records string
-}
 
 // httpClient is the DNS provider client.
 type httpClient struct {
 	*Config
 	*http.Client
 
-	csrf       string
-	ClientURLs *ClientURLs
+	siteID string
 }
 
+// API paths (Network Integration API, internal connection only).
 const (
-	unifiLoginPath          = "%s/api/auth/login"
-	unifiLoginPathExternal  = "%s/api/login"
-	unifiRecordPath         = "%s/proxy/network/v2/api/site/%s/static-dns/%s"
-	unifiRecordPathExternal = "%s/v2/api/site/%s/static-dns/%s"
+	pathSites    = "%s/proxy/network/integration/v1/sites"
+	pathPolicies = "%s/proxy/network/integration/v1/sites/%s/dns/policies"
+	pathPolicy   = "%s/proxy/network/integration/v1/sites/%s/dns/policies/%s"
+)
 
+// recordType* are the external-dns / DNSRecord type strings. They map to the
+// API's per-type discriminator values in dto.go.
+const (
 	recordTypeA     = "A"
 	recordTypeAAAA  = "AAAA"
 	recordTypeCNAME = "CNAME"
 	recordTypeMX    = "MX"
-	recordTypeNS    = "NS"
 	recordTypeSRV   = "SRV"
 	recordTypeTXT   = "TXT"
-
-	errorBodyBufferSize = 512
 )
 
-// newUnifiClient creates a new DNS provider client and logs in to store cookies.
+// pageLimit is the API's documented maximum page size.
+const pageLimit = 200
+
+// siteResolveTimeout caps the startup probe so a broken controller doesn't
+// hang the process forever.
+const siteResolveTimeout = 15 * time.Second
+
+var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// newUnifiClient constructs a UniFi API client and resolves the site name (or
+// UUID) supplied via UNIFI_SITE to the API's UUID at startup. The probe also
+// validates credentials early so misconfiguration fails fast.
 func newUnifiClient(config *Config) (*httpClient, error) {
-	jar, err := cookiejar.New(nil)
+	transport, err := newHTTPTransport(config)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create cookie jar")
+		return nil, err
 	}
 
-	// Create the HTTP client
-	client := &httpClient{
+	// NewInstrumentedClient wraps the transport so every outbound call emits
+	// external_dns_http_request_duration_seconds, matching the metric naming
+	// the rest of the external-dns ecosystem (and the inbound webhook server)
+	// uses. See sigs.k8s.io/external-dns PR #6307.
+	c := &httpClient{
 		Config: config,
-		Client: &http.Client{
-			Transport: &http.Transport{
-				//nolint:gosec // InsecureSkipVerify is configurable via UNIFI_SKIP_TLS_VERIFY for self-signed certs
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipTLSVerify},
-			},
-			Jar: jar,
-		},
-		ClientURLs: &ClientURLs{
-			Login:   unifiLoginPath,
-			Records: unifiRecordPath,
-		},
+		Client: extdnshttp.NewInstrumentedClient(&http.Client{Transport: transport}),
 	}
 
-	if client.ExternalController {
-		client.ClientURLs.Login = unifiLoginPathExternal
-		client.ClientURLs.Records = unifiRecordPathExternal
-	}
-
-	if client.APIKey != "" {
-		return client, nil
-	}
-
-	log.Info("UNIFI_USER and UNIFI_PASSWORD are deprecated, please switch to using UNIFI_API_KEY instead")
-
-	err = client.login(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), siteResolveTimeout)
+	defer cancel()
+	siteID, err := c.resolveSite(ctx, config.Site)
 	if err != nil {
-		return nil, errors.Wrap(err, "initial login failed")
+		return nil, fmt.Errorf("resolving UNIFI_SITE %q: %w", config.Site, err)
 	}
+	c.siteID = siteID
+	slog.Info("resolved UniFi site", "ref", config.Site, "id", siteID)
 
-	return client, nil
+	return c, nil
 }
 
-// GetEndpoints retrieves the list of DNS records from the UniFi controller.
+// resolveSite turns a user-supplied site name (or UUID) into the API's site
+// UUID via GET /v1/sites with a filter. Accepts either the human-friendly
+// internalReference (e.g. "default") or a raw UUID — both are common ways
+// people identify a site in their environment.
+func (c *httpClient) resolveSite(ctx context.Context, ref string) (string, error) {
+	field := "internalReference"
+	if uuidRegex.MatchString(ref) {
+		field = "id"
+	}
+
+	filter := fmt.Sprintf("%s.eq('%s')", field, ref)
+	u := FormatURL(pathSites, c.Host) + "?filter=" + url.QueryEscape(filter)
+
+	var page sitePage
+	if _, err := c.getJSON(ctx, u, "sites", &page); err != nil {
+		return "", err
+	}
+
+	switch len(page.Data) {
+	case 0:
+		return "", fmt.Errorf("no site matches %s=%q", field, ref)
+	case 1:
+		return page.Data[0].ID, nil
+	default:
+		return "", fmt.Errorf("multiple sites match %s=%q (%d)", field, ref, len(page.Data))
+	}
+}
+
+// getJSON issues a GET, reads the body fully, and decodes it into dest. The
+// scope label is used in error messages ("DNS policies", "sites", ...) so the
+// caller doesn't have to repeat it across read/unmarshal sites. Returns the
+// number of body bytes read for metric accounting.
+func (c *httpClient) getJSON(ctx context.Context, reqURL, scope string, dest any) (int, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer extdnshttp.DrainAndClose(resp.Body)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, NewDataError("read", scope+" response body", err)
+	}
+	if err := json.Unmarshal(body, dest); err != nil {
+		return len(body), NewDataError("unmarshal", scope, err)
+	}
+
+	return len(body), nil
+}
+
+// GetEndpoints retrieves the full list of DNS records from the UniFi
+// controller, walking the paginated DNS Policies endpoint. FORWARD_DOMAIN
+// entries and unknown record types are filtered out by the converter so we
+// never report them as managed records.
 func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 	m := metrics.Get()
 	start := time.Now()
 
-	resp, err := c.doRequest(
-		ctx,
-		http.MethodGet,
-		FormatURL(c.ClientURLs.Records, c.Host, c.Site),
-		nil,
+	var (
+		records  []DNSRecord
+		offset   int
+		bodyRead int
 	)
+	for {
+		page, n, err := c.fetchPolicyPage(ctx, offset, pageLimit)
+		bodyRead += n
+		if err != nil {
+			m.RecordUniFiAPICall("get_endpoints", time.Since(start), bodyRead, err)
 
-	duration := time.Since(start)
-
-	if err != nil {
-		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
-
-		return nil, errors.Wrap(err, "failed to fetch DNS records from UniFi")
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		m.RecordUniFiAPICall("get_endpoints", duration, 0, err)
-
-		return nil, NewDataError("read", "get endpoints response body", err)
-	}
-
-	var records []DNSRecord
-	err = json.Unmarshal(bodyBytes, &records)
-	if err != nil {
-		log.Error("Failed to decode response", "error", err)
-		m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), err)
-
-		return nil, NewDataError("unmarshal", "DNS records", err)
-	}
-
-	m.RecordUniFiAPICall("get_endpoints", duration, len(bodyBytes), nil)
-
-	// Loop through records to modify SRV type
-	for i, record := range records {
-		if record.RecordType != recordTypeSRV {
-			continue
+			return nil, fmt.Errorf("fetching DNS records from UniFi: %w", err)
 		}
 
-		// Modify the Target for SRV records
-		records[i].Value = fmt.Sprintf("%d %d %d %s",
-			*record.Priority,
-			*record.Weight,
-			*record.Port,
-			record.Value,
-		)
-		records[i].Priority = nil
-		records[i].Weight = nil
-		records[i].Port = nil
+		for _, env := range page.Data {
+			if r, ok := toDNSRecord(env); ok {
+				records = append(records, r)
+			}
+		}
+
+		offset += page.Count
+		if page.Count == 0 || offset >= page.TotalCount {
+			break
+		}
 	}
 
-	log.Debug("fetched records", "count", len(records))
+	m.RecordUniFiAPICall("get_endpoints", time.Since(start), bodyRead, nil)
+	slog.Debug("fetched records", "count", len(records))
 
 	return records, nil
+}
+
+func (c *httpClient) fetchPolicyPage(ctx context.Context, offset, limit int) (dnsPolicyPage, int, error) {
+	u := fmt.Sprintf("%s?offset=%d&limit=%d",
+		FormatURL(pathPolicies, c.Host, c.siteID), offset, limit)
+
+	var page dnsPolicyPage
+	n, err := c.getJSON(ctx, u, "DNS policies", &page)
+
+	return page, n, err
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
@@ -159,307 +187,117 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 	m := metrics.Get()
 	start := time.Now()
 
-	// CNAME records can only have one target
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
 		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
-		log.Warn("Ignoring additional CNAME targets. Only the first target will be used.", "key", endpoint.DNSName, "ignored_targets", endpoint.Targets[1:])
+		slog.Warn("ignoring additional CNAME targets; only the first target will be used",
+			"key", endpoint.DNSName, "ignored_targets", endpoint.Targets[1:])
 		endpoint.Targets = endpoint.Targets[:1]
 	}
 
-	createdRecords := make([]*DNSRecord, 0, len(endpoint.Targets))
-
+	created := make([]*DNSRecord, 0, len(endpoint.Targets))
 	for _, target := range endpoint.Targets {
-		record := prepareDNSRecord(endpoint, target)
-
-		// SRV records need special parsing
-		if endpoint.RecordType == recordTypeSRV {
-			err := parseSRVTarget(&record, endpoint.Targets[0])
-			if err != nil {
-				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
-
-				return nil, err
-			}
+		r := DNSRecord{
+			Enabled:    true,
+			Key:        endpoint.DNSName,
+			RecordType: endpoint.RecordType,
+			TTL:        endpoint.RecordTTL,
+			Value:      target,
 		}
 
-		createdRecord, err := c.createSingleDNSRecord(ctx, &record)
+		out, err := c.createOne(ctx, r)
 		if err != nil {
+			if isSRVConversionError(err) {
+				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
+			}
 			m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
 
 			return nil, err
 		}
 
-		createdRecords = append(createdRecords, createdRecord)
-		log.Debug("created new record", "key", createdRecord.Key, "type", createdRecord.RecordType, "target", createdRecord.Value)
+		created = append(created, out)
+		slog.Debug("created new record", "key", out.Key, "type", out.RecordType, "target", out.Value)
 	}
 
 	m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, nil)
 
-	return createdRecords, nil
+	return created, nil
 }
 
-// prepareDNSRecord creates a DNSRecord from endpoint and target value.
-func prepareDNSRecord(endpoint *externaldnsendpoint.Endpoint, target string) DNSRecord {
-	return DNSRecord{
-		Enabled:    true,
-		Key:        endpoint.DNSName,
-		RecordType: endpoint.RecordType,
-		TTL:        endpoint.RecordTTL,
-		Value:      target,
+// isSRVConversionError reports whether err originated in SRV name or target
+// parsing. It guards the SRV-specific metric so unrelated DataErrors (marshal,
+// MX parse, unsupported type) don't pollute the count.
+func isSRVConversionError(err error) bool {
+	var de *DataError
+	if !errors.As(err, &de) {
+		return false
 	}
+
+	return de.DataType == "SRV record target" || de.DataType == "SRV record name"
 }
 
-// parseSRVTarget parses SRV record format and populates Priority, Weight, Port fields.
-func parseSRVTarget(record *DNSRecord, target string) error {
-	record.Priority = new(int)
-	record.Weight = new(int)
-	record.Port = new(int)
-
-	_, err := fmt.Sscanf(target, "%d %d %d %s", record.Priority, record.Weight, record.Port, &record.Value)
+func (c *httpClient) createOne(ctx context.Context, r DNSRecord) (*DNSRecord, error) {
+	env, err := fromDNSRecord(r)
 	if err != nil {
-		return NewDataError("parse", "SRV record target", err)
+		return nil, err
 	}
 
-	return nil
-}
-
-// createSingleDNSRecord sends a create request for a single DNS record and returns the created record.
-func (c *httpClient) createSingleDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
-	jsonBody, err := json.Marshal(record)
+	body, err := json.Marshal(env)
 	if err != nil {
 		return nil, NewDataError("marshal", "DNS record", err)
 	}
 
-	resp, err := c.doRequest(
-		ctx,
-		http.MethodPost,
-		FormatURL(c.ClientURLs.Records, c.Host, c.Site),
-		bytes.NewReader(jsonBody),
-	)
+	resp, err := c.doRequest(ctx, http.MethodPost, FormatURL(pathPolicies, c.Host, c.siteID), body)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create DNS record")
+		return nil, fmt.Errorf("creating DNS record: %w", err)
 	}
+	defer extdnshttp.DrainAndClose(resp.Body)
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, NewDataError("read", "create endpoint response body", err)
 	}
 
-	var createdRecord DNSRecord
-	err = json.Unmarshal(bodyBytes, &createdRecord)
-	if err != nil {
+	var createdEnv dnsPolicyEnvelope
+	if err := json.Unmarshal(respBytes, &createdEnv); err != nil {
 		return nil, NewDataError("unmarshal", "created DNS record", err)
 	}
 
-	return &createdRecord, nil
+	out, ok := toDNSRecord(createdEnv)
+	if !ok {
+		return nil, NewDataError("convert", "created DNS record",
+			fmt.Errorf("unsupported response type %q", createdEnv.Type))
+	}
+
+	return &out, nil
 }
 
-// DeleteEndpoint deletes a DNS record from the UniFi controller.
-func (c *httpClient) DeleteEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) error {
+// DeleteRecord deletes a single DNS record by its ID. 404 responses are
+// treated as success: the record is already gone, which is the desired
+// outcome. Tolerating 404 lets callers use a snapshot-based index of records
+// without worrying about staleness — concurrent deletes, manual cleanup in
+// the UniFi UI, or a stale plan all converge harmlessly.
+func (c *httpClient) DeleteRecord(ctx context.Context, id string) error {
 	m := metrics.Get()
 	start := time.Now()
 
-	records, err := c.GetEndpoints(ctx)
-	if err != nil {
-		duration := time.Since(start)
-		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
-
-		return errors.Wrap(err, "failed to fetch records before deletion")
-	}
-
-	var deleteErrors []error
-	for _, record := range records {
-		if record.Key == endpoint.DNSName && record.RecordType == endpoint.RecordType {
-			deleteURL := FormatURL(c.ClientURLs.Records, c.Host, c.Site, record.ID)
-
-			resp, err := c.doRequest(
-				ctx,
-				http.MethodDelete,
-				deleteURL,
-				nil,
-			)
-			if err != nil {
-				deleteErrors = append(deleteErrors, err)
-			} else {
-				_ = resp.Body.Close()
-				log.Debug("client successfully removed record", "key", record.Key, "type", record.RecordType, "target", record.Value)
-			}
-		}
-	}
-
+	u := FormatURL(pathPolicy, c.Host, c.siteID, id)
+	resp, err := c.doRequest(ctx, http.MethodDelete, u, nil)
 	duration := time.Since(start)
-	if len(deleteErrors) > 0 {
-		err := errors.Newf("failed to delete %d records", len(deleteErrors))
-		for _, deleteErr := range deleteErrors {
-			err = errors.Wrap(deleteErr, err.Error())
-		}
-		m.RecordUniFiAPICall("delete_endpoint", duration, 0, err)
+	if err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			m.RecordUniFiAPICall("delete_record", duration, 0, nil)
+			slog.Debug("record already deleted", "id", id)
 
-		return err
+			return nil
+		}
+		m.RecordUniFiAPICall("delete_record", duration, 0, err)
+
+		return fmt.Errorf("deleting DNS record %s: %w", id, err)
 	}
-	m.RecordUniFiAPICall("delete_endpoint", duration, 0, nil)
+	extdnshttp.DrainAndClose(resp.Body)
+	m.RecordUniFiAPICall("delete_record", duration, 0, nil)
+	slog.Debug("client successfully removed record", "id", id)
 
 	return nil
-}
-
-func (c *httpClient) login(ctx context.Context) error {
-	m := metrics.Get()
-	jsonBody, err := json.Marshal(Login{ //nolint:gosec // G117: login must marshal credentials to authenticate
-		Username: c.User,
-		Password: c.Password,
-		Remember: true,
-	})
-	if err != nil {
-		return NewDataError("marshal", "login credentials", err)
-	}
-
-	// Perform the login request
-	resp, err := c.doRequest(
-		ctx,
-		http.MethodPost,
-		FormatURL(c.ClientURLs.Login, c.Host),
-		bytes.NewBuffer(jsonBody),
-	)
-	if err != nil {
-		m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "failure").Inc()
-		m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(0)
-
-		return err
-	}
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	// Check if the login was successful
-	if resp.StatusCode != http.StatusOK {
-		m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "failure").Inc()
-		m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(0)
-		respBody, readErr := io.ReadAll(resp.Body)
-		responseMsg := ""
-		if readErr == nil {
-			responseMsg = string(respBody)
-		}
-		log.Error("login failed", "status", resp.Status, "response", responseMsg)
-
-		return NewAuthError("login", resp.StatusCode, resp.Status, nil)
-	}
-
-	m.UniFiLoginTotal.WithLabelValues(metrics.ProviderName, "success").Inc()
-	m.UniFiConnected.WithLabelValues(metrics.ProviderName).Set(1)
-
-	// Retrieve CSRF token from the response headers
-	if csrf := resp.Header.Get("X-Csrf-Token"); csrf != "" {
-		c.csrf = resp.Header.Get("X-Csrf-Token")
-		m.UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
-	}
-
-	return nil
-}
-
-func (c *httpClient) doRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, path, body)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create HTTP request")
-	}
-
-	c.setHeaders(req)
-
-	resp, err := c.Do(req)
-	if err != nil {
-		return nil, NewNetworkError(method, path, err)
-	}
-
-	// TODO: Deprecation Notice - Use UNIFI_API_KEY instead
-	//nolint:godox // This TODO is intentional and will remain until the deprecated auth method is removed
-	if c.APIKey == "" {
-		c.handleCSRFToken(resp)
-
-		// If the status code is 401, re-login and retry the request
-		if resp.StatusCode == http.StatusUnauthorized {
-			resp, err = c.handleUnauthorized(ctx, req, method, path)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// It is unknown at this time if the UniFi API returns anything other than 200 for these types of requests.
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.handleErrorResponse(resp, method, path)
-	}
-
-	return resp, nil
-}
-
-// handleCSRFToken updates the CSRF token from response headers.
-func (c *httpClient) handleCSRFToken(resp *http.Response) {
-	csrf := resp.Header.Get("X-Csrf-Token")
-	if csrf == "" {
-		return
-	}
-
-	if c.csrf != csrf {
-		metrics.Get().UniFiCSRFRefreshesTotal.WithLabelValues(metrics.ProviderName).Inc()
-	}
-	c.csrf = csrf
-}
-
-// handleUnauthorized handles 401 responses by re-logging in and retrying the request.
-func (c *httpClient) handleUnauthorized(ctx context.Context, req *http.Request, method, path string) (*http.Response, error) {
-	met := metrics.Get()
-	met.UniFiReloginTotal.WithLabelValues(metrics.ProviderName).Inc()
-
-	log.Debug("received 401 unauthorized, attempting to re-login")
-
-	err := c.login(ctx)
-	if err != nil {
-		log.Error("re-login failed", "error", err)
-
-		return nil, errors.Wrap(err, "re-login after 401 failed")
-	}
-
-	// Update the headers with new CSRF token
-	c.setHeaders(req)
-
-	// Retry the request
-	log.Debug("retrying request after re-login")
-
-	resp, err := c.Do(req)
-	if err != nil {
-		log.Error("Retry request failed", "error", err)
-
-		return nil, NewNetworkError(method+" (retry)", path, err)
-	}
-
-	return resp, nil
-}
-
-// handleErrorResponse processes non-200 status codes and returns appropriate errors.
-func (c *httpClient) handleErrorResponse(resp *http.Response, method, path string) error {
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, errorBodyBufferSize))
-	if err != nil {
-		return NewDataError("read", "error response body", err)
-	}
-
-	var apiError UnifiErrorResponse
-	err = json.Unmarshal(bodyBytes, &apiError)
-	if err != nil {
-		return NewDataError("unmarshal", "API error response", err)
-	}
-
-	return NewAPIError(method, path, resp.StatusCode, apiError.Message)
-}
-
-// setHeaders sets the headers for the HTTP request.
-func (c *httpClient) setHeaders(req *http.Request) {
-	if c.APIKey != "" {
-		req.Header.Set("X-Api-Key", c.APIKey)
-	} else {
-		req.Header.Set("X-Csrf-Token", c.csrf)
-	}
-
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 }

@@ -18,28 +18,16 @@ func TestFormatURL(t *testing.T) {
 			expected: testURLLoginInternal,
 		},
 		{
-			name:     "records path with site",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite},
-			expected: testURLRecordsInternal,
+			name:     "policies path with site UUID",
+			path:     pathPolicies,
+			params:   []string{testHost, testSiteUUID},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies",
 		},
 		{
-			name:     "records path with site and record ID",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite, "abc123"},
-			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/abc123",
-		},
-		{
-			name:     "external controller login",
-			path:     unifiLoginPathExternal,
-			params:   []string{testHostExt},
-			expected: "https://ui.com/api/login",
-		},
-		{
-			name:     "external controller records",
-			path:     unifiRecordPathExternal,
-			params:   []string{testHostExt, "site-id", "record-id"},
-			expected: "https://ui.com/v2/api/site/site-id/static-dns/record-id",
+			name:     "policy path with site UUID and record ID",
+			path:     pathPolicy,
+			params:   []string{testHost, testSiteUUID, "abc123"},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies/abc123",
 		},
 		{
 			name:     "no placeholders - appends params",
@@ -67,7 +55,7 @@ func TestFormatURL(t *testing.T) {
 		},
 		{
 			name:     "URL with port",
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{"https://unifi.local:8443"},
 			expected: "https://unifi.local:8443/api/login",
 		},
@@ -127,13 +115,13 @@ func TestFormatURL(t *testing.T) {
 		},
 		{
 			name:     "IPv4 address",
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{"https://192.168.1.1"},
 			expected: "https://192.168.1.1/api/login",
 		},
 		{
 			name:     "IPv6 address",
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{"https://[2001:db8::1]"},
 			expected: "https://[2001:db8::1]/api/login",
 		},
@@ -188,52 +176,28 @@ func TestFormatURLRealWorldUsage(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "internal controller login",
-			path:     unifiLoginPath,
+			name:     "list policies",
+			path:     pathPolicies,
+			params:   []string{testHost, testSiteUUID},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies",
+		},
+		{
+			name:     "get specific policy",
+			path:     pathPolicy,
+			params:   []string{testHost, testSiteUUID, testRecordID},
+			expected: "https://unifi.local/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies/" + testRecordID,
+		},
+		{
+			name:     "sites listing",
+			path:     pathSites,
 			params:   []string{testHost},
-			expected: testURLLoginInternal,
-		},
-		{
-			name:     testNameExtCtrlLogin,
-			path:     unifiLoginPathExternal,
-			params:   []string{testHostExt},
-			expected: testURLLoginExternal,
-		},
-		{
-			name:     "get all records (internal)",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite},
-			expected: testURLRecordsInternal,
-		},
-		{
-			name:     "get specific record (internal)",
-			path:     unifiRecordPath,
-			params:   []string{testHost, testSite, testRecordID},
-			expected: "https://unifi.local/proxy/network/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
-		},
-		{
-			name:     "get all records (external)",
-			path:     unifiRecordPathExternal,
-			params:   []string{testHostExt, testSite},
-			expected: "https://ui.com/v2/api/site/default/static-dns/",
-		},
-		{
-			name:     "get specific record (external)",
-			path:     unifiRecordPathExternal,
-			params:   []string{testHostExt, testSite, testRecordID},
-			expected: "https://ui.com/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
-		},
-		{
-			name:     "custom site name",
-			path:     unifiRecordPath,
-			params:   []string{testHost, "my-custom-site"},
-			expected: "https://unifi.local/proxy/network/v2/api/site/my-custom-site/static-dns/",
+			expected: "https://unifi.local/proxy/network/integration/v1/sites",
 		},
 		{
 			name:     "controller with port",
-			path:     unifiLoginPath,
-			params:   []string{testHostPort},
-			expected: "https://192.168.1.1:8443/api/auth/login",
+			path:     pathPolicies,
+			params:   []string{testHostPort, testSiteUUID},
+			expected: "https://192.168.1.1:8443/proxy/network/integration/v1/sites/" + testSiteUUID + "/dns/policies",
 		},
 	}
 
@@ -297,33 +261,35 @@ func TestFormatURLEdgeCases(t *testing.T) {
 	}
 }
 
-// TestFormatURLPanic tests that function panics when params exceed segments.
-func TestFormatURLPanic(t *testing.T) {
+// TestFormatURLExcessParams verifies that extra params beyond the placeholder
+// count are appended to the final segment instead of panicking.
+func TestFormatURLExcessParams(t *testing.T) {
 	tests := []struct {
-		name   string
-		path   string
-		params []string
+		name     string
+		path     string
+		params   []string
+		expected string
 	}{
 		{
-			name:   "more params than placeholders - causes panic",
-			path:   "%s/api",
-			params: []string{testURLExample, "extra", "params"},
+			name:     "one extra param appended to tail",
+			path:     "%s/api",
+			params:   []string{testURLExample, "extra"},
+			expected: testURLExample + "/apiextra",
 		},
 		{
-			name:   "three extra params",
-			path:   "%s",
-			params: []string{"a", "b", "c", "d"},
+			name:     "three extra params all appended to tail",
+			path:     "%s",
+			params:   []string{"a", "b", "c", "d"},
+			expected: "abcd",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("FormatURL(%q, %v) did not panic", tt.path, tt.params)
-				}
-			}()
-			_ = FormatURL(tt.path, tt.params...)
+			result := FormatURL(tt.path, tt.params...)
+			if result != tt.expected {
+				t.Errorf("FormatURL(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
+			}
 		})
 	}
 }

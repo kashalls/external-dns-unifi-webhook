@@ -39,24 +39,44 @@ func recoveryAndAccessLog(next http.Handler) http.Handler {
 				rec.WriteHeader(http.StatusInternalServerError)
 			}
 
+			status := rec.Status()
 			level := slog.LevelInfo
 			switch {
-			case rec.Status() >= http.StatusInternalServerError:
+			case status >= http.StatusInternalServerError:
 				level = slog.LevelError
-			case rec.Status() >= http.StatusBadRequest:
+			case status >= http.StatusBadRequest:
 				level = slog.LevelWarn
+			case isProbePath(r.URL.Path):
+				// Successful liveness, readiness, and metrics scrapes fire
+				// every few seconds; logging each one at INFO drowns out
+				// anything actually interesting. Failures still surface as
+				// WARN/ERROR by the cases above.
+				level = slog.LevelDebug
 			}
 
 			slog.LogAttrs(r.Context(), level, "request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.Int("status", rec.Status()),
-				slog.Duration("duration", time.Since(start)),
+				slog.Int("status", status),
+				slog.Float64("duration_ms", float64(time.Since(start).Microseconds())/1000),
 			)
 		}()
 
 		next.ServeHTTP(rec, r)
 	})
+}
+
+// isProbePath reports whether path is a routine probe / scrape endpoint that
+// fires on a fixed schedule (every few seconds in production). Successful
+// responses on these paths are demoted to DEBUG so they don't drown out the
+// actual external-dns request flow in the logs.
+func isProbePath(path string) bool {
+	switch path {
+	case "/healthz", "/readyz", "/metrics":
+		return true
+	}
+
+	return false
 }
 
 // limitBody wraps next so that each request body is capped at maxBytes. Any

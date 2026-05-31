@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.1](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.0...0.10.1) (2026-05-31)
+
+
+### Features
+
+* support the api.ui.com cloud connector ([#203](https://github.com/home-operations/external-dns-unifi-webhook/issues/203)) ([4f804bb](https://github.com/home-operations/external-dns-unifi-webhook/commit/4f804bbb948110923bff0f99164010a9ec3ade8e))
+
+
+### Code Refactoring
+
+* code cleanliness, logging & Go 1.26 idioms ([#200](https://github.com/home-operations/external-dns-unifi-webhook/issues/200)) ([08b1415](https://github.com/home-operations/external-dns-unifi-webhook/commit/08b141552677bd570ecf76b633787176005ad697))
+
 ## [0.10.0](https://github.com/home-operations/external-dns-unifi-webhook/compare/v0.9.0...0.10.0) (2026-05-31)
 
 

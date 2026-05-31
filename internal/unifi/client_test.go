@@ -543,12 +543,13 @@ func TestDeleteRecord(t *testing.T) {
 // internalReference / UUID heuristic and the empty/multi-match error paths.
 func TestResolveSite(t *testing.T) {
 	tests := []struct {
-		name      string
-		ref       string
-		data      []siteEntry
-		wantField string // "internalReference" or "id"
-		wantID    string
-		wantErr   bool
+		name       string
+		ref        string
+		data       []siteEntry
+		wantField  string // "internalReference" or "id"
+		wantFilter string // exact filter expression, when escaping matters
+		wantID     string
+		wantErr    bool
 	}{
 		{
 			name:      "by name resolves to UUID",
@@ -556,6 +557,13 @@ func TestResolveSite(t *testing.T) {
 			data:      []siteEntry{{ID: testSiteUUID, InternalReference: "default", Name: "Default"}},
 			wantField: "internalReference",
 			wantID:    testSiteUUID,
+		},
+		{
+			name:       "single quote in site name is doubled",
+			ref:        "o'brien",
+			data:       []siteEntry{{ID: testSiteUUID, InternalReference: "o'brien", Name: "O'Brien"}},
+			wantFilter: "internalReference.eq('o''brien')",
+			wantID:     testSiteUUID,
 		},
 		{
 			name:      "UUID input filters by id",
@@ -615,6 +623,9 @@ func TestResolveSite(t *testing.T) {
 			}
 			if tt.wantField != "" && !strings.HasPrefix(capturedFilter, tt.wantField+".eq(") {
 				t.Errorf("filter = %q, expected prefix %s.eq(", capturedFilter, tt.wantField)
+			}
+			if tt.wantFilter != "" && capturedFilter != tt.wantFilter {
+				t.Errorf("filter = %q, want %q", capturedFilter, tt.wantFilter)
 			}
 		})
 	}

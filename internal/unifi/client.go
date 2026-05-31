@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
@@ -93,7 +94,10 @@ func (c *httpClient) resolveSite(ctx context.Context, ref string) (string, error
 		field = "id"
 	}
 
-	filter := fmt.Sprintf("%s.eq('%s')", field, ref)
+	// The Integration API filter DSL wraps string values in single quotes and
+	// escapes an embedded quote by doubling it. ref is operator-supplied
+	// (UNIFI_SITE), so quote it correctly rather than trusting its contents.
+	filter := fmt.Sprintf("%s.eq('%s')", field, strings.ReplaceAll(ref, "'", "''"))
 	u := formatURL(pathSites, c.cfg.baseURL()) + "?filter=" + url.QueryEscape(filter)
 
 	var page sitePage

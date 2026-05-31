@@ -11,7 +11,7 @@
 ## 🎯 Requirements
 
 - ExternalDNS >= v0.14.0
-- UniFi OS >= 3.x
+- UniFi OS >= 4.x
 - UniFi Network >= 10.3.58
 
 ## 🚫 Limitations

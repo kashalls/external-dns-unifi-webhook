@@ -36,6 +36,54 @@ func newTestClient(srv *httptest.Server) *httpClient {
 	})
 }
 
+// TestCloudConnectorPath verifies that with a console ID set, every request is
+// routed through the api.ui.com connector prefix while reusing the same
+// Integration API endpoints — the whole point of the cloud support is that
+// only the base URL changes.
+func TestCloudConnectorPath(t *testing.T) {
+	wantPrefix := "/v1/connector/consoles/" + testConsoleID + "/proxy/network/integration/v1"
+
+	var gotPaths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPaths = append(gotPaths, r.URL.Path)
+		switch r.Method {
+		case http.MethodGet:
+			_ = json.NewEncoder(w).Encode(pageOf(envA(testDNSID1, testDomain, testIPv4A, 300)))
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	c := testClient(srv, &Config{
+		Host:          srv.URL,
+		Site:          testSite,
+		APIKey:        testKeyA,
+		ConsoleID:     testConsoleID,
+		SkipTLSVerify: true,
+	})
+
+	if _, err := c.GetEndpoints(context.Background()); err != nil {
+		t.Fatalf("GetEndpoints: %v", err)
+	}
+	if err := c.DeleteRecord(context.Background(), testDNSID1); err != nil {
+		t.Fatalf("DeleteRecord: %v", err)
+	}
+
+	if len(gotPaths) == 0 {
+		t.Fatal("server received no requests")
+	}
+	for _, p := range gotPaths {
+		if !strings.HasPrefix(p, wantPrefix) {
+			t.Errorf("request path %q does not start with cloud connector prefix %q", p, wantPrefix)
+		}
+	}
+	// Sanity-check the suffix is the same Integration API surface as local.
+	if want := wantPrefix + "/sites/" + testSiteUUID + "/dns/policies/" + testDNSID1; gotPaths[len(gotPaths)-1] != want {
+		t.Errorf("delete path = %q, want %q", gotPaths[len(gotPaths)-1], want)
+	}
+}
+
 // envelope helpers keep test data terse and consistent.
 func envA(id, domain, ip string, ttl int) dnsPolicyEnvelope {
 	return dnsPolicyEnvelope{
@@ -495,12 +543,13 @@ func TestDeleteRecord(t *testing.T) {
 // internalReference / UUID heuristic and the empty/multi-match error paths.
 func TestResolveSite(t *testing.T) {
 	tests := []struct {
-		name      string
-		ref       string
-		data      []siteEntry
-		wantField string // "internalReference" or "id"
-		wantID    string
-		wantErr   bool
+		name       string
+		ref        string
+		data       []siteEntry
+		wantField  string // "internalReference" or "id"
+		wantFilter string // exact filter expression, when escaping matters
+		wantID     string
+		wantErr    bool
 	}{
 		{
 			name:      "by name resolves to UUID",
@@ -508,6 +557,13 @@ func TestResolveSite(t *testing.T) {
 			data:      []siteEntry{{ID: testSiteUUID, InternalReference: "default", Name: "Default"}},
 			wantField: "internalReference",
 			wantID:    testSiteUUID,
+		},
+		{
+			name:       "single quote in site name is doubled",
+			ref:        "o'brien",
+			data:       []siteEntry{{ID: testSiteUUID, InternalReference: "o'brien", Name: "O'Brien"}},
+			wantFilter: "internalReference.eq('o''brien')",
+			wantID:     testSiteUUID,
 		},
 		{
 			name:      "UUID input filters by id",
@@ -567,6 +623,9 @@ func TestResolveSite(t *testing.T) {
 			}
 			if tt.wantField != "" && !strings.HasPrefix(capturedFilter, tt.wantField+".eq(") {
 				t.Errorf("filter = %q, expected prefix %s.eq(", capturedFilter, tt.wantField)
+			}
+			if tt.wantFilter != "" && capturedFilter != tt.wantFilter {
+				t.Errorf("filter = %q, want %q", capturedFilter, tt.wantFilter)
 			}
 		})
 	}

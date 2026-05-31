@@ -1,0 +1,7 @@
+status:       405
+content_type: text/html
+url:          https://unifi.example.com/proxy/network/v2/api/site/default/static-dns/deadbeef-0000-0000-0000-000000000000
+note:         The Tomcat layer behind the UniFi Network API returns a stock HTML
+              405 page when a request reaches an endpoint that doesn't accept
+              the verb (e.g. GET on a record path). Used to verify the
+              non-JSON error body fallback in handleErrorResponse.

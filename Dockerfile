@@ -9,7 +9,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w -X main.Version=${VERSION} -X main.Gitsha=${REVISION}" \
-    -trimpath -o /out/external-dns-unifi-webhook ./cmd/webhook
+    -trimpath -o /out/external-dns-unifi-webhook ./cmd/external-dns-unifi-webhook
 RUN upx --best --lzma /out/external-dns-unifi-webhook
 
 FROM scratch

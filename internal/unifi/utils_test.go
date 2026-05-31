@@ -31,7 +31,7 @@ func TestFormatURL(t *testing.T) {
 		},
 		{
 			name:     "external controller login",
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{testHostExt},
 			expected: "https://ui.com/api/login",
 		},
@@ -67,7 +67,7 @@ func TestFormatURL(t *testing.T) {
 		},
 		{
 			name:     "URL with port",
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{"https://unifi.local:8443"},
 			expected: "https://unifi.local:8443/api/login",
 		},
@@ -127,13 +127,13 @@ func TestFormatURL(t *testing.T) {
 		},
 		{
 			name:     "IPv4 address",
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{"https://192.168.1.1"},
 			expected: "https://192.168.1.1/api/login",
 		},
 		{
 			name:     "IPv6 address",
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{"https://[2001:db8::1]"},
 			expected: "https://[2001:db8::1]/api/login",
 		},
@@ -189,13 +189,13 @@ func TestFormatURLRealWorldUsage(t *testing.T) {
 	}{
 		{
 			name:     "internal controller login",
-			path:     unifiLoginPath,
+			path:     "%s/api/auth/login",
 			params:   []string{testHost},
 			expected: testURLLoginInternal,
 		},
 		{
 			name:     testNameExtCtrlLogin,
-			path:     unifiLoginPathExternal,
+			path:     "%s/api/login",
 			params:   []string{testHostExt},
 			expected: testURLLoginExternal,
 		},
@@ -231,7 +231,7 @@ func TestFormatURLRealWorldUsage(t *testing.T) {
 		},
 		{
 			name:     "controller with port",
-			path:     unifiLoginPath,
+			path:     "%s/api/auth/login",
 			params:   []string{testHostPort},
 			expected: "https://192.168.1.1:8443/api/auth/login",
 		},
@@ -297,33 +297,35 @@ func TestFormatURLEdgeCases(t *testing.T) {
 	}
 }
 
-// TestFormatURLPanic tests that function panics when params exceed segments.
-func TestFormatURLPanic(t *testing.T) {
+// TestFormatURLExcessParams verifies that extra params beyond the placeholder
+// count are appended to the final segment instead of panicking.
+func TestFormatURLExcessParams(t *testing.T) {
 	tests := []struct {
-		name   string
-		path   string
-		params []string
+		name     string
+		path     string
+		params   []string
+		expected string
 	}{
 		{
-			name:   "more params than placeholders - causes panic",
-			path:   "%s/api",
-			params: []string{testURLExample, "extra", "params"},
+			name:     "one extra param appended to tail",
+			path:     "%s/api",
+			params:   []string{testURLExample, "extra"},
+			expected: testURLExample + "/apiextra",
 		},
 		{
-			name:   "three extra params",
-			path:   "%s",
-			params: []string{"a", "b", "c", "d"},
+			name:     "three extra params all appended to tail",
+			path:     "%s",
+			params:   []string{"a", "b", "c", "d"},
+			expected: "abcd",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("FormatURL(%q, %v) did not panic", tt.path, tt.params)
-				}
-			}()
-			_ = FormatURL(tt.path, tt.params...)
+			result := FormatURL(tt.path, tt.params...)
+			if result != tt.expected {
+				t.Errorf("FormatURL(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
+			}
 		})
 	}
 }

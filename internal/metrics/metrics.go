@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -46,13 +47,12 @@ type Metrics struct {
 	NegotiateTotal       *prometheus.CounterVec
 
 	// UniFi API metrics
-	UniFiAPIErrorsTotal     *prometheus.CounterVec
-	UniFiAPIDuration        *prometheus.HistogramVec
-	UniFiLoginTotal         *prometheus.CounterVec
-	UniFiReloginTotal       *prometheus.CounterVec
-	UniFiCSRFRefreshesTotal *prometheus.CounterVec
-	UniFiConnected          *prometheus.GaugeVec
-	UniFiResponseSizeBytes  *prometheus.HistogramVec
+	UniFiAPIErrorsTotal    *prometheus.CounterVec
+	UniFiAPIDuration       *prometheus.HistogramVec
+	UniFiResponseSizeBytes *prometheus.HistogramVec
+	UniFiRetriesTotal      *prometheus.CounterVec
+	UniFiRateLimitsTotal   *prometheus.CounterVec
+	PanicsTotal            *prometheus.CounterVec
 
 	// Quality metrics
 	ConsecutiveErrors    *prometheus.GaugeVec
@@ -63,19 +63,35 @@ type Metrics struct {
 	Info *prometheus.GaugeVec
 }
 
-var instance *Metrics
+var (
+	initOnce sync.Once
+	instance *Metrics
+)
 
-// New creates and registers all metrics.
+// New initialises the package-wide metrics instance against the default
+// Prometheus registerer. Safe to call multiple times — only the first call
+// performs initialisation, and the supplied version is recorded then.
+func New(version string) *Metrics {
+	initOnce.Do(func() {
+		instance = build(promauto.With(prometheus.DefaultRegisterer), version)
+	})
+
+	return instance
+}
+
+// Get returns the singleton metrics instance, initialising it with an
+// "unknown" version if New has not yet been called.
+func Get() *Metrics {
+	return New("unknown")
+}
+
+// build constructs a Metrics instance against the supplied factory. Exposed
+// for tests that need an isolated registry.
 //
 //nolint:funlen // Metric registration is declarative and splitting would reduce readability
-func New(version string) *Metrics {
-	if instance != nil {
-		return instance
-	}
-
+func build(f promauto.Factory, version string) *Metrics {
 	m := &Metrics{
-		// HTTP metrics
-		HTTPRequestsTotal: promauto.NewCounterVec(
+		HTTPRequestsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "http_requests_total",
@@ -83,7 +99,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelMethod, labelEndpoint, "status_code"},
 		),
-		HTTPRequestDuration: promauto.NewHistogramVec(
+		HTTPRequestDuration: f.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: namespace,
 				Name:      "http_request_duration_seconds",
@@ -92,7 +108,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelMethod, labelEndpoint},
 		),
-		HTTPRequestsInFlight: promauto.NewGaugeVec(
+		HTTPRequestsInFlight: f.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "http_requests_in_flight",
@@ -100,7 +116,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		HTTPResponseSizeBytes: promauto.NewHistogramVec(
+		HTTPResponseSizeBytes: f.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: namespace,
 				Name:      "http_response_size_bytes",
@@ -109,7 +125,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelMethod, labelEndpoint},
 		),
-		HTTPValidationErrorsTotal: promauto.NewCounterVec(
+		HTTPValidationErrorsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "http_validation_errors_total",
@@ -117,7 +133,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, "header_type"},
 		),
-		HTTPJSONErrorsTotal: promauto.NewCounterVec(
+		HTTPJSONErrorsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "http_json_errors_total",
@@ -126,8 +142,7 @@ func New(version string) *Metrics {
 			[]string{labelProvider, labelEndpoint},
 		),
 
-		// Business metrics
-		RecordsTotal: promauto.NewGaugeVec(
+		RecordsTotal: f.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "records",
@@ -135,7 +150,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelRecordType},
 		),
-		ChangesTotal: promauto.NewCounterVec(
+		ChangesTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "changes_total",
@@ -143,7 +158,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelOperation},
 		),
-		ChangesByTypeTotal: promauto.NewCounterVec(
+		ChangesByTypeTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "changes_by_type_total",
@@ -151,7 +166,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelOperation, labelRecordType},
 		),
-		CNAMEConflictsTotal: promauto.NewCounterVec(
+		CNAMEConflictsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "cname_conflicts_total",
@@ -159,7 +174,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		IgnoredCNAMETargetsTotal: promauto.NewCounterVec(
+		IgnoredCNAMETargetsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "ignored_cname_targets_total",
@@ -167,7 +182,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		SRVParsingErrorsTotal: promauto.NewCounterVec(
+		SRVParsingErrorsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "srv_parsing_errors_total",
@@ -175,7 +190,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		BatchSize: promauto.NewHistogramVec(
+		BatchSize: f.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: namespace,
 				Name:      "batch_size",
@@ -185,8 +200,7 @@ func New(version string) *Metrics {
 			[]string{labelProvider, labelOperation},
 		),
 
-		// Endpoint operations
-		AdjustEndpointsTotal: promauto.NewCounterVec(
+		AdjustEndpointsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "adjust_endpoints_total",
@@ -194,7 +208,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		NegotiateTotal: promauto.NewCounterVec(
+		NegotiateTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "negotiate_total",
@@ -203,8 +217,7 @@ func New(version string) *Metrics {
 			[]string{labelProvider},
 		),
 
-		// UniFi API metrics
-		UniFiAPIErrorsTotal: promauto.NewCounterVec(
+		UniFiAPIErrorsTotal: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "unifi_api_errors_total",
@@ -212,7 +225,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelOperation},
 		),
-		UniFiAPIDuration: promauto.NewHistogramVec(
+		UniFiAPIDuration: f.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: namespace,
 				Name:      "unifi_api_duration_seconds",
@@ -221,39 +234,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider, labelOperation},
 		),
-		UniFiLoginTotal: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Name:      "unifi_login_total",
-				Help:      "Total number of UniFi login attempts",
-			},
-			[]string{labelProvider, "status"},
-		),
-		UniFiReloginTotal: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Name:      "unifi_relogin_total",
-				Help:      "Total number of UniFi re-login attempts after 401",
-			},
-			[]string{labelProvider},
-		),
-		UniFiCSRFRefreshesTotal: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Name:      "unifi_csrf_refreshes_total",
-				Help:      "Total number of CSRF token refreshes",
-			},
-			[]string{labelProvider},
-		),
-		UniFiConnected: promauto.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: namespace,
-				Name:      "unifi_connected",
-				Help:      "UniFi connection status (1 = connected, 0 = disconnected)",
-			},
-			[]string{labelProvider},
-		),
-		UniFiResponseSizeBytes: promauto.NewHistogramVec(
+		UniFiResponseSizeBytes: f.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: namespace,
 				Name:      "unifi_response_size_bytes",
@@ -262,9 +243,32 @@ func New(version string) *Metrics {
 			},
 			[]string{labelOperation},
 		),
+		UniFiRetriesTotal: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Name:      "unifi_api_retries_total",
+				Help:      "Total number of UniFi API retries triggered by 5xx or 429 responses",
+			},
+			[]string{labelProvider, labelOperation, "status"},
+		),
+		UniFiRateLimitsTotal: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Name:      "unifi_api_rate_limits_total",
+				Help:      "Total number of HTTP 429 rate-limit responses received from UniFi",
+			},
+			[]string{labelProvider, labelOperation},
+		),
+		PanicsTotal: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Name:      "http_handler_panics_total",
+				Help:      "Total number of panics caught by the HTTP recovery middleware",
+			},
+			[]string{labelProvider, labelEndpoint},
+		),
 
-		// Quality metrics
-		ConsecutiveErrors: promauto.NewGaugeVec(
+		ConsecutiveErrors: f.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "consecutive_errors",
@@ -272,7 +276,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		LastSuccessTimestamp: promauto.NewGaugeVec(
+		LastSuccessTimestamp: f.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "last_success_timestamp",
@@ -280,7 +284,7 @@ func New(version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		OperationSuccessRate: promauto.NewGaugeVec(
+		OperationSuccessRate: f.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "operation_success_rate",
@@ -289,8 +293,7 @@ func New(version string) *Metrics {
 			[]string{labelOperation},
 		),
 
-		// Info metric
-		Info: promauto.NewGaugeVec(
+		Info: f.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "info",
@@ -300,21 +303,9 @@ func New(version string) *Metrics {
 		),
 	}
 
-	// Set info metric
 	m.Info.WithLabelValues(version, ProviderName).Set(1)
 
-	instance = m
-
 	return m
-}
-
-// Get returns the singleton metrics instance.
-func Get() *Metrics {
-	if instance == nil {
-		return New("unknown")
-	}
-
-	return instance
 }
 
 // RecordHTTPRequest records HTTP request metrics.

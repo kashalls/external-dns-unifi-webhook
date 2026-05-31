@@ -8,15 +8,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
 	"sigs.k8s.io/external-dns/endpoint"
 )
 
 func init() {
-	// Initialize logger for tests
-	log.Init()
-	// metrics.Get() will initialize on first use
+	// Force lazy initialization of the metrics singleton so handler paths can
+	// rely on metrics.Get() returning a non-nil instance.
 	_ = metrics.Get()
 }
 
@@ -180,10 +178,8 @@ func TestGetEndpoints(t *testing.T) {
 					APIKey:        testKeyA,
 					SkipTLSVerify: true,
 				},
-				Client: server.Client(),
-				ClientURLs: &ClientURLs{
-					Records: unifiRecordPathExternal,
-				},
+				Client:     server.Client(),
+				recordsURL: unifiRecordPathExternal,
 			}
 
 			records, err := client.GetEndpoints(context.Background())
@@ -375,10 +371,8 @@ func TestCreateEndpoint(t *testing.T) {
 					APIKey:        testKeyA,
 					SkipTLSVerify: true,
 				},
-				Client: server.Client(),
-				ClientURLs: &ClientURLs{
-					Records: unifiRecordPathExternal,
-				},
+				Client:     server.Client(),
+				recordsURL: unifiRecordPathExternal,
 			}
 
 			records, err := client.CreateEndpoint(context.Background(), tt.endpoint)
@@ -546,10 +540,8 @@ func TestDeleteEndpoint(t *testing.T) {
 					APIKey:        testKeyA,
 					SkipTLSVerify: true,
 				},
-				Client: server.Client(),
-				ClientURLs: &ClientURLs{
-					Records: unifiRecordPathExternal,
-				},
+				Client:     server.Client(),
+				recordsURL: unifiRecordPathExternal,
 			}
 
 			err := client.DeleteEndpoint(context.Background(), tt.endpoint)
@@ -568,103 +560,61 @@ func TestDeleteEndpoint(t *testing.T) {
 	}
 }
 
-// TestSetHeaders tests header setting logic.
+// TestSetHeaders verifies the API-key auth header and standard JSON headers.
 func TestSetHeaders(t *testing.T) {
-	tests := []struct {
-		name            string
-		config          *Config
-		csrf            string
-		expectedHeaders map[string]string
-	}{
-		{
-			name: "with API key",
-			config: &Config{
-				APIKey: testKeyB,
-			},
-			csrf: "",
-			expectedHeaders: map[string]string{
-				"X-Api-Key":       "test-api-key",
-				headerAccept:      contentTypeJSON,
-				headerContentType: contentTypeJSONUTF8,
-			},
-		},
-		{
-			name: "with CSRF token",
-			config: &Config{
-				APIKey: "",
-			},
-			csrf: testCSRF,
-			expectedHeaders: map[string]string{
-				"X-Csrf-Token":    testCSRF,
-				headerAccept:      contentTypeJSON,
-				headerContentType: contentTypeJSONUTF8,
-			},
-		},
+	client := &httpClient{Config: &Config{APIKey: testKeyB}}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", http.NoBody)
+	client.setHeaders(req)
+
+	expected := map[string]string{
+		"X-Api-Key":       "test-api-key",
+		headerAccept:      contentTypeJSON,
+		headerContentType: contentTypeJSONUTF8,
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &httpClient{
-				Config: tt.config,
-				csrf:   tt.csrf,
-			}
-
-			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", http.NoBody)
-			client.setHeaders(req)
-
-			for key, expectedValue := range tt.expectedHeaders {
-				actualValue := req.Header.Get(key)
-				if actualValue != expectedValue {
-					t.Errorf("Header %s = %q, want %q", key, actualValue, expectedValue)
-				}
-			}
-		})
+	for key, want := range expected {
+		if got := req.Header.Get(key); got != want {
+			t.Errorf("Header %s = %q, want %q", key, got, want)
+		}
 	}
 }
 
 // TestFormatURL_ClientUsage tests FormatURL in real client scenarios.
 func TestFormatURL_ClientUsage(t *testing.T) {
 	tests := []struct {
-		name      string
-		urls      *ClientURLs
-		host      string
-		site      string
-		recordID  string
-		operation string
-		expected  string
+		name       string
+		urlPattern string
+		host       string
+		site       string
+		recordID   string
+		operation  string
+		expected   string
 	}{
 		{
-			name: "internal controller - list records",
-			urls: &ClientURLs{
-				Records: unifiRecordPath,
-			},
-			host:      testHostPort,
-			site:      testSite,
-			recordID:  "",
-			operation: testOpList,
-			expected:  "https://192.168.1.1:8443/proxy/network/v2/api/site/default/static-dns/",
+			name:       "internal controller - list records",
+			urlPattern: unifiRecordPath,
+			host:       testHostPort,
+			site:       testSite,
+			recordID:   "",
+			operation:  testOpList,
+			expected:   "https://192.168.1.1:8443/proxy/network/v2/api/site/default/static-dns/",
 		},
 		{
-			name: "internal controller - get specific record",
-			urls: &ClientURLs{
-				Records: unifiRecordPath,
-			},
-			host:      testHostPort,
-			site:      testSite,
-			recordID:  "507f1f77bcf86cd799439011",
-			operation: "get",
-			expected:  "https://192.168.1.1:8443/proxy/network/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
+			name:       "internal controller - get specific record",
+			urlPattern: unifiRecordPath,
+			host:       testHostPort,
+			site:       testSite,
+			recordID:   "507f1f77bcf86cd799439011",
+			operation:  "get",
+			expected:   "https://192.168.1.1:8443/proxy/network/v2/api/site/default/static-dns/507f1f77bcf86cd799439011",
 		},
 		{
-			name: "external controller - list records",
-			urls: &ClientURLs{
-				Records: unifiRecordPathExternal,
-			},
-			host:      testHostExt,
-			site:      "site-abc123",
-			recordID:  "",
-			operation: testOpList,
-			expected:  "https://ui.com/v2/api/site/site-abc123/static-dns/",
+			name:       "external controller - list records",
+			urlPattern: unifiRecordPathExternal,
+			host:       testHostExt,
+			site:       "site-abc123",
+			recordID:   "",
+			operation:  testOpList,
+			expected:   "https://ui.com/v2/api/site/site-abc123/static-dns/",
 		},
 	}
 
@@ -672,9 +622,9 @@ func TestFormatURL_ClientUsage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var result string
 			if tt.recordID == "" {
-				result = FormatURL(tt.urls.Records, tt.host, tt.site)
+				result = FormatURL(tt.urlPattern, tt.host, tt.site)
 			} else {
-				result = FormatURL(tt.urls.Records, tt.host, tt.site, tt.recordID)
+				result = FormatURL(tt.urlPattern, tt.host, tt.site, tt.recordID)
 			}
 
 			if result != tt.expected {

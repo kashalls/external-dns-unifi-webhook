@@ -22,7 +22,6 @@ const (
 	// HTTP headers.
 	headerAccept      = "Accept"
 	headerContentType = "Content-Type"
-	testCSRF          = "csrf-token-123"
 
 	// Error message fragments.
 	testMsgInternalServer = "Internal server error"

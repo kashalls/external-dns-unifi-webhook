@@ -1,25 +1,23 @@
 package unifi
 
 import (
+	"time"
+
 	"sigs.k8s.io/external-dns/endpoint"
 )
 
 // Config represents the configuration for the UniFi API.
 type Config struct {
-	Host               string `env:"UNIFI_HOST,notEmpty"`
-	APIKey             string `env:"UNIFI_API_KEY"             envDefault:""`
-	User               string `env:"UNIFI_USER"                envDefault:""`
-	Password           string `env:"UNIFI_PASS"                envDefault:""`
-	Site               string `env:"UNIFI_SITE"                envDefault:"default"`
-	ExternalController bool   `env:"UNIFI_EXTERNAL_CONTROLLER" envDefault:"false"`
-	SkipTLSVerify      bool   `env:"UNIFI_SKIP_TLS_VERIFY"     envDefault:"true"`
-}
-
-// Login represents a login request to the UniFi API.
-type Login struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Remember bool   `json:"remember"`
+	Host               string        `env:"UNIFI_HOST,notEmpty"`
+	APIKey             string        `env:"UNIFI_API_KEY,notEmpty"`
+	Site               string        `env:"UNIFI_SITE"                envDefault:"default"`
+	ExternalController bool          `env:"UNIFI_EXTERNAL_CONTROLLER" envDefault:"false"`
+	SkipTLSVerify      bool          `env:"UNIFI_SKIP_TLS_VERIFY"     envDefault:"true"`
+	CACertPath         string        `env:"UNIFI_CA_CERT"             envDefault:""`
+	RetryAttempts      int           `env:"UNIFI_RETRY_ATTEMPTS"      envDefault:"3"`
+	RetryInitialDelay  time.Duration `env:"UNIFI_RETRY_INITIAL_DELAY" envDefault:"500ms"`
+	RetryMaxDelay      time.Duration `env:"UNIFI_RETRY_MAX_DELAY"     envDefault:"10s"`
+	ApplyWorkers       int           `env:"UNIFI_APPLY_WORKERS"       envDefault:"5"`
 }
 
 // DNSRecord represents a DNS record in the UniFi API.

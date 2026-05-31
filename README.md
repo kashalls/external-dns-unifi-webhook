@@ -12,7 +12,7 @@
 
 - ExternalDNS >= v0.14.0
 - UniFi OS >= 3.x
-- UniFi Network >= 8.2.93
+- UniFi Network >= 10.3.58
 
 ## 🚫 Limitations
 
@@ -27,16 +27,7 @@ _This project is subject to the limitations of dnsmasq. Please report any issues
 
 ### Creating UniFi Credentials
 
-ExternalDNS Provider for UniFi supports 2 styles of authentication:
-
-- UniFi API Key
-- Username & Password (Deprecated)
-
-Click the below headers to view the instructions:
-
-<details>
-<summary>UniFi Api Key - Network v9.0.0+</summary>
-<br>
+Authentication uses a UniFi API Key (Network 9.0.0+). Username & password authentication is no longer supported.
 
 1. Open your UniFi controller/Console's admin page either via [unifi.ui.com](https://unifi.ui.com) or via the IP address of your controller
 
@@ -99,33 +90,6 @@ stringData:
 
 You should now follow the [Installing the provider](#installing-the-provider) instructions
 
-</details>
-
-<details>
-<summary>Username & Password (Deprecated)</summary>
-<br>
-
-1. Open your UniFi Console's Network Settings and go to `Settings > Control Plane > Admins & Users`.
-
-2. Select `Create New Admin`.
-
-3. In the menu that appears, enable `Restrict to Local Access Only`. Deselect `Use a Predefined Role`. Set `Network: Site Admin`. All other selections can be set to `None`. Click `Create`.
-
-4. Create a Kubernetes secret called `external-dns-unifi-secret` that holds the `username` and `password` with their respected values from Step 3.
-
-```yaml
----
-apiVersion: v1
-kind: Secret
-metadata:
-    name: external-dns-unifi-secret
-stringData:
-    username: <your-username>
-    password: <your-password>
-```
-
-</details>
-
 ### Installing the provider
 
 1. Add the ExternalDNS Helm repository to your cluster.
@@ -145,7 +109,7 @@ stringData:
         name: webhook
         webhook:
             image:
-                repository: ghcr.io/kashalls/external-dns-unifi-webhook
+                repository: ghcr.io/home-operations/external-dns-unifi-webhook
                 tag: main # replace with a versioned release tag
             env:
                 - name: UNIFI_HOST
@@ -192,37 +156,49 @@ stringData:
 
 ### Unifi Controller Configuration
 
-| Environment Variable          | Description                                                         | Default Value |
-| ----------------------------- | ------------------------------------------------------------------- | ------------- |
-| `UNIFI_API_KEY`               | The local api key provided for your user                            | N/A           |
-| `UNIFI_USER`                  | Username for the Unifi Controller (deprecated use `UNIFI_API_KEY`). | N/A           |
-| `UNIFI_PASS`                  | Password for the Unifi Controller (deprecated use `UNIFI_API_KEY`). | N/A           |
-| `UNIFI_SKIP_TLS_VERIFY`       | Whether to skip TLS verification (true or false).                   | `true`        |
-| `UNIFI_SITE`                  | Unifi Site Identifier (used in multi-site installations)            | `default`     |
-| `UNIFI_HOST`                  | Host of the Unifi Controller (must be provided).                    | N/A           |
-| `UNIFI_EXTERNAL_CONTROLLER`\* | Toggles support for non-UniFi Hardware                              | `false`       |
-| `LOG_LEVEL`                   | Change the verbosity of logs (used when making a bug report)        | `info`        |
+| Environment Variable          | Description                                                                       | Default Value |
+| ----------------------------- | --------------------------------------------------------------------------------- | ------------- |
+| `UNIFI_API_KEY`               | The local API key provided for your user (required).                              | N/A           |
+| `UNIFI_SKIP_TLS_VERIFY`       | Whether to skip TLS verification (true or false).                                 | `true`        |
+| `UNIFI_CA_CERT`               | Path to a PEM file with extra trusted CAs (alternative to skipping verification). | N/A           |
+| `UNIFI_SITE`                  | Unifi Site Identifier (used in multi-site installations)                          | `default`     |
+| `UNIFI_HOST`                  | Host of the Unifi Controller (must be provided).                                  | N/A           |
+| `UNIFI_EXTERNAL_CONTROLLER`\* | Toggles support for non-UniFi Hardware                                            | `false`       |
+| `LOG_LEVEL`                   | Change the verbosity of logs (used when making a bug report)                      | `info`        |
 
 \*`UNIFI_EXTERNAL_CONTROLLER` is used to toggle between two versions of the Network Controller API. If you are running the UniFi software outside of UniFi's official hardware (e.g., Cloud Key or Dream Machine), you'll need to set `UNIFI_EXTERNAL_CONTROLLER` to `true`
 
 ### Server Configuration
 
-| Environment Variable             | Description                                                      | Default Value |
-| -------------------------------- | ---------------------------------------------------------------- | ------------- |
-| `SERVER_HOST`                    | The host address where the server listens.                       | `localhost`   |
-| `SERVER_PORT`                    | The port where the server listens.                               | `8888`        |
-| `SERVER_READ_TIMEOUT`            | Duration the server waits before timing out on read operations.  | N/A           |
-| `SERVER_WRITE_TIMEOUT`           | Duration the server waits before timing out on write operations. | N/A           |
-| `DOMAIN_FILTER`                  | List of domains to include in the filter.                        | Empty         |
-| `EXCLUDE_DOMAIN_FILTER`          | List of domains to exclude from filtering.                       | Empty         |
-| `REGEXP_DOMAIN_FILTER`           | Regular expression for filtering domains.                        | Empty         |
-| `REGEXP_DOMAIN_FILTER_EXCLUSION` | Regular expression for excluding domains from the filter.        | Empty         |
+| Environment Variable             | Description                                                         | Default Value     |
+| -------------------------------- | ------------------------------------------------------------------- | ----------------- |
+| `SERVER_HOST`                    | Host address for the webhook server.                                | `localhost`       |
+| `SERVER_PORT`                    | Port for the webhook server.                                        | `8888`            |
+| `SERVER_READ_TIMEOUT`            | Read timeout for the webhook server.                                | `60s`             |
+| `SERVER_READ_HEADER_TIMEOUT`     | Read-header timeout (Slowloris mitigation).                         | `5s`              |
+| `SERVER_WRITE_TIMEOUT`           | Write timeout for the webhook server.                               | `60s`             |
+| `SERVER_IDLE_TIMEOUT`            | Keep-alive idle timeout.                                            | `120s`            |
+| `SERVER_MAX_HEADER_BYTES`        | Maximum request header size.                                        | `65536`           |
+| `SERVER_MAX_BODY_BYTES`          | Maximum POST body size before returning 413.                        | `5242880` (5 MiB) |
+| `HEALTH_SERVER_ADDR`             | Address for the /metrics, /healthz, /readyz server.                 | `0.0.0.0:8080`    |
+| `READINESS_CACHE_TTL`            | How long /readyz caches the upstream probe result.                  | `30s`             |
+| `PPROF_ENABLED`                  | Mount /debug/pprof/\* on the health server (do not enable in prod). | `false`           |
+| `UNIFI_APPLY_WORKERS`            | Maximum concurrent record operations during ApplyChanges.           | `5`               |
+| `UNIFI_RETRY_ATTEMPTS`           | Total attempts per request (including the first).                   | `3`               |
+| `UNIFI_RETRY_INITIAL_DELAY`      | Initial backoff before the first retry.                             | `500ms`           |
+| `UNIFI_RETRY_MAX_DELAY`          | Maximum backoff between retries (also caps Retry-After).            | `10s`             |
+| `DOMAIN_FILTER`                  | List of domains to include in the filter.                           | Empty             |
+| `EXCLUDE_DOMAIN_FILTER`          | List of domains to exclude from filtering.                          | Empty             |
+| `REGEXP_DOMAIN_FILTER`           | Regular expression for filtering domains.                           | Empty             |
+| `REGEXP_DOMAIN_FILTER_EXCLUSION` | Regular expression for excluding domains from the filter.           | Empty             |
+| `LOG_LEVEL`                      | Log verbosity (debug / info / warn / error).                        | `info`            |
+| `LOG_FORMAT`                     | Set to `test` for human-readable text output instead of JSON.       | JSON              |
 
 ## ⭐ Stargazers
 
 <div align="center">
 
-[![Star History Chart](https://api.star-history.com/svg?repos=kashalls/external-dns-unifi-webhook&type=Date)](https://star-history.com/#kashalls/external-dns-unifi-webhook&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=home-operations/external-dns-unifi-webhook&type=Date)](https://star-history.com/#home-operations/external-dns-unifi-webhook&Date)
 
 </div>
 

@@ -2,14 +2,18 @@ package unifi
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"slices"
 
-	"github.com/cockroachdb/errors"
-	"github.com/home-operations/external-dns-unifi-webhook/cmd/webhook/init/log"
-	"github.com/home-operations/external-dns-unifi-webhook/pkg/metrics"
+	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
+	"golang.org/x/sync/errgroup"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
 )
+
+const defaultApplyWorkers = 5
 
 // UnifiProvider type for interfacing with UniFi.
 //
@@ -19,6 +23,7 @@ type UnifiProvider struct {
 
 	client       *httpClient
 	domainFilter endpoint.DomainFilter
+	workers      int
 }
 
 // NewUnifiProvider initializes a new DNSProvider.
@@ -27,15 +32,19 @@ type UnifiProvider struct {
 func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
 	c, err := newUnifiClient(config)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create the unifi client")
+		return nil, fmt.Errorf("creating unifi client: %w", err)
 	}
 
-	p := &UnifiProvider{
+	workers := config.ApplyWorkers
+	if workers <= 0 {
+		workers = defaultApplyWorkers
+	}
+
+	return &UnifiProvider{
 		client:       c,
 		domainFilter: domainFilter,
-	}
-
-	return p, nil
+		workers:      workers,
+	}, nil
 }
 
 // Records returns the list of records in the DNS provider.
@@ -44,43 +53,33 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 
 	records, err := p.client.GetEndpoints(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch DNS records")
+		return nil, fmt.Errorf("fetching DNS records: %w", err)
 	}
 
-	// Count records by type for metrics
-	recordsByType := make(map[string]int)
+	// Group supported records by key+type and tally per-type counts in one pass.
+	groups := make(map[string][]DNSRecord)
+	counts := make(map[string]int)
 	for _, r := range records {
-		if provider.SupportedRecordType(r.RecordType) {
-			recordsByType[r.RecordType]++
+		if !provider.SupportedRecordType(r.RecordType) {
+			continue
 		}
+		groups[r.Key+r.RecordType] = append(groups[r.Key+r.RecordType], r)
+		counts[r.RecordType]++
 	}
 
-	// Update metrics for each record type
-	for recordType, count := range recordsByType {
+	for recordType, count := range counts {
 		m.UpdateRecordsByType(recordType, count)
 	}
 
-	groups := make(map[string][]DNSRecord)
-	for _, r := range records {
-		if provider.SupportedRecordType(r.RecordType) {
-			groupKey := r.Key + r.RecordType
-			groups[groupKey] = append(groups[groupKey], r)
-		}
-	}
-
-	var endpoints []*endpoint.Endpoint
-	for _, records := range groups {
-		if len(records) == 0 {
-			continue
-		}
-
-		targets := make([]string, len(records))
-		for i, record := range records {
-			targets[i] = record.Value
+	endpoints := make([]*endpoint.Endpoint, 0, len(groups))
+	for _, group := range groups {
+		targets := make([]string, len(group))
+		for i, r := range group {
+			targets[i] = r.Value
 		}
 
 		if ep := endpoint.NewEndpointWithTTL(
-			records[0].Key, records[0].RecordType, records[0].TTL, targets...,
+			group[0].Key, group[0].RecordType, group[0].TTL, targets...,
 		); ep != nil {
 			endpoints = append(endpoints, ep)
 		}
@@ -95,60 +94,89 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 	existingRecords, err := p.Records(ctx)
 	if err != nil {
-		log.Error("failed to get records while applying", "error", err)
+		slog.Error("failed to get records while applying", "error", err)
 
-		return errors.Wrap(err, "failed to get existing records before applying changes")
+		return fmt.Errorf("fetching existing records before applying changes: %w", err)
 	}
 
-	// Record batch sizes
 	m.BatchSize.WithLabelValues(metrics.ProviderName, "create").Observe(float64(len(changes.Create)))
 	m.BatchSize.WithLabelValues(metrics.ProviderName, "update").Observe(float64(len(changes.UpdateNew)))
 	m.BatchSize.WithLabelValues(metrics.ProviderName, "delete").Observe(float64(len(changes.Delete)))
 
-	// Process deletions and updates (delete old)
-	for _, ep := range append(changes.UpdateOld, changes.Delete...) {
-		err := p.client.DeleteEndpoint(ctx, ep)
-		if err != nil {
-			log.Error("failed to delete endpoint", "data", ep, "error", err)
-
-			return errors.Wrapf(err, "failed to delete endpoint %s (%s)", ep.DNSName, ep.RecordType)
+	// Index existing CNAMEs by DNSName so conflict detection on create is O(1).
+	existingCNAMEs := make(map[string]*endpoint.Endpoint)
+	for _, r := range existingRecords {
+		if r.RecordType == recordTypeCNAME {
+			existingCNAMEs[r.DNSName] = r
 		}
-		m.RecordChange("delete", ep.RecordType)
 	}
 
-	// Process creates and updates (create new)
-	for _, ep := range append(changes.Create, changes.UpdateNew...) {
-		operation := "create"
-		// Check for CNAME conflicts
+	// Deletes (UpdateOld + Delete) and creates (Create + UpdateNew) each run
+	// under their own errgroup with SetLimit so we get bounded concurrency
+	// without a hand-rolled semaphore. external-dns already sequences delete
+	// before create at the plan level, so we keep the two phases ordered but
+	// parallelise within each phase.
+	deleteEPs := slices.Concat(changes.UpdateOld, changes.Delete)
+	if err := p.runBounded(ctx, deleteEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
+		if err := p.client.DeleteEndpoint(ctx, ep); err != nil {
+			slog.Error("failed to delete endpoint", "data", ep, "error", err)
+
+			return fmt.Errorf("deleting endpoint %s (%s): %w", ep.DNSName, ep.RecordType, err)
+		}
+		m.RecordChange("delete", ep.RecordType)
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	createEPs := slices.Concat(changes.Create, changes.UpdateNew)
+	if err := p.runBounded(ctx, createEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
 		if ep.RecordType == recordTypeCNAME {
-			for _, record := range existingRecords {
-				if record.RecordType != recordTypeCNAME {
-					continue
-				}
-
-				if record.DNSName != ep.DNSName {
-					continue
-				}
-
+			if existing, ok := existingCNAMEs[ep.DNSName]; ok {
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				err := p.client.DeleteEndpoint(ctx, record)
-				if err != nil {
-					log.Error("failed to delete conflicting CNAME", "data", record, "error", err)
+				if err := p.client.DeleteEndpoint(ctx, existing); err != nil {
+					slog.Error("failed to delete conflicting CNAME", "data", existing, "error", err)
 
-					return errors.Wrapf(err, "failed to delete conflicting CNAME %s", record.DNSName)
+					return fmt.Errorf("deleting conflicting CNAME %s: %w", existing.DNSName, err)
 				}
 			}
 		}
-		_, err := p.client.CreateEndpoint(ctx, ep)
-		if err != nil {
-			log.Error("failed to create endpoint", "data", ep, "error", err)
+		if _, err := p.client.CreateEndpoint(ctx, ep); err != nil {
+			slog.Error("failed to create endpoint", "data", ep, "error", err)
 
-			return errors.Wrapf(err, "failed to create endpoint %s (%s)", ep.DNSName, ep.RecordType)
+			return fmt.Errorf("creating endpoint %s (%s): %w", ep.DNSName, ep.RecordType, err)
 		}
-		m.RecordChange(operation, ep.RecordType)
+		m.RecordChange("create", ep.RecordType)
+
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+// runBounded executes fn(ctx, ep) for every entry in eps with at most
+// p.workers in flight at any time. The first non-nil error cancels the
+// context and bubbles up; remaining workers see ctx.Err() and short-circuit.
+func (p *UnifiProvider) runBounded(
+	ctx context.Context,
+	eps []*endpoint.Endpoint,
+	fn func(context.Context, *endpoint.Endpoint) error,
+) error {
+	if len(eps) == 0 {
+		return nil
+	}
+
+	group, gctx := errgroup.WithContext(ctx)
+	group.SetLimit(p.workers)
+
+	for _, ep := range eps {
+		group.Go(func() error { return fn(gctx, ep) })
+	}
+
+	return group.Wait()
 }
 
 // GetDomainFilter returns the domain filter for the provider.

@@ -1,11 +1,11 @@
 package unifi
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -507,7 +507,7 @@ func TestIsAuthError(t *testing.T) {
 		},
 		{
 			name:     "wrapped AuthError",
-			err:      errors.Wrap(NewAuthError(testOperationLogin, 401, "fail", nil), "additional context"),
+			err:      fmt.Errorf("additional context: %w", NewAuthError(testOperationLogin, 401, "fail", nil)),
 			expected: true,
 		},
 		{
@@ -551,7 +551,7 @@ func TestIsNetworkError(t *testing.T) {
 		},
 		{
 			name:     "wrapped NetworkError",
-			err:      errors.Wrap(NewNetworkError(http.MethodGet, "url", errors.New("error")), "context"),
+			err:      fmt.Errorf("context: %w", NewNetworkError(http.MethodGet, "url", errors.New("error"))),
 			expected: true,
 		},
 		{
@@ -595,7 +595,7 @@ func TestIsAPIError(t *testing.T) {
 		},
 		{
 			name:     "wrapped APIError",
-			err:      errors.Wrap(NewAPIError(http.MethodGet, "url", 404, "not found"), "context"),
+			err:      fmt.Errorf("context: %w", NewAPIError(http.MethodGet, "url", 404, "not found")),
 			expected: true,
 		},
 		{
@@ -639,7 +639,7 @@ func TestIsDataError(t *testing.T) {
 		},
 		{
 			name:     "wrapped DataError",
-			err:      errors.Wrap(NewDataError(testOpMarshal, "data", errors.New("error")), "context"),
+			err:      fmt.Errorf("context: %w", NewDataError(testOpMarshal, "data", errors.New("error"))),
 			expected: true,
 		},
 		{
@@ -673,8 +673,8 @@ func TestIsDataError(t *testing.T) {
 func TestErrorChaining(t *testing.T) {
 	baseErr := errors.New("root cause")
 	dataErr := NewDataError("parse", "config", baseErr)
-	wrappedOnce := errors.Wrap(dataErr, "first wrap")
-	wrappedTwice := errors.Wrap(wrappedOnce, "second wrap")
+	wrappedOnce := fmt.Errorf("first wrap: %w", dataErr)
+	wrappedTwice := fmt.Errorf("second wrap: %w", wrappedOnce)
 
 	// Should still be detectable as DataError
 	if !IsDataError(wrappedTwice) {
@@ -696,7 +696,7 @@ func TestErrorChaining(t *testing.T) {
 // TestErrorAs tests errors.As with custom error types.
 func TestErrorAs(t *testing.T) {
 	authErr := NewAuthError(testOperationLogin, 401, "unauthorized", nil)
-	wrappedErr := errors.Wrap(authErr, "wrapped")
+	wrappedErr := fmt.Errorf("wrapped: %w", authErr)
 
 	var targetErr *AuthError
 	if !errors.As(wrappedErr, &targetErr) {

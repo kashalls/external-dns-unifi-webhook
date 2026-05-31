@@ -1,0 +1,5 @@
+status:       200
+content_type: application/json
+url:          https://unifi.example.com/proxy/network/v2/api/site/default/static-dns/
+note:         Captured from a live UniFi Network controller, then sanitized:
+              domain -> example.com, IPs -> 192.0.2.0/24 + 198.51.100.0/24, IDs -> sequential hex.

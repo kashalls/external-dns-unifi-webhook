@@ -57,7 +57,6 @@ type Metrics struct {
 	// Quality metrics
 	ConsecutiveErrors    *prometheus.GaugeVec
 	LastSuccessTimestamp *prometheus.GaugeVec
-	OperationSuccessRate *prometheus.GaugeVec
 
 	// Info metric
 	Info *prometheus.GaugeVec
@@ -284,15 +283,6 @@ func build(f promauto.Factory, version string) *Metrics {
 			},
 			[]string{labelProvider},
 		),
-		OperationSuccessRate: f.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: namespace,
-				Name:      "operation_success_rate",
-				Help:      "Success rate of operations (0-1)",
-			},
-			[]string{labelOperation},
-		),
-
 		Info: f.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,

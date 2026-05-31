@@ -36,11 +36,7 @@ func newRetryClient(t *testing.T, srv *httptest.Server, cfg *Config) *httpClient
 		cfg.RetryMaxDelay = 10 * time.Millisecond
 	}
 
-	return &httpClient{
-		Config: cfg,
-		Client: srv.Client(),
-		siteID: testSiteUUID,
-	}
+	return testClient(srv, cfg)
 }
 
 func TestDoRequest_RetriesOn5xxThenSucceeds(t *testing.T) {
@@ -84,7 +80,7 @@ func TestDoRequest_NoRetryOn4xx(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on 400")
 	}
-	if !IsAPIError(err) {
+	if !isAPIError(err) {
 		t.Errorf("expected APIError, got %T: %v", err, err)
 	}
 	if got := calls.Load(); got != 1 {
@@ -141,7 +137,7 @@ func TestDoRequest_GivesUpAfterMaxAttempts(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
 	}
-	if !IsAPIError(err) {
+	if !isAPIError(err) {
 		t.Errorf("expected APIError surfaced from final attempt, got %T: %v", err, err)
 	}
 	if got := calls.Load(); got != 2 {
@@ -171,7 +167,7 @@ func TestParseRetryAfter(t *testing.T) {
 }
 
 func TestBackoff_ClampsToMax(t *testing.T) {
-	c := &httpClient{Config: &Config{
+	c := &httpClient{cfg: &Config{
 		RetryInitialDelay: 1 * time.Second,
 		RetryMaxDelay:     2 * time.Second,
 	}}

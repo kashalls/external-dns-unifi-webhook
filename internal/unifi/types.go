@@ -1,6 +1,8 @@
 package unifi
 
 import (
+	"fmt"
+	"net/url"
 	"time"
 
 	"sigs.k8s.io/external-dns/endpoint"
@@ -17,6 +19,34 @@ type Config struct {
 	RetryInitialDelay time.Duration `env:"UNIFI_RETRY_INITIAL_DELAY" envDefault:"500ms"`
 	RetryMaxDelay     time.Duration `env:"UNIFI_RETRY_MAX_DELAY"     envDefault:"10s"`
 	ApplyWorkers      int           `env:"UNIFI_APPLY_WORKERS"       envDefault:"5"`
+}
+
+// Validate checks that the UniFi configuration is internally consistent. It is
+// called once at provider construction so misconfiguration fails startup
+// rather than surfacing as confusing request-time errors.
+func (c Config) Validate() error {
+	u, err := url.Parse(c.Host)
+	if err != nil {
+		return fmt.Errorf("UNIFI_HOST %q is not a valid URL: %w", c.Host, err)
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("UNIFI_HOST %q must include a scheme and host (e.g. https://unifi.local)", c.Host)
+	}
+	if c.RetryAttempts < 1 {
+		return fmt.Errorf("UNIFI_RETRY_ATTEMPTS must be at least 1, got %d", c.RetryAttempts)
+	}
+	if c.ApplyWorkers < 1 {
+		return fmt.Errorf("UNIFI_APPLY_WORKERS must be at least 1, got %d", c.ApplyWorkers)
+	}
+	if c.RetryInitialDelay <= 0 {
+		return fmt.Errorf("UNIFI_RETRY_INITIAL_DELAY must be positive, got %s", c.RetryInitialDelay)
+	}
+	if c.RetryMaxDelay < c.RetryInitialDelay {
+		return fmt.Errorf("UNIFI_RETRY_MAX_DELAY (%s) must be >= UNIFI_RETRY_INITIAL_DELAY (%s)",
+			c.RetryMaxDelay, c.RetryInitialDelay)
+	}
+
+	return nil
 }
 
 // DNSRecord is the internal representation of a record used by the provider

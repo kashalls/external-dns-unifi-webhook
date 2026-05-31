@@ -5,26 +5,6 @@ import (
 	"fmt"
 )
 
-// AuthError represents authentication-related errors.
-type AuthError struct {
-	Operation string
-	Status    int
-	Message   string
-	Err       error
-}
-
-func (e *AuthError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("authentication failed during %s (status %d): %s: %v", e.Operation, e.Status, e.Message, e.Err)
-	}
-
-	return fmt.Sprintf("authentication failed during %s (status %d): %s", e.Operation, e.Status, e.Message)
-}
-
-func (e *AuthError) Unwrap() error {
-	return e.Err
-}
-
 // NetworkError represents network-related errors.
 type NetworkError struct {
 	Operation string
@@ -67,11 +47,6 @@ func (e *DataError) Unwrap() error {
 	return e.Err
 }
 
-// NewAuthError creates a new authentication error.
-func NewAuthError(operation string, status int, message string, err error) error {
-	return &AuthError{Operation: operation, Status: status, Message: message, Err: err}
-}
-
 // NewNetworkError creates a new network error.
 func NewNetworkError(operation, url string, err error) error {
 	return &NetworkError{Operation: operation, URL: url, Err: err}
@@ -87,30 +62,9 @@ func NewDataError(operation, dataType string, err error) error {
 	return &DataError{Operation: operation, DataType: dataType, Err: err}
 }
 
-// IsAuthError reports whether err is an *AuthError.
-func IsAuthError(err error) bool {
-	var authErr *AuthError
-
-	return errors.As(err, &authErr)
-}
-
 // IsNetworkError reports whether err is a *NetworkError.
 func IsNetworkError(err error) bool {
-	var netErr *NetworkError
+	_, ok := errors.AsType[*NetworkError](err)
 
-	return errors.As(err, &netErr)
-}
-
-// IsAPIError reports whether err is an *APIError.
-func IsAPIError(err error) bool {
-	var apiErr *APIError
-
-	return errors.As(err, &apiErr)
-}
-
-// IsDataError reports whether err is a *DataError.
-func IsDataError(err error) bool {
-	var dataErr *DataError
-
-	return errors.As(err, &dataErr)
+	return ok
 }

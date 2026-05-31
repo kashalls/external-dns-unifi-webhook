@@ -2,10 +2,13 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/caarlos0/env/v11"
 )
+
+const maxPort = 65535
 
 // Config holds configuration loaded from the process environment.
 //
@@ -28,12 +31,51 @@ type Config struct {
 	PprofEnabled            bool          `env:"PPROF_ENABLED"              envDefault:"false"`
 }
 
-// Init reads Config from the environment. Parse errors fail startup.
+// Init reads Config from the environment. Parse and validation errors fail
+// startup so misconfiguration is caught before any server is bound.
 func Init() (Config, error) {
 	cfg := Config{}
 	if err := env.Parse(&cfg); err != nil {
 		return Config{}, fmt.Errorf("reading configuration from environment: %w", err)
 	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, fmt.Errorf("invalid configuration: %w", err)
+	}
 
 	return cfg, nil
+}
+
+// Validate checks that the loaded configuration is internally consistent.
+func (c Config) Validate() error {
+	if c.ServerPort < 1 || c.ServerPort > maxPort {
+		return fmt.Errorf("SERVER_PORT must be between 1 and %d, got %d", maxPort, c.ServerPort)
+	}
+	if c.ServerMaxBodyBytes <= 0 {
+		return fmt.Errorf("SERVER_MAX_BODY_BYTES must be positive, got %d", c.ServerMaxBodyBytes)
+	}
+	if c.ServerMaxHeaderBytes <= 0 {
+		return fmt.Errorf("SERVER_MAX_HEADER_BYTES must be positive, got %d", c.ServerMaxHeaderBytes)
+	}
+
+	durations := []struct {
+		name  string
+		value time.Duration
+	}{
+		{"SERVER_READ_TIMEOUT", c.ServerReadTimeout},
+		{"SERVER_READ_HEADER_TIMEOUT", c.ServerReadHeaderTimeout},
+		{"SERVER_WRITE_TIMEOUT", c.ServerWriteTimeout},
+		{"SERVER_IDLE_TIMEOUT", c.ServerIdleTimeout},
+		{"READINESS_CACHE_TTL", c.ReadinessCacheTTL},
+	}
+	for _, d := range durations {
+		if d.value < 0 {
+			return fmt.Errorf("%s must not be negative, got %s", d.name, d.value)
+		}
+	}
+
+	if _, _, err := net.SplitHostPort(c.HealthServerAddr); err != nil {
+		return fmt.Errorf("HEALTH_SERVER_ADDR %q is not a valid host:port: %w", c.HealthServerAddr, err)
+	}
+
+	return nil
 }

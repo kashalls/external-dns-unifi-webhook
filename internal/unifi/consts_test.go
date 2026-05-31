@@ -25,11 +25,9 @@ const (
 
 	// Error message fragments.
 	testMsgInternalServer = "Internal server error"
-	testMsgForbidden      = "forbidden"
 	testMsgRecordNotFound = "Record not found"
 	testMsgUnknownError   = "Unknown error"
 	testMsgGenericError   = "generic error"
-	testAuthFailedLogin   = "authentication failed during login"
 	testAPIErrPost        = "API error during POST"
 
 	// DataError data types.
@@ -43,9 +41,6 @@ const (
 	testURLSpecialChars  = "https://unifi.local/api?param=value&key=секрет"
 	testURLMissingRecord = "https://unifi.local/api/site/default/static-dns/missing"
 	testURLLoginInternal = "https://unifi.local/api/auth/login"
-
-	// Subtest names.
-	testNameAuthError = "AuthError"
 
 	// FormatURL path fragments.
 	testPathHostParam = "%s/api/%s"
@@ -67,13 +62,9 @@ const (
 	contentTypeJSONUTF8 = "application/json; charset=utf-8"
 
 	// Operations, statuses and messages.
-	testOpMarshal      = "marshal"
-	testMsgInvalidAuth = "invalid credentials"
-	testMsgInvalid     = "invalid"
-	testMsgNoResponse  = "no response"
-	testStatus401      = "status 401"
-	testStatus0        = "status 0"
-	testDataRespBody   = "response body"
+	testOpMarshal    = "marshal"
+	testStatus0      = "status 0"
+	testDataRespBody = "response body"
 
 	// Subtest names.
 	testNameNilError = "nil error"

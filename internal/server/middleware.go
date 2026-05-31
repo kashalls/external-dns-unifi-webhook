@@ -1,28 +1,14 @@
 package server
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
 	"time"
 
+	"github.com/home-operations/external-dns-unifi-webhook/internal/httpx"
 	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
 )
-
-// statusRecorder wraps http.ResponseWriter to capture the status code written
-// by the handler. Defaults to 200 since Go writes that implicitly if no
-// WriteHeader call is made before the first Write.
-type statusRecorder struct {
-	http.ResponseWriter
-
-	status int
-}
-
-func (r *statusRecorder) WriteHeader(code int) {
-	r.status = code
-	r.ResponseWriter.WriteHeader(code)
-}
 
 // recoveryAndAccessLog wraps next with two cross-cutting concerns:
 //
@@ -35,15 +21,15 @@ func (r *statusRecorder) WriteHeader(code int) {
 func recoveryAndAccessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		rec := httpx.NewResponseRecorder(w)
 
 		defer func() {
 			if rv := recover(); rv != nil {
 				metrics.Get().PanicsTotal.WithLabelValues(metrics.ProviderName, r.URL.Path).Inc()
 				slog.Error("panic in HTTP handler",
 					"panic", rv,
-					"req_method", r.Method,
-					"req_path", r.URL.Path,
+					"method", r.Method,
+					"path", r.URL.Path,
 					"stack", string(debug.Stack()),
 				)
 				// Best-effort response. If the handler already wrote anything,
@@ -55,16 +41,16 @@ func recoveryAndAccessLog(next http.Handler) http.Handler {
 
 			level := slog.LevelInfo
 			switch {
-			case rec.status >= http.StatusInternalServerError:
+			case rec.Status() >= http.StatusInternalServerError:
 				level = slog.LevelError
-			case rec.status >= http.StatusBadRequest:
+			case rec.Status() >= http.StatusBadRequest:
 				level = slog.LevelWarn
 			}
 
 			slog.LogAttrs(r.Context(), level, "request",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.Int("status", rec.status),
+				slog.Int("status", rec.Status()),
 				slog.Duration("duration", time.Since(start)),
 			)
 		}()
@@ -85,12 +71,4 @@ func limitBody(maxBytes int64) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// IsBodyTooLarge reports whether err comes from a MaxBytesReader limit
-// having been exceeded — used by handlers to map decode failures to 413.
-func IsBodyTooLarge(err error) bool {
-	var maxErr *http.MaxBytesError
-
-	return errors.As(err, &maxErr)
 }

@@ -2,6 +2,7 @@ package unifi
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -55,10 +56,7 @@ func newHTTPTransport(cfg *Config) (*http.Transport, error) {
 // raw JSON payload (nil for GET/DELETE) — it is re-read on every retry
 // attempt so the caller does not need a rewindable reader.
 func (c *httpClient) doRequest(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
-	attempts := c.RetryAttempts
-	if attempts < 1 {
-		attempts = 1
-	}
+	attempts := max(c.cfg.RetryAttempts, 1)
 
 	var lastErr error
 	for attempt := range attempts {
@@ -124,7 +122,7 @@ func (c *httpClient) doOnce(ctx context.Context, method, path string, body []byt
 	}
 	c.setHeaders(req)
 
-	resp, err := c.Do(req)
+	resp, err := c.httpc.Do(req)
 	if err != nil {
 		return nil, NewNetworkError(method, path, err)
 	}
@@ -165,14 +163,8 @@ func (c *httpClient) retryAfter(resp *http.Response, err error, attempt int) (bo
 // non-zero (Retry-After from the server) it is used as the floor — we never
 // retry sooner than the server asked us to.
 func (c *httpClient) backoff(attempt int, hint time.Duration) time.Duration {
-	initial := c.RetryInitialDelay
-	if initial <= 0 {
-		initial = 500 * time.Millisecond
-	}
-	maxDelay := c.RetryMaxDelay
-	if maxDelay <= 0 {
-		maxDelay = 10 * time.Second
-	}
+	initial := cmp.Or(c.cfg.RetryInitialDelay, 500*time.Millisecond)
+	maxDelay := cmp.Or(c.cfg.RetryMaxDelay, 10*time.Second)
 
 	base := initial << attempt
 	if base <= 0 || base > maxDelay {
@@ -270,7 +262,7 @@ func formatAPIError(e *apiErrorResponse) string {
 
 // setHeaders applies the X-API-KEY auth header and the standard JSON headers.
 func (c *httpClient) setHeaders(req *http.Request) {
-	req.Header.Set("X-API-KEY", c.APIKey)
+	req.Header.Set("X-API-KEY", c.cfg.APIKey)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 }

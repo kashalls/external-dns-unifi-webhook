@@ -106,10 +106,8 @@ provider:
                 port: http-webhook
             initialDelaySeconds: 10
             timeoutSeconds: 5
-extraArgs:
-    - --ignore-ingress-tls-spec
 policy: create-only
-sources: ["ingress", "service"]
+sources: ["gateway-httproute", "service"]
 txtOwnerId: default
 txtPrefix: k8s.
 domainFilters: ["example.com"] # replace with your domain

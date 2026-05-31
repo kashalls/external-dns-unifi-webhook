@@ -121,7 +121,7 @@ func TestLimitBody_TrimsOversizedRequests(t *testing.T) {
 	var sawLimit atomic.Bool
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := io.ReadAll(r.Body)
-		if IsBodyTooLarge(err) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			sawLimit.Store(true)
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 

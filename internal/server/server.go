@@ -62,8 +62,7 @@ func buildMainHandler(cfg *config.Config, whk *webhook.Webhook, readyz http.Hand
 	// the webhook port. The external-dns Helm chart only exposes one
 	// container port for the webhook sidecar, so probes pointed at the
 	// health server's port would need extra chart wiring to work.
-	mux.HandleFunc("GET /healthz", okHandler)
-	mux.HandleFunc("GET /readyz", readyz)
+	mountHealth(mux, readyz)
 
 	// Middleware order (outermost first): recovery+log -> metrics -> body limit -> mux.
 	// recovery must be outermost so it catches panics in any inner layer, and
@@ -80,8 +79,7 @@ func buildMainHandler(cfg *config.Config, whk *webhook.Webhook, readyz http.Hand
 func buildHealthHandler(cfg *config.Config, readyz http.HandlerFunc) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", promhttp.Handler())
-	mux.HandleFunc("GET /healthz", okHandler)
-	mux.HandleFunc("GET /readyz", readyz)
+	mountHealth(mux, readyz)
 
 	if cfg.PprofEnabled {
 		slog.Warn("pprof endpoints enabled on health server — disable in production unless investigating")
@@ -95,10 +93,18 @@ func buildHealthHandler(cfg *config.Config, readyz http.HandlerFunc) http.Handle
 	return recoveryAndAccessLog(mux)
 }
 
+// mountHealth registers the /healthz and /readyz endpoints on mux. Both the
+// webhook and health muxes expose them so Kubernetes probes can target either
+// port.
+func mountHealth(mux *http.ServeMux, readyz http.HandlerFunc) {
+	mux.HandleFunc("GET /healthz", okHandler)
+	mux.HandleFunc("GET /readyz", readyz)
+}
+
 func okHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		slog.Error("failed to write health response", "error", err)
+		slog.Error("writing health response", "error", err)
 	}
 }
 

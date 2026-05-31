@@ -8,114 +8,6 @@ import (
 	"testing"
 )
 
-const (
-	testOperationLogin = "login"
-)
-
-// TestAuthError tests AuthError type.
-func TestAuthError(t *testing.T) {
-	tests := []struct {
-		name            string
-		operation       string
-		status          int
-		message         string
-		wrappedErr      error
-		expectedContain []string
-	}{
-		{
-			name:       "auth error with wrapped error",
-			operation:  testOperationLogin,
-			status:     401,
-			message:    testMsgInvalidAuth,
-			wrappedErr: errors.New("connection timeout"),
-			expectedContain: []string{
-				testAuthFailedLogin,
-				testStatus401,
-				testMsgInvalidAuth,
-				"connection timeout",
-			},
-		},
-		{
-			name:       "auth error without wrapped error",
-			operation:  testOperationLogin,
-			status:     403,
-			message:    testMsgForbidden,
-			wrappedErr: nil,
-			expectedContain: []string{
-				testAuthFailedLogin,
-				"status 403",
-				testMsgForbidden,
-			},
-		},
-		{
-			name:       "auth error with empty message",
-			operation:  "refresh",
-			status:     401,
-			message:    "",
-			wrappedErr: nil,
-			expectedContain: []string{
-				"authentication failed during refresh",
-				testStatus401,
-			},
-		},
-		{
-			name:       "auth error with status 0",
-			operation:  "verify",
-			status:     0,
-			message:    testMsgNoResponse,
-			wrappedErr: nil,
-			expectedContain: []string{
-				"authentication failed during verify",
-				testStatus0,
-				testMsgNoResponse,
-			},
-		},
-		{
-			name:       "auth error with negative status",
-			operation:  "test",
-			status:     -1,
-			message:    testMsgInvalid,
-			wrappedErr: nil,
-			expectedContain: []string{
-				"authentication failed during test",
-				"status -1",
-				testMsgInvalid,
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			authErr := &AuthError{
-				Operation: tt.operation,
-				Status:    tt.status,
-				Message:   tt.message,
-				Err:       tt.wrappedErr,
-			}
-
-			errMsg := authErr.Error()
-			for _, expected := range tt.expectedContain {
-				if !strings.Contains(errMsg, expected) {
-					t.Errorf("AuthError.Error() = %q, should contain %q", errMsg, expected)
-				}
-			}
-
-			// Test Unwrap
-			unwrapped := authErr.Unwrap()
-			if !errors.Is(unwrapped, tt.wrappedErr) {
-				t.Errorf("AuthError.Unwrap() = %v, want %v", unwrapped, tt.wrappedErr)
-			}
-
-			// Test that it's compatible with errors.Is when wrapped
-			if tt.wrappedErr != nil {
-				if !errors.Is(authErr, tt.wrappedErr) {
-					t.Errorf("errors.Is(authErr, wrappedErr) = false, want true")
-				}
-			}
-		})
-	}
-}
-
 // TestNetworkError tests NetworkError type.
 func TestNetworkError(t *testing.T) {
 	tests := []struct {
@@ -384,35 +276,6 @@ func TestDataError(t *testing.T) {
 	}
 }
 
-// TestNewAuthError tests NewAuthError helper.
-func TestNewAuthError(t *testing.T) {
-	wrappedErr := errors.New("underlying error")
-	err := NewAuthError(testOperationLogin, 401, "unauthorized", wrappedErr)
-
-	if err == nil {
-		t.Fatal("NewAuthError returned nil")
-	}
-
-	authErr := &AuthError{}
-	ok := errors.As(err, &authErr)
-	if !ok {
-		t.Fatalf("NewAuthError returned %T, want *AuthError", err)
-	}
-
-	if authErr.Operation != testOperationLogin {
-		t.Errorf("Operation = %q, want %q", authErr.Operation, testOperationLogin)
-	}
-	if authErr.Status != 401 {
-		t.Errorf("Status = %d, want %d", authErr.Status, 401)
-	}
-	if authErr.Message != "unauthorized" {
-		t.Errorf("Message = %q, want %q", authErr.Message, "unauthorized")
-	}
-	if !errors.Is(authErr.Err, wrappedErr) {
-		t.Errorf("Err = %v, want %v", authErr.Err, wrappedErr)
-	}
-}
-
 // TestNewNetworkError tests NewNetworkError helper.
 func TestNewNetworkError(t *testing.T) {
 	wrappedErr := errors.New("connection refused")
@@ -493,50 +356,6 @@ func TestNewDataError(t *testing.T) {
 	}
 }
 
-// TestIsAuthError tests IsAuthError helper.
-func TestIsAuthError(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		expected bool
-	}{
-		{
-			name:     "actual AuthError",
-			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
-			expected: true,
-		},
-		{
-			name:     "wrapped AuthError",
-			err:      fmt.Errorf("additional context: %w", NewAuthError(testOperationLogin, 401, "fail", nil)),
-			expected: true,
-		},
-		{
-			name:     "NetworkError",
-			err:      NewNetworkError(http.MethodGet, "url", errors.New("error")),
-			expected: false,
-		},
-		{
-			name:     testMsgGenericError,
-			err:      errors.New("some error"),
-			expected: false,
-		},
-		{
-			name:     testNameNilError,
-			err:      nil,
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := IsAuthError(tt.err)
-			if result != tt.expected {
-				t.Errorf("IsAuthError(%v) = %v, want %v", tt.err, result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestIsNetworkError tests IsNetworkError helper.
 func TestIsNetworkError(t *testing.T) {
 	tests := []struct {
@@ -555,8 +374,8 @@ func TestIsNetworkError(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     testNameAuthError,
-			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
+			name:     "APIError",
+			err:      NewAPIError(http.MethodGet, "url", 404, "not found"),
 			expected: false,
 		},
 		{
@@ -581,94 +400,6 @@ func TestIsNetworkError(t *testing.T) {
 	}
 }
 
-// TestIsAPIError tests IsAPIError helper.
-func TestIsAPIError(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		expected bool
-	}{
-		{
-			name:     "actual APIError",
-			err:      NewAPIError(http.MethodGet, "url", 404, "not found"),
-			expected: true,
-		},
-		{
-			name:     "wrapped APIError",
-			err:      fmt.Errorf("context: %w", NewAPIError(http.MethodGet, "url", 404, "not found")),
-			expected: true,
-		},
-		{
-			name:     testNameAuthError,
-			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
-			expected: false,
-		},
-		{
-			name:     testMsgGenericError,
-			err:      errors.New("some error"),
-			expected: false,
-		},
-		{
-			name:     testNameNilError,
-			err:      nil,
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := IsAPIError(tt.err)
-			if result != tt.expected {
-				t.Errorf("IsAPIError(%v) = %v, want %v", tt.err, result, tt.expected)
-			}
-		})
-	}
-}
-
-// TestIsDataError tests IsDataError helper.
-func TestIsDataError(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		expected bool
-	}{
-		{
-			name:     "actual DataError",
-			err:      NewDataError(testOpMarshal, "data", errors.New("error")),
-			expected: true,
-		},
-		{
-			name:     "wrapped DataError",
-			err:      fmt.Errorf("context: %w", NewDataError(testOpMarshal, "data", errors.New("error"))),
-			expected: true,
-		},
-		{
-			name:     testNameAuthError,
-			err:      NewAuthError(testOperationLogin, 401, "fail", nil),
-			expected: false,
-		},
-		{
-			name:     testMsgGenericError,
-			err:      errors.New("some error"),
-			expected: false,
-		},
-		{
-			name:     testNameNilError,
-			err:      nil,
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := IsDataError(tt.err)
-			if result != tt.expected {
-				t.Errorf("IsDataError(%v) = %v, want %v", tt.err, result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestErrorChaining tests error chaining with multiple wraps.
 func TestErrorChaining(t *testing.T) {
 	baseErr := errors.New("root cause")
@@ -676,37 +407,39 @@ func TestErrorChaining(t *testing.T) {
 	wrappedOnce := fmt.Errorf("first wrap: %w", dataErr)
 	wrappedTwice := fmt.Errorf("second wrap: %w", wrappedOnce)
 
-	// Should still be detectable as DataError
-	if !IsDataError(wrappedTwice) {
-		t.Error("IsDataError failed to detect error through multiple wraps")
+	// Should still be detectable as DataError through multiple wraps.
+	var target *DataError
+	if !errors.As(wrappedTwice, &target) {
+		t.Error("errors.As failed to detect DataError through multiple wraps")
 	}
 
-	// Should be able to unwrap to base error
+	// Should be able to unwrap to base error.
 	if !errors.Is(wrappedTwice, baseErr) {
 		t.Error("errors.Is failed to match base error through chain")
 	}
 
-	// Error message should contain context from wraps
+	// Error message should contain context from wraps.
 	errMsg := wrappedTwice.Error()
 	if !strings.Contains(errMsg, "second wrap") {
 		t.Errorf("error message missing wrap context: %s", errMsg)
 	}
 }
 
-// TestErrorAs tests errors.As with custom error types.
+// TestErrorAs tests errors.As with custom error types. APIError carries the
+// status code that DeleteRecord relies on to treat a 404 as success.
 func TestErrorAs(t *testing.T) {
-	authErr := NewAuthError(testOperationLogin, 401, "unauthorized", nil)
-	wrappedErr := fmt.Errorf("wrapped: %w", authErr)
+	apiErr := NewAPIError(http.MethodGet, testURLExample, http.StatusNotFound, "not found")
+	wrappedErr := fmt.Errorf("wrapped: %w", apiErr)
 
-	var targetErr *AuthError
+	var targetErr *APIError
 	if !errors.As(wrappedErr, &targetErr) {
-		t.Fatal("errors.As failed to extract AuthError")
+		t.Fatal("errors.As failed to extract APIError")
 	}
 
-	if targetErr.Operation != testOperationLogin {
-		t.Errorf("extracted AuthError has Operation = %q, want %q", targetErr.Operation, testOperationLogin)
+	if targetErr.Operation != http.MethodGet {
+		t.Errorf("extracted APIError has Operation = %q, want %q", targetErr.Operation, http.MethodGet)
 	}
-	if targetErr.Status != 401 {
-		t.Errorf("extracted AuthError has Status = %d, want %d", targetErr.Status, 401)
+	if targetErr.StatusCode != http.StatusNotFound {
+		t.Errorf("extracted APIError has StatusCode = %d, want %d", targetErr.StatusCode, http.StatusNotFound)
 	}
 }

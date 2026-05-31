@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -15,12 +14,6 @@ import (
 	"github.com/home-operations/external-dns-unifi-webhook/internal/webhook"
 )
 
-const banner = `
-external-dns-provider-unifi
-version: %s (%s)
-
-`
-
 var (
 	Version = "local"
 	Gitsha  = "?"
@@ -28,19 +21,19 @@ var (
 
 func main() {
 	initLogger()
-	slog.Info(fmt.Sprintf(banner, Version, Gitsha))
+	slog.Info("starting external-dns-unifi-webhook", "version", Version, "gitsha", Gitsha)
 
 	metrics.New(Version)
 
 	cfg, err := config.Init()
 	if err != nil {
-		slog.Error("failed to load configuration", "error", err)
+		slog.Error("loading configuration", "error", err)
 		os.Exit(1)
 	}
 
 	provider, err := dnsprovider.Init(&cfg)
 	if err != nil {
-		slog.Error("failed to initialize provider", "error", err)
+		slog.Error("initializing provider", "error", err)
 		os.Exit(1)
 	}
 
@@ -60,7 +53,7 @@ func main() {
 	}
 
 	if err := server.Run(ctx, &cfg, webhook.New(provider), probe); err != nil {
-		slog.Error("server exited with error", "error", err)
+		slog.Error("running server", "error", err)
 		os.Exit(1)
 	}
 }

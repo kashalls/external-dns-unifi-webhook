@@ -45,7 +45,7 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 
 	records, err := p.provider.Records(r.Context())
 	if err != nil {
-		requestLog(r).Error("error getting records", "error", err)
+		requestLog(r).Error("getting records", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 
 		return
@@ -202,13 +202,13 @@ func writePlainError(w http.ResponseWriter, r *http.Request, status int, msg str
 }
 
 func requestLog(r *http.Request) *slog.Logger {
-	return slog.With("req_method", r.Method, "req_path", r.URL.Path)
+	return slog.With("method", r.Method, "path", r.URL.Path)
 }
 
 // isBodyTooLarge reports whether err comes from a MaxBytesReader having been
 // exceeded — used by the POST handlers to map decode failures to 413.
 func isBodyTooLarge(err error) bool {
-	var maxErr *http.MaxBytesError
+	_, ok := errors.AsType[*http.MaxBytesError](err)
 
-	return errors.As(err, &maxErr)
+	return ok
 }

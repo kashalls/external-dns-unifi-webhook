@@ -159,9 +159,9 @@ func TestFormatURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatURL(tt.path, tt.params...)
+			result := formatURL(tt.path, tt.params...)
 			if result != tt.expected {
-				t.Errorf("FormatURL(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
+				t.Errorf("formatURL(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
 			}
 		})
 	}
@@ -203,9 +203,9 @@ func TestFormatURLRealWorldUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatURL(tt.path, tt.params...)
+			result := formatURL(tt.path, tt.params...)
 			if result != tt.expected {
-				t.Errorf("FormatURL() = %q, want %q", result, tt.expected)
+				t.Errorf("formatURL() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
@@ -253,9 +253,9 @@ func TestFormatURLEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatURL(tt.path, tt.params...)
+			result := formatURL(tt.path, tt.params...)
 			if result != tt.expected {
-				t.Errorf("FormatURL() = %q, want %q", result, tt.expected)
+				t.Errorf("formatURL() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
@@ -286,9 +286,9 @@ func TestFormatURLExcessParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatURL(tt.path, tt.params...)
+			result := formatURL(tt.path, tt.params...)
 			if result != tt.expected {
-				t.Errorf("FormatURL(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
+				t.Errorf("formatURL(%q, %v) = %q, want %q", tt.path, tt.params, result, tt.expected)
 			}
 		})
 	}

@@ -28,16 +28,12 @@ const (
 // the site UUID already resolved. Real client construction goes through
 // resolveSite; tests skip that by populating siteID directly.
 func newTestClient(srv *httptest.Server) *httpClient {
-	return &httpClient{
-		Config: &Config{
-			Host:          srv.URL,
-			Site:          testSite,
-			APIKey:        testKeyA,
-			SkipTLSVerify: true,
-		},
-		Client: srv.Client(),
-		siteID: testSiteUUID,
-	}
+	return testClient(srv, &Config{
+		Host:          srv.URL,
+		Site:          testSite,
+		APIKey:        testKeyA,
+		SkipTLSVerify: true,
+	})
 }
 
 // envelope helpers keep test data terse and consistent.
@@ -551,8 +547,8 @@ func TestResolveSite(t *testing.T) {
 			defer srv.Close()
 
 			c := &httpClient{
-				Config: &Config{Host: srv.URL, APIKey: testKeyA, SkipTLSVerify: true},
-				Client: srv.Client(),
+				cfg:   &Config{Host: srv.URL, APIKey: testKeyA, SkipTLSVerify: true},
+				httpc: srv.Client(),
 			}
 
 			id, err := c.resolveSite(context.Background(), tt.ref)
@@ -578,7 +574,7 @@ func TestResolveSite(t *testing.T) {
 
 // TestSetHeaders verifies the API-key auth header and standard JSON headers.
 func TestSetHeaders(t *testing.T) {
-	client := &httpClient{Config: &Config{APIKey: testKeyB}}
+	client := &httpClient{cfg: &Config{APIKey: testKeyB}}
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", http.NoBody)
 	client.setHeaders(req)
 

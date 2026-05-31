@@ -1,10 +1,10 @@
 package unifi
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 
 	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
@@ -34,19 +34,18 @@ type UnifiProvider struct {
 //
 //nolint:ireturn // Must return provider.Provider interface as required by external-dns API
 func NewUnifiProvider(config *Config) (provider.Provider, error) {
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid unifi configuration: %w", err)
+	}
+
 	c, err := newUnifiClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("creating unifi client: %w", err)
 	}
 
-	workers := config.ApplyWorkers
-	if workers <= 0 {
-		workers = defaultApplyWorkers
-	}
-
 	return &UnifiProvider{
 		client:  c,
-		workers: workers,
+		workers: cmp.Or(config.ApplyWorkers, defaultApplyWorkers),
 	}, nil
 }
 
@@ -104,8 +103,6 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 
 	rawRecords, err := p.client.GetEndpoints(ctx)
 	if err != nil {
-		slog.Error("failed to get records while applying", "error", err)
-
 		return fmt.Errorf("fetching existing records before applying changes: %w", err)
 	}
 
@@ -123,8 +120,6 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	deleteEPs := slices.Concat(changes.UpdateOld, changes.Delete)
 	if err := p.runBounded(ctx, deleteEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
 		if err := p.deleteByIDs(ctx, byKeyType[ep.DNSName+ep.RecordType]); err != nil {
-			slog.Error("failed to delete endpoint", "data", ep, "error", err)
-
 			return fmt.Errorf("deleting endpoint %s (%s): %w", ep.DNSName, ep.RecordType, err)
 		}
 		m.RecordChange("delete", ep.RecordType)
@@ -140,15 +135,11 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 			if ids := byKeyType[ep.DNSName+recordTypeCNAME]; len(ids) > 0 {
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				if err := p.deleteByIDs(ctx, ids); err != nil {
-					slog.Error("failed to delete conflicting CNAME", "name", ep.DNSName, "error", err)
-
 					return fmt.Errorf("deleting conflicting CNAME %s: %w", ep.DNSName, err)
 				}
 			}
 		}
 		if _, err := p.client.CreateEndpoint(ctx, ep); err != nil {
-			slog.Error("failed to create endpoint", "data", ep, "error", err)
-
 			return fmt.Errorf("creating endpoint %s (%s): %w", ep.DNSName, ep.RecordType, err)
 		}
 		m.RecordChange("create", ep.RecordType)

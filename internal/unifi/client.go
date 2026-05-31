@@ -19,9 +19,8 @@ import (
 
 // httpClient is the DNS provider client.
 type httpClient struct {
-	*Config
-	*http.Client
-
+	cfg    *Config
+	httpc  *http.Client
 	siteID string
 }
 
@@ -66,8 +65,8 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 	// the rest of the external-dns ecosystem (and the inbound webhook server)
 	// uses. See sigs.k8s.io/external-dns PR #6307.
 	c := &httpClient{
-		Config: config,
-		Client: extdnshttp.NewInstrumentedClient(&http.Client{Transport: transport}),
+		cfg:   config,
+		httpc: extdnshttp.NewInstrumentedClient(&http.Client{Transport: transport}),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), siteResolveTimeout)
@@ -77,7 +76,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		return nil, fmt.Errorf("resolving UNIFI_SITE %q: %w", config.Site, err)
 	}
 	c.siteID = siteID
-	slog.Info("resolved UniFi site", "ref", config.Site, "id", siteID)
+	slog.Info("resolved unifi site", "ref", config.Site, "id", siteID)
 
 	return c, nil
 }
@@ -93,7 +92,7 @@ func (c *httpClient) resolveSite(ctx context.Context, ref string) (string, error
 	}
 
 	filter := fmt.Sprintf("%s.eq('%s')", field, ref)
-	u := FormatURL(pathSites, c.Host) + "?filter=" + url.QueryEscape(filter)
+	u := formatURL(pathSites, c.cfg.Host) + "?filter=" + url.QueryEscape(filter)
 
 	var page sitePage
 	if _, err := c.getJSON(ctx, u, "sites", &page); err != nil {
@@ -121,6 +120,13 @@ func (c *httpClient) getJSON(ctx context.Context, reqURL, scope string, dest any
 	}
 	defer extdnshttp.DrainAndClose(resp.Body)
 
+	return decodeJSON(resp, scope, dest)
+}
+
+// decodeJSON reads resp.Body fully and unmarshals it into dest, wrapping
+// failures as DataErrors scoped by label. Returns the number of body bytes
+// read for metric accounting. The caller owns closing resp.Body.
+func decodeJSON(resp *http.Response, scope string, dest any) (int, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, NewDataError("read", scope+" response body", err)
@@ -136,22 +142,18 @@ func (c *httpClient) getJSON(ctx context.Context, reqURL, scope string, dest any
 // controller, walking the paginated DNS Policies endpoint. FORWARD_DOMAIN
 // entries and unknown record types are filtered out by the converter so we
 // never report them as managed records.
-func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
-	m := metrics.Get()
+func (c *httpClient) GetEndpoints(ctx context.Context) (records []DNSRecord, err error) {
 	start := time.Now()
+	var offset, bodyRead int
+	defer func() {
+		metrics.Get().RecordUniFiAPICall("get_endpoints", time.Since(start), bodyRead, err)
+	}()
 
-	var (
-		records  []DNSRecord
-		offset   int
-		bodyRead int
-	)
 	for {
-		page, n, err := c.fetchPolicyPage(ctx, offset, pageLimit)
+		page, n, perr := c.fetchPolicyPage(ctx, offset, pageLimit)
 		bodyRead += n
-		if err != nil {
-			m.RecordUniFiAPICall("get_endpoints", time.Since(start), bodyRead, err)
-
-			return nil, fmt.Errorf("fetching DNS records from UniFi: %w", err)
+		if perr != nil {
+			return nil, fmt.Errorf("fetching DNS records from UniFi: %w", perr)
 		}
 
 		for _, env := range page.Data {
@@ -166,7 +168,6 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 		}
 	}
 
-	m.RecordUniFiAPICall("get_endpoints", time.Since(start), bodyRead, nil)
 	slog.Debug("fetched records", "count", len(records))
 
 	return records, nil
@@ -174,7 +175,7 @@ func (c *httpClient) GetEndpoints(ctx context.Context) ([]DNSRecord, error) {
 
 func (c *httpClient) fetchPolicyPage(ctx context.Context, offset, limit int) (dnsPolicyPage, int, error) {
 	u := fmt.Sprintf("%s?offset=%d&limit=%d",
-		FormatURL(pathPolicies, c.Host, c.siteID), offset, limit)
+		formatURL(pathPolicies, c.cfg.Host, c.siteID), offset, limit)
 
 	var page dnsPolicyPage
 	n, err := c.getJSON(ctx, u, "DNS policies", &page)
@@ -183,9 +184,12 @@ func (c *httpClient) fetchPolicyPage(ctx context.Context, offset, limit int) (dn
 }
 
 // CreateEndpoint creates a new DNS record in the UniFi controller.
-func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) ([]*DNSRecord, error) {
+func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) (created []*DNSRecord, err error) {
 	m := metrics.Get()
 	start := time.Now()
+	defer func() {
+		m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
+	}()
 
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
 		m.IgnoredCNAMETargetsTotal.WithLabelValues(metrics.ProviderName).Inc()
@@ -194,7 +198,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 		endpoint.Targets = endpoint.Targets[:1]
 	}
 
-	created := make([]*DNSRecord, 0, len(endpoint.Targets))
+	created = make([]*DNSRecord, 0, len(endpoint.Targets))
 	for _, target := range endpoint.Targets {
 		r := DNSRecord{
 			Enabled:    true,
@@ -204,21 +208,18 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 			Value:      target,
 		}
 
-		out, err := c.createOne(ctx, r)
-		if err != nil {
-			if isSRVConversionError(err) {
+		out, cerr := c.createOne(ctx, r)
+		if cerr != nil {
+			if isSRVConversionError(cerr) {
 				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
 			}
-			m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
 
-			return nil, err
+			return nil, cerr
 		}
 
 		created = append(created, out)
-		slog.Debug("created new record", "key", out.Key, "type", out.RecordType, "target", out.Value)
+		slog.Debug("created record", "key", out.Key, "type", out.RecordType, "target", out.Value)
 	}
-
-	m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, nil)
 
 	return created, nil
 }
@@ -227,12 +228,7 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 // parsing. It guards the SRV-specific metric so unrelated DataErrors (marshal,
 // MX parse, unsupported type) don't pollute the count.
 func isSRVConversionError(err error) bool {
-	var de *DataError
-	if !errors.As(err, &de) {
-		return false
-	}
-
-	return de.DataType == "SRV record target" || de.DataType == "SRV record name"
+	return errors.Is(err, errSRVConversion)
 }
 
 func (c *httpClient) createOne(ctx context.Context, r DNSRecord) (*DNSRecord, error) {
@@ -246,20 +242,15 @@ func (c *httpClient) createOne(ctx context.Context, r DNSRecord) (*DNSRecord, er
 		return nil, NewDataError("marshal", "DNS record", err)
 	}
 
-	resp, err := c.doRequest(ctx, http.MethodPost, FormatURL(pathPolicies, c.Host, c.siteID), body)
+	resp, err := c.doRequest(ctx, http.MethodPost, formatURL(pathPolicies, c.cfg.Host, c.siteID), body)
 	if err != nil {
 		return nil, fmt.Errorf("creating DNS record: %w", err)
 	}
 	defer extdnshttp.DrainAndClose(resp.Body)
 
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, NewDataError("read", "create endpoint response body", err)
-	}
-
 	var createdEnv dnsPolicyEnvelope
-	if err := json.Unmarshal(respBytes, &createdEnv); err != nil {
-		return nil, NewDataError("unmarshal", "created DNS record", err)
+	if _, err := decodeJSON(resp, "created DNS record", &createdEnv); err != nil {
+		return nil, err
 	}
 
 	out, ok := toDNSRecord(createdEnv)
@@ -276,28 +267,25 @@ func (c *httpClient) createOne(ctx context.Context, r DNSRecord) (*DNSRecord, er
 // outcome. Tolerating 404 lets callers use a snapshot-based index of records
 // without worrying about staleness — concurrent deletes, manual cleanup in
 // the UniFi UI, or a stale plan all converge harmlessly.
-func (c *httpClient) DeleteRecord(ctx context.Context, id string) error {
-	m := metrics.Get()
+func (c *httpClient) DeleteRecord(ctx context.Context, id string) (err error) {
 	start := time.Now()
+	defer func() {
+		metrics.Get().RecordUniFiAPICall("delete_record", time.Since(start), 0, err)
+	}()
 
-	u := FormatURL(pathPolicy, c.Host, c.siteID, id)
-	resp, err := c.doRequest(ctx, http.MethodDelete, u, nil)
-	duration := time.Since(start)
-	if err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-			m.RecordUniFiAPICall("delete_record", duration, 0, nil)
+	u := formatURL(pathPolicy, c.cfg.Host, c.siteID, id)
+	resp, derr := c.doRequest(ctx, http.MethodDelete, u, nil)
+	if derr != nil {
+		if apiErr, ok := errors.AsType[*APIError](derr); ok && apiErr.StatusCode == http.StatusNotFound {
 			slog.Debug("record already deleted", "id", id)
 
 			return nil
 		}
-		m.RecordUniFiAPICall("delete_record", duration, 0, err)
 
-		return fmt.Errorf("deleting DNS record %s: %w", id, err)
+		return fmt.Errorf("deleting DNS record %s: %w", id, derr)
 	}
 	extdnshttp.DrainAndClose(resp.Body)
-	m.RecordUniFiAPICall("delete_record", duration, 0, nil)
-	slog.Debug("client successfully removed record", "id", id)
+	slog.Debug("removed record", "id", id)
 
 	return nil
 }

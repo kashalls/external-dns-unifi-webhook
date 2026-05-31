@@ -2,6 +2,7 @@ package unifi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,21 @@ import (
 	"strings"
 	"testing"
 )
+
+// isAPIError and isDataError are test-only predicates over the package's
+// typed errors. Production code uses errors.As at the single site that needs
+// it (DeleteRecord's 404 check); the tests assert classification more broadly.
+func isAPIError(err error) bool {
+	_, ok := errors.AsType[*APIError](err)
+
+	return ok
+}
+
+func isDataError(err error) bool {
+	_, ok := errors.AsType[*DataError](err)
+
+	return ok
+}
 
 // fixture reads a captured response from internal/unifi/testdata. Files were
 // originally captured from a real UniFi Network controller and then rewritten
@@ -24,22 +40,17 @@ func fixture(t *testing.T, name string) []byte {
 	return data
 }
 
+// testClient builds an httpClient pointed at srv with siteID pre-resolved, so
+// tests skip the startup site-resolution round trip.
+func testClient(srv *httptest.Server, cfg *Config) *httpClient {
+	return &httpClient{cfg: cfg, httpc: srv.Client(), siteID: testSiteUUID}
+}
+
 func fixtureClient(t *testing.T, handler http.HandlerFunc) (*httpClient, func()) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 
-	c := &httpClient{
-		Config: &Config{
-			Host:          srv.URL,
-			Site:          testSite,
-			APIKey:        testKeyA,
-			SkipTLSVerify: true,
-		},
-		Client: srv.Client(),
-		siteID: testSiteUUID,
-	}
-
-	return c, srv.Close
+	return newTestClient(srv), srv.Close
 }
 
 // TestGetEndpoints_RealFixture replays a captured response from a real UniFi
@@ -171,10 +182,10 @@ func TestHandleErrorResponse_HTMLBody(t *testing.T) {
 		t.Fatal("GetEndpoints succeeded against a 405 response")
 	}
 
-	if !IsAPIError(err) {
+	if !isAPIError(err) {
 		t.Errorf("expected *APIError, got %T: %v", err, err)
 	}
-	if IsDataError(err) {
+	if isDataError(err) {
 		t.Errorf("expected APIError, got DataError — non-JSON body was misclassified: %v", err)
 	}
 }

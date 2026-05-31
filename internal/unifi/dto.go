@@ -1,11 +1,17 @@
 package unifi
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"sigs.k8s.io/external-dns/endpoint"
 )
+
+// errSRVConversion marks errors that originate in SRV name or target parsing.
+// CreateEndpoint matches it with errors.Is to attribute the SRV-specific
+// parsing metric, decoupled from the human-readable DataType strings.
+var errSRVConversion = errors.New("SRV conversion")
 
 // UniFi Integration API discriminator values for /dns/policies entries.
 const (
@@ -51,23 +57,21 @@ type dnsPolicyEnvelope struct {
 	TTLSeconds *int `json:"ttlSeconds,omitempty"`
 }
 
-// dnsPolicyPage is the paginated list envelope returned by GET /dns/policies.
-type dnsPolicyPage struct {
-	Offset     int                 `json:"offset"`
-	Limit      int                 `json:"limit"`
-	Count      int                 `json:"count"`
-	TotalCount int                 `json:"totalCount"`
-	Data       []dnsPolicyEnvelope `json:"data"`
+// apiPage is the paginated list envelope the Integration API returns for its
+// collection endpoints. Data carries the per-endpoint entry type.
+type apiPage[T any] struct {
+	Offset     int `json:"offset"`
+	Limit      int `json:"limit"`
+	Count      int `json:"count"`
+	TotalCount int `json:"totalCount"`
+	Data       []T `json:"data"`
 }
 
-// sitePage is the paginated list envelope returned by GET /sites.
-type sitePage struct {
-	Offset     int         `json:"offset"`
-	Limit      int         `json:"limit"`
-	Count      int         `json:"count"`
-	TotalCount int         `json:"totalCount"`
-	Data       []siteEntry `json:"data"`
-}
+// dnsPolicyPage is the envelope returned by GET /dns/policies.
+type dnsPolicyPage = apiPage[dnsPolicyEnvelope]
+
+// sitePage is the envelope returned by GET /sites.
+type sitePage = apiPage[siteEntry]
 
 //nolint:tagliatelle // UniFi API field names cannot be changed
 type siteEntry struct {
@@ -179,14 +183,7 @@ func fromDNSRecord(r DNSRecord) (dnsPolicyEnvelope, error) {
 // clampTTL clips ttl into [0, max]. A zero TTL means "use controller default"
 // to external-dns, so we don't substitute anything for unset.
 func clampTTL(ttl, maxSecs int) int {
-	if ttl < 0 {
-		return 0
-	}
-	if ttl > maxSecs {
-		return maxSecs
-	}
-
-	return ttl
+	return min(max(ttl, 0), maxSecs)
 }
 
 // joinSRVName reassembles the external-dns SRV FQDN from the per-field
@@ -208,7 +205,7 @@ func splitSRVName(name string) (service, protocol, domain string, err error) {
 		!strings.HasPrefix(parts[0], "_") ||
 		!strings.HasPrefix(parts[1], "_") {
 		return "", "", "", NewDataError("parse", "SRV record name",
-			fmt.Errorf("expected _service._proto.domain, got %q", name))
+			fmt.Errorf("%w: expected _service._proto.domain, got %q", errSRVConversion, name))
 	}
 
 	return parts[0], parts[1], parts[2], nil
@@ -225,7 +222,8 @@ func formatSRVValue(priority, weight, port *int, server string) string {
 // parseSRVValue reverses formatSRVValue.
 func parseSRVValue(target string) (priority, weight, port int, server string, err error) {
 	if _, err := fmt.Sscanf(target, "%d %d %d %s", &priority, &weight, &port, &server); err != nil {
-		return 0, 0, 0, "", NewDataError("parse", "SRV record target", err)
+		return 0, 0, 0, "", NewDataError("parse", "SRV record target",
+			fmt.Errorf("%w: %w", errSRVConversion, err))
 	}
 
 	return priority, weight, port, server, nil

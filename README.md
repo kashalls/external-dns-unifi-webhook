@@ -109,7 +109,7 @@ provider:
 policy: create-only
 sources: ["gateway-httproute", "service"]
 txtOwnerId: default
-txtPrefix: k8s.
+txtPrefix: k8s.%{record_type}-
 domainFilters: ["example.com"] # replace with your domain
 ```
 

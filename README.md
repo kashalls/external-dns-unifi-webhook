@@ -122,7 +122,7 @@ Install:
 
 ```sh
 helm install external-dns-unifi external-dns/external-dns \
-  -f external-dns-unifi-values.yaml --version 1.15.0 -n external-dns
+  -f external-dns-unifi-values.yaml --version 1.21.1 -n external-dns
 ```
 
 See the [chart values](https://github.com/kubernetes-sigs/external-dns/blob/master/charts/external-dns/values.yaml) for additional options.

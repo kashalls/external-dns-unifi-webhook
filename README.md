@@ -8,16 +8,6 @@
 
 A webhook provider for [ExternalDNS](https://github.com/kubernetes-sigs/external-dns) that manages DNS records in a UniFi Network controller. ExternalDNS keeps DNS in sync with your Kubernetes Ingresses and Services; this provider applies those records to UniFi's built-in DNS via the Network [Integration API](https://developer.ui.com/network/).
 
-## Contents
-
-- [Requirements](#requirements)
-- [How it works](#how-it-works)
-- [Limitations](#limitations)
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Upgrading](#upgrading)
-- [Community](#community)
-
 ## Requirements
 
 | Component     | Minimum version |

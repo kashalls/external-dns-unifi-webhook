@@ -13,7 +13,7 @@ A webhook provider for [ExternalDNS](https://github.com/kubernetes-sigs/external
 | Component     | Minimum version |
 | ------------- | --------------- |
 | ExternalDNS   | v0.21.0         |
-| UniFi OS      | 4.x             |
+| UniFi OS      | 5.x             |
 | UniFi Network | 10.3.58         |
 
 ## How it works

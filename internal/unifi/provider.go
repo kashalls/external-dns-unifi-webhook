@@ -118,7 +118,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	// before create at the plan level, so we keep the two phases ordered but
 	// parallelise within each phase.
 	deleteEPs := slices.Concat(changes.UpdateOld, changes.Delete)
-	if err := p.runBounded(ctx, deleteEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
+	if err := runBounded(ctx, p.workers, deleteEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
 		if err := p.deleteByIDs(ctx, byKeyType[ep.DNSName+ep.RecordType]); err != nil {
 			return fmt.Errorf("deleting endpoint %s (%s): %w", ep.DNSName, ep.RecordType, err)
 		}
@@ -130,7 +130,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	}
 
 	createEPs := slices.Concat(changes.Create, changes.UpdateNew)
-	if err := p.runBounded(ctx, createEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
+	if err := runBounded(ctx, p.workers, createEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
 		if ep.RecordType == recordTypeCNAME {
 			if ids := byKeyType[ep.DNSName+recordTypeCNAME]; len(ids) > 0 {
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
@@ -177,23 +177,25 @@ func (p *UnifiProvider) deleteByIDs(ctx context.Context, ids []string) error {
 	return errors.Join(errs...)
 }
 
-// runBounded executes fn(ctx, ep) for every entry in eps with at most
-// p.workers in flight at any time. The first non-nil error cancels the
-// context and bubbles up; remaining workers see ctx.Err() and short-circuit.
-func (p *UnifiProvider) runBounded(
+// runBounded executes fn(ctx, item) for every entry in items with at most
+// limit in flight at any time. The first non-nil error cancels the context and
+// bubbles up; remaining workers see ctx.Err() and short-circuit. An empty slice
+// is a no-op.
+func runBounded[T any](
 	ctx context.Context,
-	eps []*endpoint.Endpoint,
-	fn func(context.Context, *endpoint.Endpoint) error,
+	limit int,
+	items []T,
+	fn func(context.Context, T) error,
 ) error {
-	if len(eps) == 0 {
+	if len(items) == 0 {
 		return nil
 	}
 
 	group, gctx := errgroup.WithContext(ctx)
-	group.SetLimit(p.workers)
+	group.SetLimit(limit)
 
-	for _, ep := range eps {
-		group.Go(func() error { return fn(gctx, ep) })
+	for _, item := range items {
+		group.Go(func() error { return fn(gctx, item) })
 	}
 
 	return group.Wait()

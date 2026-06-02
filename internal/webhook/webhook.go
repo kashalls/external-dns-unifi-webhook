@@ -51,30 +51,17 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
-	w.Header().Set(varyHeader, contentTypeHeader)
-	if err := json.NewEncoder(w).Encode(records); err != nil {
-		requestLog(r).Error("encoding records response", "error", err)
-	}
+	writeJSON(w, r, records, "records")
 }
 
 // ApplyChanges handles POST /records.
 func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
-	m := metrics.Get()
 	if err := p.checkContentType(w, r); err != nil {
 		return
 	}
 
-	var changes plan.Changes
-	if err := json.NewDecoder(r.Body).Decode(&changes); err != nil {
-		if isBodyTooLarge(err) {
-			writePlainError(w, r, http.StatusRequestEntityTooLarge, "request body too large")
-
-			return
-		}
-		m.HTTPJSONErrorsTotal.WithLabelValues(metrics.ProviderName, "/records").Inc()
-		writePlainError(w, r, http.StatusBadRequest, fmt.Sprintf("error decoding changes: %v", err))
-
+	changes, ok := decodeBody[plan.Changes](w, r, "/records")
+	if !ok {
 		return
 	}
 
@@ -97,8 +84,7 @@ func (p *Webhook) ApplyChanges(w http.ResponseWriter, r *http.Request) {
 
 // AdjustEndpoints handles POST /adjustendpoints.
 func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
-	m := metrics.Get()
-	m.AdjustEndpointsTotal.WithLabelValues(metrics.ProviderName).Inc()
+	metrics.Get().AdjustEndpointsTotal.WithLabelValues(metrics.ProviderName).Inc()
 
 	if err := p.checkContentType(w, r); err != nil {
 		return
@@ -107,16 +93,8 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var endpoints []*endpoint.Endpoint
-	if err := json.NewDecoder(r.Body).Decode(&endpoints); err != nil {
-		if isBodyTooLarge(err) {
-			writePlainError(w, r, http.StatusRequestEntityTooLarge, "request body too large")
-
-			return
-		}
-		m.HTTPJSONErrorsTotal.WithLabelValues(metrics.ProviderName, "/adjustendpoints").Inc()
-		writePlainError(w, r, http.StatusBadRequest, fmt.Sprintf("failed to decode request body: %v", err))
-
+	endpoints, ok := decodeBody[[]*endpoint.Endpoint](w, r, "/adjustendpoints")
+	if !ok {
 		return
 	}
 
@@ -128,11 +106,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
-	w.Header().Set(varyHeader, contentTypeHeader)
-	if err := json.NewEncoder(w).Encode(endpoints); err != nil {
-		requestLog(r).Error("encoding endpoints response", "error", err)
-	}
+	writeJSON(w, r, endpoints, "endpoints")
 }
 
 // Negotiate handles GET / and returns the provider's domain filter.
@@ -189,6 +163,40 @@ func validateMediaHeader(
 	}
 
 	return nil
+}
+
+// decodeBody decodes the JSON request body into T. On failure it writes the
+// appropriate error response — 413 when the configured body-size limit was
+// exceeded, 400 otherwise (counting the JSON error against route's endpoint
+// label) — and returns ok=false so the caller can simply return. It centralises
+// the decode handling shared by ApplyChanges and AdjustEndpoints.
+func decodeBody[T any](w http.ResponseWriter, r *http.Request, route string) (T, bool) {
+	var v T
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		if isBodyTooLarge(err) {
+			writePlainError(w, r, http.StatusRequestEntityTooLarge, "request body too large")
+
+			return v, false
+		}
+		metrics.Get().HTTPJSONErrorsTotal.WithLabelValues(metrics.ProviderName, route).Inc()
+		writePlainError(w, r, http.StatusBadRequest, fmt.Sprintf("error decoding request body: %v", err))
+
+		return v, false
+	}
+
+	return v, true
+}
+
+// writeJSON encodes v as the versioned-media-type response shared by the
+// Records and AdjustEndpoints handlers. A failed encode is logged but not
+// surfaced — the 200 status line is already on the wire by then. what labels
+// the log message ("records", "endpoints").
+func writeJSON(w http.ResponseWriter, r *http.Request, v any, what string) {
+	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
+	w.Header().Set(varyHeader, contentTypeHeader)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		requestLog(r).Error("encoding "+what+" response", "error", err)
+	}
 }
 
 // writePlainError writes a plaintext error response. A failed write is logged

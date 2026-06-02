@@ -12,7 +12,7 @@ import (
 // Config represents the configuration for the UniFi API.
 type Config struct {
 	Host              string        `env:"UNIFI_HOST,notEmpty"`
-	APIKey            string        `env:"UNIFI_API_KEY,notEmpty"`
+	APIKey            string        `env:"UNIFI_API_KEY,notEmpty,unset"`
 	Site              string        `env:"UNIFI_SITE"                envDefault:"default"`
 	ConsoleID         string        `env:"UNIFI_CONSOLE_ID"          envDefault:""`
 	SkipTLSVerify     bool          `env:"UNIFI_SKIP_TLS_VERIFY"     envDefault:"true"`

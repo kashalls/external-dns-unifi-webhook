@@ -21,7 +21,7 @@ permissions:
 jobs:
   lint:
     name: Run on Ubuntu
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:

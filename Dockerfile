@@ -1,4 +1,5 @@
-FROM golang:1.26-alpine AS builder
+ARG GO_VERSION
+FROM golang:${GO_VERSION}-alpine AS builder
 ARG VERSION=dev
 ARG REVISION=dev
 WORKDIR /src

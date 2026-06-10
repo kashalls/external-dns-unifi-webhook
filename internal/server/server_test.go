@@ -108,7 +108,11 @@ func TestCachedProbe_DetachesFromCallerContext(t *testing.T) {
 }
 
 func TestReadyzHandler_ReturnsServiceUnavailableWhenProbeFails(t *testing.T) {
-	handler := readyzHandler(func(_ context.Context) error { return errors.New("nope") }, time.Minute)
+	// The cause embeds internal topology (UniFi host / console ID / upstream
+	// error body), so the response body to the unauthenticated caller must be
+	// generic and must NOT leak it. See #225.
+	const secret = "https://unifi.internal.example:8443 console-abc123 boom"
+	handler := readyzHandler(func(_ context.Context) error { return errors.New(secret) }, time.Minute)
 
 	rec := httptest.NewRecorder()
 	handler(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
@@ -116,8 +120,12 @@ func TestReadyzHandler_ReturnsServiceUnavailableWhenProbeFails(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "nope") {
-		t.Errorf("body should include cause; got %q", rec.Body.String())
+	body := rec.Body.String()
+	if strings.TrimSpace(body) != "not ready" {
+		t.Errorf("body = %q, want generic %q", body, "not ready")
+	}
+	if strings.Contains(body, secret) || strings.Contains(body, "unifi.internal") || strings.Contains(body, "console-abc123") {
+		t.Errorf("body leaked the probe error detail: %q", body)
 	}
 }
 

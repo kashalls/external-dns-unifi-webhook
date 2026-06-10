@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -70,6 +71,15 @@ func (c *cachedProbe) Check(ctx context.Context) error {
 		pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), probeTimeout)
 		err := c.probe(pctx)
 		cancel()
+
+		if err != nil {
+			// Log the full cause here: /readyz returns only a generic "not
+			// ready" to its (possibly unauthenticated) caller, so the pod log is
+			// where operators see which upstream failed and why. Logging at the
+			// probe site rather than per request means one line per actual probe
+			// run, not one per cached /readyz hit. See #225.
+			slog.Warn("readiness probe failed", "error", err)
+		}
 
 		c.mu.Lock()
 		c.lastAt = time.Now()

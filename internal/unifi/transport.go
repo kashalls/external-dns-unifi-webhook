@@ -53,7 +53,18 @@ func newHTTPTransport(cfg *Config) (*http.Transport, error) {
 		tlsCfg.InsecureSkipVerify = true
 	}
 
-	return &http.Transport{TLSClientConfig: tlsCfg}, nil
+	// Bound the connection pool. ApplyChanges fans out up to ApplyWorkers
+	// concurrent requests; without a per-host cap a misconfigured worker count
+	// could open that many simultaneous connections to the controller and
+	// exhaust its connection table. MaxConnsPerHost gives an absolute ceiling
+	// (workers is validated <= maxApplyWorkers), and MaxIdleConnsPerHost keeps
+	// connections warm for reuse up to the configured concurrency — the net/http
+	// default of 2 would otherwise churn connections during a wide reconcile.
+	return &http.Transport{
+		TLSClientConfig:     tlsCfg,
+		MaxConnsPerHost:     maxApplyWorkers,
+		MaxIdleConnsPerHost: cmp.Or(cfg.ApplyWorkers, defaultApplyWorkers),
+	}, nil
 }
 
 // doRequest issues an HTTP request and applies exponential backoff retries

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.10.3](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.2...0.10.3) (2026-06-10)
+
+
+### Features
+
+* **deps:** update module golang.org/x/sync (v0.20.0 → v0.21.0) ([#210](https://github.com/home-operations/external-dns-unifi-webhook/issues/210)) ([d2d80c3](https://github.com/home-operations/external-dns-unifi-webhook/commit/d2d80c3620ee4a8bea6462de25a6470f22e681fd))
+* **mise:** update tool oxfmt (0.53.0 → 0.54.0) ([#211](https://github.com/home-operations/external-dns-unifi-webhook/issues/211)) ([8403ccc](https://github.com/home-operations/external-dns-unifi-webhook/commit/8403cccfc77671270743227bac7d1ef42c923dec))
+
+
+### Bug Fixes
+
+* **mise:** update tool go (1.26.3 → 1.26.4) ([38b8819](https://github.com/home-operations/external-dns-unifi-webhook/commit/38b881966e6a28e6b32cc52557b9a1baba9631ee))
+
+
+### Miscellaneous Chores
+
+* move mise to mise folder ([45e9f2f](https://github.com/home-operations/external-dns-unifi-webhook/commit/45e9f2f6abd011ee22d4b84fccf8a2f724d77179))
+* update release-please-config.json to remove paths ([cf07cb9](https://github.com/home-operations/external-dns-unifi-webhook/commit/cf07cb9e46487a636c7f5c25e7a98175d65b8a34))
+* update rlspls workflow name ([9f96b22](https://github.com/home-operations/external-dns-unifi-webhook/commit/9f96b220970727ed6e0cb3841bc9cd9a2cf4d12f))
+
 ## [0.10.2](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.1...0.10.2) (2026-06-02)
 
 

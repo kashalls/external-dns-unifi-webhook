@@ -113,9 +113,15 @@ func readyzHandler(probe ProbeFunc, ttl time.Duration) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := cached.Check(r.Context()); err != nil {
+			// Return a generic body. The probe error chain embeds the UniFi
+			// host (and, in cloud mode, the console ID) plus a slice of the
+			// controller's error response; the health server listens on
+			// 0.0.0.0 with no auth, so echoing that to the caller leaks
+			// internal topology. The cause is logged server-side instead
+			// (see cachedProbe.Check). See #225.
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = fmt.Fprintf(w, "not ready: %v\n", err)
+			_, _ = w.Write([]byte("not ready\n"))
 
 			return
 		}

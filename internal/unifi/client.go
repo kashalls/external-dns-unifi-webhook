@@ -231,8 +231,9 @@ func (c *httpClient) fetchPolicyPage(ctx context.Context, offset, limit int) (dn
 func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsendpoint.Endpoint) (created []*DNSRecord, err error) {
 	m := metrics.Get()
 	start := time.Now()
+	var bodyRead int
 	defer func() {
-		m.RecordUniFiAPICall("create_endpoint", time.Since(start), 0, err)
+		m.RecordUniFiAPICall("create_endpoint", time.Since(start), bodyRead, err)
 	}()
 
 	if endpoint.RecordType == recordTypeCNAME && len(endpoint.Targets) > 1 {
@@ -251,7 +252,8 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 			Value:      target,
 		}
 
-		out, cerr := c.createOne(ctx, r)
+		n, out, cerr := c.createOne(ctx, r)
+		bodyRead += n
 		if cerr != nil {
 			if isSRVConversionError(cerr) {
 				m.SRVParsingErrorsTotal.WithLabelValues(metrics.ProviderName).Inc()
@@ -274,35 +276,38 @@ func isSRVConversionError(err error) bool {
 	return errors.Is(err, errSRVConversion)
 }
 
-func (c *httpClient) createOne(ctx context.Context, r DNSRecord) (*DNSRecord, error) {
+// createOne POSTs a single DNS record and returns the number of response body
+// bytes read (for metric accounting), the created record, and any error.
+func (c *httpClient) createOne(ctx context.Context, r DNSRecord) (int, *DNSRecord, error) {
 	env, err := fromDNSRecord(r)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	body, err := json.Marshal(env)
 	if err != nil {
-		return nil, NewDataError("marshal", "DNS record", err)
+		return 0, nil, NewDataError("marshal", "DNS record", err)
 	}
 
 	resp, err := c.doRequest(ctx, http.MethodPost, formatURL(pathPolicies, c.cfg.baseURL(), c.siteID), body)
 	if err != nil {
-		return nil, fmt.Errorf("creating DNS record: %w", err)
+		return 0, nil, fmt.Errorf("creating DNS record: %w", err)
 	}
 	defer extdnshttp.DrainAndClose(resp.Body)
 
 	var createdEnv dnsPolicyEnvelope
-	if _, err := decodeJSON(resp, "created DNS record", &createdEnv); err != nil {
-		return nil, err
+	n, err := decodeJSON(resp, "created DNS record", &createdEnv)
+	if err != nil {
+		return n, nil, err
 	}
 
 	out, ok := toDNSRecord(createdEnv)
 	if !ok {
-		return nil, NewDataError("convert", "created DNS record",
+		return n, nil, NewDataError("convert", "created DNS record",
 			fmt.Errorf("unsupported response type %q", createdEnv.Type))
 	}
 
-	return &out, nil
+	return n, &out, nil
 }
 
 // DeleteRecord deletes a single DNS record by its ID. 404 responses are

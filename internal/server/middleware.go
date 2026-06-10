@@ -25,7 +25,7 @@ func recoveryAndAccessLog(next http.Handler) http.Handler {
 
 		defer func() {
 			if rv := recover(); rv != nil {
-				metrics.Get().PanicsTotal.WithLabelValues(metrics.ProviderName, r.URL.Path).Inc()
+				metrics.Get().PanicsTotal.WithLabelValues(metrics.ProviderName, metrics.RouteLabel(r)).Inc()
 				slog.Error("panic in HTTP handler",
 					"panic", rv,
 					"method", r.Method,

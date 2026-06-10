@@ -16,6 +16,19 @@ import (
 
 const defaultApplyWorkers = 5
 
+// recordKey identifies a record set by its DNS name and type. It is used as a
+// map key in place of string concatenation: concatenating r.Key+r.RecordType
+// is ambiguous because the type strings are not self-delimiting, so an A record
+// for the name "x.AAA" and an AAAA record for the name "x." both flatten to the
+// same "x.AAAA" string. That collision would group two unrelated records
+// together and, on the delete path, resolve one endpoint to the other's record
+// IDs — silently deleting a bystander. A struct key compares field-wise and
+// cannot collide.
+type recordKey struct {
+	name       string
+	recordType string
+}
+
 // UnifiProvider type for interfacing with UniFi.
 //
 //nolint:revive // UnifiProvider is the correct name for this provider, renaming would be a breaking change
@@ -63,7 +76,7 @@ func (p *UnifiProvider) Records(ctx context.Context) (_ []*endpoint.Endpoint, er
 	// Seed every managed type at zero so the per-type gauge is fully recomputed
 	// each cycle — a type whose records were all deleted is set to 0 rather than
 	// retaining its previous value.
-	groups := make(map[string][]DNSRecord)
+	groups := make(map[recordKey][]DNSRecord)
 	counts := make(map[string]int, len(managedRecordTypes))
 	for _, rt := range managedRecordTypes {
 		counts[rt] = 0
@@ -72,7 +85,8 @@ func (p *UnifiProvider) Records(ctx context.Context) (_ []*endpoint.Endpoint, er
 		if !provider.SupportedRecordType(r.RecordType) {
 			continue
 		}
-		groups[r.Key+r.RecordType] = append(groups[r.Key+r.RecordType], r)
+		key := recordKey{r.Key, r.RecordType}
+		groups[key] = append(groups[key], r)
 		counts[r.RecordType]++
 	}
 
@@ -99,7 +113,7 @@ func (p *UnifiProvider) Records(ctx context.Context) (_ []*endpoint.Endpoint, er
 
 // ApplyChanges applies a given set of changes in the DNS provider.
 //
-// The full record set is fetched once at the top and indexed by Key+RecordType
+// The full record set is fetched once at the top and indexed by name+type
 // so per-endpoint deletes and CNAME-conflict cleanup can resolve target
 // record IDs locally instead of re-fetching the list per call (which used to
 // produce 1+N paginated round trips per reconcile). DeleteRecord tolerates
@@ -127,7 +141,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	// parallelise within each phase.
 	deleteEPs := slices.Concat(changes.UpdateOld, changes.Delete)
 	if err := runBounded(ctx, p.workers, deleteEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
-		if err := p.deleteByIDs(ctx, byKeyType[ep.DNSName+ep.RecordType]); err != nil {
+		if err := p.deleteByIDs(ctx, byKeyType[recordKey{ep.DNSName, ep.RecordType}]); err != nil {
 			return fmt.Errorf("deleting endpoint %s (%s): %w", ep.DNSName, ep.RecordType, err)
 		}
 		m.RecordChange("delete", ep.RecordType)
@@ -140,7 +154,7 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	createEPs := slices.Concat(changes.Create, changes.UpdateNew)
 	if err := runBounded(ctx, p.workers, createEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
 		if ep.RecordType == recordTypeCNAME {
-			if ids := byKeyType[ep.DNSName+recordTypeCNAME]; len(ids) > 0 {
+			if ids := byKeyType[recordKey{ep.DNSName, recordTypeCNAME}]; len(ids) > 0 {
 				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
 				if err := p.deleteByIDs(ctx, ids); err != nil {
 					return fmt.Errorf("deleting conflicting CNAME %s: %w", ep.DNSName, err)
@@ -160,12 +174,12 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	return nil
 }
 
-// indexRecordIDs groups record IDs by Key+RecordType so the delete path can
+// indexRecordIDs groups record IDs by name+type so the delete path can
 // resolve "all IDs for endpoint X" in O(1) without re-listing.
-func indexRecordIDs(records []DNSRecord) map[string][]string {
-	out := make(map[string][]string, len(records))
+func indexRecordIDs(records []DNSRecord) map[recordKey][]string {
+	out := make(map[recordKey][]string, len(records))
 	for _, r := range records {
-		key := r.Key + r.RecordType
+		key := recordKey{r.Key, r.RecordType}
 		out[key] = append(out[key], r.ID)
 	}
 

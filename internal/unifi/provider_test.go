@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -172,5 +173,82 @@ func TestRecords_ResetsStalePerTypeGauge(t *testing.T) {
 	}
 	if got := read(); got != 0 {
 		t.Errorf("records{type=A} after all A records deleted = %v, want 0 (stale gauge not reset)", got)
+	}
+}
+
+// TestRecords_DistinguishesCollidingKeys is the grouping half of the #222
+// regression. Before the recordKey struct fix, records were grouped by the
+// bare string r.Key+r.RecordType, which is ambiguous: an A record for
+// "host.example.comAAA" and an AAAA record for "host.example.com" both flatten
+// to "host.example.comAAAA" and were merged into a single endpoint (the second
+// type silently dropped). They must come back as two distinct endpoints.
+func TestRecords_DistinguishesCollidingKeys(t *testing.T) {
+	existing := pageOf(
+		envA("id-a", "host.example.comAAA", "192.0.2.1", 300),
+		envAAAA("id-aaaa", "host.example.com", "2001:db8::1", 300),
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(existing)
+	}))
+	defer srv.Close()
+
+	p := &UnifiProvider{client: newTestClient(srv)}
+	eps, err := p.Records(context.Background())
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+
+	// Classify by type/target rather than DNSName so the assertion does not
+	// depend on external-dns name normalisation.
+	var aOK, aaaaOK bool
+	for _, ep := range eps {
+		switch ep.RecordType {
+		case recordTypeA:
+			aOK = len(ep.Targets) == 1 && ep.Targets[0] == "192.0.2.1"
+		case recordTypeAAAA:
+			aaaaOK = len(ep.Targets) == 1 && ep.Targets[0] == "2001:db8::1"
+		}
+	}
+	if len(eps) != 2 || !aOK || !aaaaOK {
+		t.Fatalf("want 2 endpoints (A→192.0.2.1, AAAA→2001:db8::1); got %d merged by key collision: %+v", len(eps), eps)
+	}
+}
+
+// TestApplyChanges_DeleteDoesNotCollideAcrossTypes is the data-loss half of
+// the #222 regression: deleting one endpoint must not take out an unrelated
+// record that shared the old concatenated key. "host.example.comAAA"/A and
+// "host.example.com"/AAAA both concatenated to "host.example.comAAAA", so
+// deleting the A record used to delete the AAAA record's ID as collateral.
+func TestApplyChanges_DeleteDoesNotCollideAcrossTypes(t *testing.T) {
+	existing := []dnsPolicyEnvelope{
+		envA("id-a", "host.example.comAAA", "192.0.2.1", 300),
+		envAAAA("id-aaaa", "host.example.com", "2001:db8::1", 300),
+	}
+
+	var deleted sync.Map
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_ = json.NewEncoder(w).Encode(pageOf(existing...))
+		case http.MethodDelete:
+			deleted.Store(path.Base(r.URL.Path), struct{}{})
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	p := &UnifiProvider{client: newTestClient(srv), workers: 1}
+	changes := &plan.Changes{
+		Delete: []*endpoint.Endpoint{endpoint.NewEndpoint("host.example.comAAA", "A", "192.0.2.1")},
+	}
+	if err := p.ApplyChanges(context.Background(), changes); err != nil {
+		t.Fatalf("ApplyChanges: %v", err)
+	}
+
+	if _, hit := deleted.Load("id-a"); !hit {
+		t.Error("expected the targeted A record id-a to be deleted")
+	}
+	if _, hit := deleted.Load("id-aaaa"); hit {
+		t.Error("AAAA record id-aaaa was deleted as collateral — Key+RecordType collision (#222)")
 	}
 }

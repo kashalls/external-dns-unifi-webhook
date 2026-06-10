@@ -281,3 +281,43 @@ func TestRecords_ExcludesDisabledRecords(t *testing.T) {
 		t.Errorf("endpoint = %q, want on.example.com (the enabled record)", eps[0].DNSName)
 	}
 }
+
+// TestAdjustEndpoints_ClearsTTLForControllerManagedTypes is the #229
+// regression: the UniFi API manages (and ignores a custom) TTL for TXT/MX/SRV,
+// so a user-set TTL on those types must be stripped from the desired set or
+// external-dns churns delete+create forever. A/AAAA/CNAME keep their TTL.
+func TestAdjustEndpoints_ClearsTTLForControllerManagedTypes(t *testing.T) {
+	p := &UnifiProvider{}
+	in := []*endpoint.Endpoint{
+		endpoint.NewEndpointWithTTL("a.example.com", recordTypeA, 300, "192.0.2.1"),
+		endpoint.NewEndpointWithTTL("v6.example.com", recordTypeAAAA, 300, "2001:db8::1"),
+		endpoint.NewEndpointWithTTL("alias.example.com", recordTypeCNAME, 300, "target.example.com"),
+		endpoint.NewEndpointWithTTL("txt.example.com", recordTypeTXT, 300, "v=spf1 ~all"),
+		endpoint.NewEndpointWithTTL("example.com", recordTypeMX, 300, "10 mail.example.com"),
+		endpoint.NewEndpointWithTTL("_ldap._tcp.example.com", recordTypeSRV, 300, "10 20 389 ldap.example.com"),
+	}
+
+	out, err := p.AdjustEndpoints(in)
+	if err != nil {
+		t.Fatalf("AdjustEndpoints: %v", err)
+	}
+
+	byType := make(map[string]*endpoint.Endpoint, len(out))
+	for _, ep := range out {
+		byType[ep.RecordType] = ep
+	}
+
+	// A/AAAA/CNAME honour a custom TTL — it must survive.
+	for _, ty := range []string{recordTypeA, recordTypeAAAA, recordTypeCNAME} {
+		if got := byType[ty].RecordTTL; got != 300 {
+			t.Errorf("%s TTL = %v, want 300 preserved", ty, got)
+		}
+	}
+	// TXT/MX/SRV are controller-managed — the TTL must be cleared so it is no
+	// longer "configured" (the trigger for external-dns TTL churn).
+	for _, ty := range []string{recordTypeTXT, recordTypeMX, recordTypeSRV} {
+		if byType[ty].RecordTTL.IsConfigured() {
+			t.Errorf("%s TTL = %v, want cleared (controller-managed)", ty, byType[ty].RecordTTL)
+		}
+	}
+}

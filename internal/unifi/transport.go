@@ -76,7 +76,7 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body []
 			return resp, nil
 		}
 
-		retryable, wait := c.retryAfter(resp, err, attempt)
+		retryable, wait := c.retryAfter(method, resp, err, attempt)
 		if !retryable || attempt == attempts-1 {
 			if err != nil {
 				return nil, err
@@ -135,13 +135,24 @@ func (c *httpClient) doOnce(ctx context.Context, method, path string, body []byt
 	return resp, nil
 }
 
-// retryAfter returns whether a request should be retried and how long to
-// wait. 429 honours the server-supplied Retry-After header (clamped to
-// RetryMaxDelay); 5xx and network errors use exponential backoff with jitter.
-func (c *httpClient) retryAfter(resp *http.Response, err error, attempt int) (bool, time.Duration) {
-	// Network errors are retryable if they aren't context cancellations.
+// retryAfter returns whether a request should be retried and how long to wait.
+//
+// 429 is retried for any method — the server signals it rejected the request
+// before processing, so re-sending is safe. 5xx and network errors are retried
+// only for idempotent methods (GET/DELETE): a POST that creates a DNS record
+// may have been committed before the controller returned a 5xx or the
+// connection dropped, so blindly re-sending it could create a duplicate record.
+// A non-retried create still converges — external-dns retries the whole
+// reconcile on its next sync — without that duplication risk. 429 honours the
+// server-supplied Retry-After header (clamped to RetryMaxDelay); the rest use
+// exponential backoff with jitter.
+func (c *httpClient) retryAfter(method string, resp *http.Response, err error, attempt int) (bool, time.Duration) {
+	idempotent := method == http.MethodGet || method == http.MethodDelete
+
+	// Network errors are retryable if they aren't context cancellations — but
+	// only for idempotent methods (a POST may have landed before the break).
 	if err != nil {
-		if IsNetworkError(err) {
+		if IsNetworkError(err) && idempotent {
 			return true, c.backoff(attempt, 0)
 		}
 
@@ -157,7 +168,9 @@ func (c *httpClient) retryAfter(resp *http.Response, err error, attempt int) (bo
 		hint := parseRetryAfter(resp.Header.Get("Retry-After"))
 
 		return true, c.backoff(attempt, hint)
-	case resp.StatusCode >= 500 && resp.StatusCode < 600:
+	case resp.StatusCode >= 500 && resp.StatusCode < 600 && idempotent:
+		// A 5xx on a non-idempotent POST is ambiguous (the write may have
+		// committed), so don't auto-retry it.
 		return true, c.backoff(attempt, 0)
 	}
 

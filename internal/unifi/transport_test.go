@@ -88,6 +88,63 @@ func TestDoRequest_NoRetryOn4xx(t *testing.T) {
 	}
 }
 
+// TestDoRequest_PostNotRetriedOn5xx verifies a non-idempotent POST is NOT
+// retried on a 5xx. The controller may have committed the create before
+// returning the 5xx, so re-sending could duplicate the DNS record; external-dns
+// recovers via its own reconcile loop instead. (GET/DELETE still retry — see
+// TestDoRequest_RetriesOn5xxThenSucceeds.)
+func TestDoRequest_PostNotRetriedOn5xx(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"message":"upstream"}`))
+	}))
+	defer srv.Close()
+
+	c := newRetryClient(t, srv, nil)
+
+	_, err := c.doRequest(context.Background(), http.MethodPost, srv.URL+"/dns/policies", []byte(`{}`))
+	if err == nil {
+		t.Fatal("expected an error on 502")
+	}
+	if !isAPIError(err) {
+		t.Errorf("expected APIError, got %T: %v", err, err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("POST must not retry on 5xx: got %d attempts, want 1", got)
+	}
+}
+
+// TestDoRequest_PostRetriedOn429 verifies a POST IS still retried on 429: the
+// server rejected the request before processing, so re-sending is safe (and the
+// body is re-read each attempt).
+func TestDoRequest_PostRetriedOn429(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	c := newRetryClient(t, srv, nil)
+
+	resp, err := c.doRequest(context.Background(), http.MethodPost, srv.URL+"/dns/policies", []byte(`{}`))
+	if err != nil {
+		t.Fatalf("doRequest: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if got := calls.Load(); got != 2 {
+		t.Errorf("POST should retry on 429: got %d attempts, want 2", got)
+	}
+}
+
 func TestDoRequest_HonorsRetryAfterOn429(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

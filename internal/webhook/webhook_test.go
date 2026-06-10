@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -265,5 +266,70 @@ func TestNegotiate_MissingAccept(t *testing.T) {
 
 	if rec.Code != http.StatusNotAcceptable {
 		t.Errorf("status = %d, want 406", rec.Code)
+	}
+}
+
+// TestAdjustEndpoints_ProviderError is the #227 regression: a provider error
+// from AdjustEndpoints must be logged (matching the Records / ApplyChanges
+// handlers), not silently turned into a bare 500.
+func TestAdjustEndpoints_ProviderError(t *testing.T) {
+	// Not parallel: captures the global slog default.
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	defer slog.SetDefault(prev)
+
+	wh := New(&fakeProvider{adjustErr: errors.New("boom")})
+	body, _ := json.Marshal([]*endpoint.Endpoint{endpoint.NewEndpoint("a.example.com", "A", "1.2.3.4")})
+
+	rec := httptest.NewRecorder()
+	wh.AdjustEndpoints(rec, newRequest(http.MethodPost, "/adjustendpoints", body, map[string]string{
+		"Content-Type": string(mediaTypeVersion1),
+		"Accept":       string(mediaTypeVersion1),
+	}))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rec.Code)
+	}
+	if !strings.Contains(buf.String(), "adjusting endpoints") {
+		t.Errorf("AdjustEndpoints provider error was not logged; log = %q", buf.String())
+	}
+}
+
+// recordingFailWriter fails every Write and records WriteHeader codes, so a
+// test can prove a handler does not attempt a (no-op, superfluous) WriteHeader
+// after the response is already committed.
+type recordingFailWriter struct {
+	header http.Header
+	codes  []int
+}
+
+func (w *recordingFailWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = http.Header{}
+	}
+
+	return w.header
+}
+func (w *recordingFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+func (w *recordingFailWriter) WriteHeader(code int)      { w.codes = append(w.codes, code) }
+
+// TestNegotiate_NoSuperfluousWriteHeaderOnEncodeError is the #228 regression:
+// once the JSON encoder has started writing (committing a 200), a later
+// WriteHeader(500) is a no-op that only logs a "superfluous WriteHeader"
+// warning. Negotiate must not make that call.
+func TestNegotiate_NoSuperfluousWriteHeaderOnEncodeError(t *testing.T) {
+	t.Parallel()
+	wh := New(&fakeProvider{})
+
+	w := &recordingFailWriter{}
+	wh.Negotiate(w, newRequest(http.MethodGet, "/", nil, map[string]string{
+		"Accept": string(mediaTypeVersion1),
+	}))
+
+	for _, c := range w.codes {
+		if c == http.StatusInternalServerError {
+			t.Errorf("Negotiate called WriteHeader(500) after the response was committed (superfluous)")
+		}
 	}
 }

@@ -100,6 +100,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	endpoints, err := p.provider.AdjustEndpoints(endpoints)
 	if err != nil {
+		requestLog(r).Error("adjusting endpoints", "error", err)
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusInternalServerError)
 
@@ -120,8 +121,11 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
 	if err := json.NewEncoder(w).Encode(p.provider.GetDomainFilter()); err != nil {
+		// The encoder has already written (and implicitly flushed a 200) by the
+		// time it can fail, so a WriteHeader(500) here is a no-op that only logs
+		// a "superfluous WriteHeader" warning. Just record the cause, matching
+		// writeJSON. See #228.
 		requestLog(r).Error("encoding negotiate response", "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 

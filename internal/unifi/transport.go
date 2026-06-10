@@ -213,6 +213,24 @@ func (c *httpClient) backoff(attempt int, hint time.Duration) time.Duration {
 	return wait
 }
 
+// worstCaseRetryBudget returns an upper bound on the total time doRequest can
+// spend sleeping between attempts for the given config. doRequest sleeps once
+// after each attempt except the last, so there are at most RetryAttempts-1
+// waits. Every individual wait is capped at RetryMaxDelay by backoff(), and any
+// wait can be driven all the way up to that cap by a server Retry-After hint on
+// a 429 (backoff honours the hint as a floor, then clamps to RetryMaxDelay). So
+// the tight, hint-safe upper bound is simply (RetryAttempts-1) * RetryMaxDelay —
+// the exponential schedule only ever produces shorter waits, never longer. Used
+// to size the startup site-resolution timeout: a fixed cap that ignores this
+// budget would cancel retries the operator explicitly asked for and crashloop
+// the process.
+func worstCaseRetryBudget(cfg *Config) time.Duration {
+	attempts := max(cfg.RetryAttempts, 1)
+	maxDelay := cmp.Or(cfg.RetryMaxDelay, 10*time.Second)
+
+	return time.Duration(attempts-1) * maxDelay
+}
+
 // parseRetryAfter understands both numeric-seconds and HTTP-date forms of
 // the Retry-After header. Unparseable values produce zero, which lets the
 // caller fall through to ordinary backoff.

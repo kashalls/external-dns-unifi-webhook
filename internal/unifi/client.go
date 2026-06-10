@@ -58,9 +58,22 @@ var managedRecordTypes = []string{
 // pageLimit is the API's documented maximum page size.
 const pageLimit = 200
 
-// siteResolveTimeout caps the startup probe so a broken controller doesn't
-// hang the process forever.
-const siteResolveTimeout = 15 * time.Second
+// siteResolveBaseTimeout is the headroom the startup site-resolution probe
+// gets for the HTTP request(s) themselves. The effective timeout adds the
+// worst-case retry backoff budget on top (see siteResolveTimeoutFor), so a
+// broken controller still can't hang the process forever, but raising the
+// retry knobs never starves the probe mid-backoff.
+const siteResolveBaseTimeout = 15 * time.Second
+
+// siteResolveTimeoutFor returns how long the startup probe may run for the
+// given config: the fixed request headroom plus the worst-case time the retry
+// loop can spend in backoff. Deriving it from the retry settings (rather than a
+// fixed cap) is what stops an operator who raises UNIFI_RETRY_ATTEMPTS — to ride
+// out a slow or rate-limiting controller — from instead tripping a startup
+// context deadline and crashlooping on every restart.
+func siteResolveTimeoutFor(cfg *Config) time.Duration {
+	return siteResolveBaseTimeout + worstCaseRetryBudget(cfg)
+}
 
 // maxResponseBytes caps how much of a UniFi API response body we buffer into
 // memory before decoding. Integration API responses are small JSON documents
@@ -91,7 +104,7 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		httpc: extdnshttp.NewInstrumentedClient(&http.Client{Transport: transport}),
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), siteResolveTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), siteResolveTimeoutFor(config))
 	defer cancel()
 	siteID, err := c.resolveSite(ctx, config.Site)
 	if err != nil {

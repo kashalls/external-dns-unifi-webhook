@@ -155,6 +155,9 @@ func fromDNSRecord(r DNSRecord) (dnsPolicyEnvelope, error) {
 		env.Type = policyTypeCNAME
 		env.TargetDomain = r.Value
 		env.TTLSeconds = new(clampTTL(int(r.TTL), ttlMaxCNAME))
+	// TXT/MX/SRV deliberately send no TTLSeconds: the Integration API manages
+	// their TTL itself and ignores any value. AdjustEndpoints clears the TTL
+	// from the desired set so external-dns doesn't churn over it. See #229.
 	case recordTypeTXT:
 		env.Type = policyTypeTXT
 		env.Text = r.Value

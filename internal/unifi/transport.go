@@ -200,7 +200,13 @@ func (c *httpClient) backoff(attempt int, hint time.Duration) time.Duration {
 		base = maxDelay
 	}
 	// 0-50% jitter so concurrent workers don't all retry on the same tick.
-	jitter := time.Duration(rand.Int64N(int64(base) / 2))
+	// Guard the divisor: rand.Int64N panics on a non-positive argument, which
+	// base/2 would be for a sub-2ns base (config validation floors the initial
+	// delay at 1ms, but backoff stays self-contained).
+	var jitter time.Duration
+	if half := int64(base) / 2; half > 0 {
+		jitter = time.Duration(rand.Int64N(half))
+	}
 	wait := base + jitter
 
 	if hint > 0 && hint > wait {

@@ -17,6 +17,11 @@ import (
 const (
 	maxApplyWorkers  = 100
 	maxRetryAttempts = 10
+	// minRetryInitialDelay floors UNIFI_RETRY_INITIAL_DELAY. backoff() computes
+	// jitter as rand.Int64N(base/2); a sub-2ns initial delay makes base/2 == 0,
+	// which panics rand.Int64N. 1ms is far below any sensible retry delay (the
+	// default is 500ms) while keeping base/2 safely positive.
+	minRetryInitialDelay = time.Millisecond
 )
 
 // Config represents the configuration for the UniFi API.
@@ -80,8 +85,8 @@ func (c Config) Validate() error {
 	if c.ApplyWorkers < 1 || c.ApplyWorkers > maxApplyWorkers {
 		return fmt.Errorf("UNIFI_APPLY_WORKERS must be between 1 and %d, got %d", maxApplyWorkers, c.ApplyWorkers)
 	}
-	if c.RetryInitialDelay <= 0 {
-		return fmt.Errorf("UNIFI_RETRY_INITIAL_DELAY must be positive, got %s", c.RetryInitialDelay)
+	if c.RetryInitialDelay < minRetryInitialDelay {
+		return fmt.Errorf("UNIFI_RETRY_INITIAL_DELAY must be >= %s, got %s", minRetryInitialDelay, c.RetryInitialDelay)
 	}
 	if c.RetryMaxDelay < c.RetryInitialDelay {
 		return fmt.Errorf("UNIFI_RETRY_MAX_DELAY (%s) must be >= UNIFI_RETRY_INITIAL_DELAY (%s)",

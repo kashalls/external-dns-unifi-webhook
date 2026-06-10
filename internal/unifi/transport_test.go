@@ -236,6 +236,21 @@ func TestBackoff_ClampsToMax(t *testing.T) {
 	}
 }
 
+// TestBackoff_NoPanicOnSubTwoNanoDelay is the #230 regression: a sub-2ns
+// initial delay makes base/2 == 0, and rand.Int64N panics on a non-positive
+// argument. backoff must guard the divisor and still return a sane wait.
+func TestBackoff_NoPanicOnSubTwoNanoDelay(t *testing.T) {
+	c := &httpClient{cfg: &Config{
+		RetryInitialDelay: 1 * time.Nanosecond,
+		RetryMaxDelay:     1 * time.Second,
+	}}
+
+	got := c.backoff(0, 0) // base = 1ns, base/2 = 0 → would panic pre-fix
+	if got < 0 {
+		t.Errorf("backoff returned negative wait %v", got)
+	}
+}
+
 func TestWorstCaseRetryBudget(t *testing.T) {
 	// The bound is (attempts-1) * RetryMaxDelay: each of the attempts-1 waits
 	// can be driven to RetryMaxDelay by a 429 Retry-After hint, so the initial

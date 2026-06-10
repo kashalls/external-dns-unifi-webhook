@@ -75,6 +75,38 @@ func TestCachedProbe_PropagatesError(t *testing.T) {
 	}
 }
 
+// TestCachedProbe_DetachesFromCallerContext verifies the probe runs detached
+// from the caller's request context: a caller whose context is already
+// cancelled (e.g. a kubelet probe that timed out, a dropped /readyz connection)
+// must not turn a healthy upstream into a cached "not ready" verdict for the
+// whole TTL. Regression test for the singleflight result/cache being poisoned
+// by one caller's cancellation.
+func TestCachedProbe_DetachesFromCallerContext(t *testing.T) {
+	var calls atomic.Int32
+	// Mirrors provider.Records honouring its context — it would return
+	// context.Canceled if handed an already-cancelled context.
+	probe := func(ctx context.Context) error {
+		calls.Add(1)
+
+		return ctx.Err()
+	}
+	cached := newCachedProbe(probe, time.Minute)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // the caller has already gone away before the probe runs
+
+	if err := cached.Check(ctx); err != nil {
+		t.Fatalf("Check with a cancelled caller context = %v; the probe should run detached and succeed", err)
+	}
+	// The good result — not the caller's cancellation — is what gets cached.
+	if err := cached.Check(context.Background()); err != nil {
+		t.Errorf("second Check = %v; a cancelled caller must not poison the cached verdict", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("probe ran %d times, want 1 (result cached)", got)
+	}
+}
+
 func TestReadyzHandler_ReturnsServiceUnavailableWhenProbeFails(t *testing.T) {
 	handler := readyzHandler(func(_ context.Context) error { return errors.New("nope") }, time.Minute)
 

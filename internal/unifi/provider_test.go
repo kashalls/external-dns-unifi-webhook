@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
+	dto "github.com/prometheus/client_model/go"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 )
@@ -123,5 +124,53 @@ func TestApplyChanges_CNAMEConflictUsesSnapshot(t *testing.T) {
 	}
 	if got := createCount.Load(); got != 1 {
 		t.Errorf("POST count = %d, want 1", got)
+	}
+}
+
+// TestRecords_ResetsStalePerTypeGauge verifies the per-type records gauge is
+// recomputed each call: once the last record of a type is deleted upstream, its
+// gauge must drop to 0 rather than retain the previous count. Regression for
+// the stale GaugeVec child (issue #218) — Records seeds every managed type at
+// zero so a vanished type is explicitly Set(0).
+func TestRecords_ResetsStalePerTypeGauge(t *testing.T) {
+	var page atomic.Pointer[dnsPolicyPage]
+	first := pageOf(
+		envA("id-1", "a.example.com", "192.0.2.1", 300),
+		envA("id-2", "b.example.com", "192.0.2.2", 300),
+	)
+	page.Store(&first)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(*page.Load())
+	}))
+	defer srv.Close()
+
+	p := &UnifiProvider{client: newTestClient(srv)}
+	gaugeA := metrics.Get().RecordsTotal.WithLabelValues(metrics.ProviderName, recordTypeA)
+	read := func() float64 {
+		t.Helper()
+		var m dto.Metric
+		if err := gaugeA.Write(&m); err != nil {
+			t.Fatalf("gauge.Write: %v", err)
+		}
+
+		return m.GetGauge().GetValue()
+	}
+
+	if _, err := p.Records(context.Background()); err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+	if got := read(); got != 2 {
+		t.Fatalf("records{type=A} after first fetch = %v, want 2", got)
+	}
+
+	// All A records deleted upstream.
+	empty := pageOf()
+	page.Store(&empty)
+	if _, err := p.Records(context.Background()); err != nil {
+		t.Fatalf("Records (after deletion): %v", err)
+	}
+	if got := read(); got != 0 {
+		t.Errorf("records{type=A} after all A records deleted = %v, want 0 (stale gauge not reset)", got)
 	}
 }

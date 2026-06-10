@@ -59,8 +59,14 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 	}
 
 	// Group supported records by key+type and tally per-type counts in one pass.
+	// Seed every managed type at zero so the per-type gauge is fully recomputed
+	// each cycle — a type whose records were all deleted is set to 0 rather than
+	// retaining its previous value.
 	groups := make(map[string][]DNSRecord)
-	counts := make(map[string]int)
+	counts := make(map[string]int, len(managedRecordTypes))
+	for _, rt := range managedRecordTypes {
+		counts[rt] = 0
+	}
 	for _, r := range records {
 		if !provider.SupportedRecordType(r.RecordType) {
 			continue

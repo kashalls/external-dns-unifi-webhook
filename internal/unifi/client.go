@@ -45,6 +45,16 @@ const (
 	recordTypeTXT   = "TXT"
 )
 
+// managedRecordTypes is every record type this provider emits (toDNSRecord
+// produces only these; all other policy types are skipped). Records() seeds its
+// per-type tally with all of them at zero so a type whose records were all
+// deleted is reported as 0 this cycle instead of leaving the gauge pinned at
+// its last value.
+var managedRecordTypes = []string{
+	recordTypeA, recordTypeAAAA, recordTypeCNAME,
+	recordTypeMX, recordTypeSRV, recordTypeTXT,
+}
+
 // pageLimit is the API's documented maximum page size.
 const pageLimit = 200
 

@@ -236,6 +236,77 @@ func TestBackoff_ClampsToMax(t *testing.T) {
 	}
 }
 
+func TestWorstCaseRetryBudget(t *testing.T) {
+	// The bound is (attempts-1) * RetryMaxDelay: each of the attempts-1 waits
+	// can be driven to RetryMaxDelay by a 429 Retry-After hint, so the initial
+	// delay does not enter into the worst case.
+	tests := []struct {
+		name string
+		cfg  *Config
+		want time.Duration
+	}{
+		{
+			name: "single attempt has no backoff waits",
+			cfg:  &Config{RetryAttempts: 1, RetryInitialDelay: 500 * time.Millisecond, RetryMaxDelay: 10 * time.Second},
+			want: 0,
+		},
+		{
+			name: "three attempts: two waits at the ceiling",
+			cfg:  &Config{RetryAttempts: 3, RetryInitialDelay: 500 * time.Millisecond, RetryMaxDelay: 10 * time.Second},
+			want: 20 * time.Second,
+		},
+		{
+			name: "six attempts: five waits at the ceiling",
+			cfg:  &Config{RetryAttempts: 6, RetryInitialDelay: 500 * time.Millisecond, RetryMaxDelay: 10 * time.Second},
+			want: 50 * time.Second,
+		},
+		{
+			name: "a tiny initial delay does not shrink the bound",
+			cfg:  &Config{RetryAttempts: 3, RetryInitialDelay: 1 * time.Millisecond, RetryMaxDelay: 10 * time.Second},
+			want: 20 * time.Second,
+		},
+		{
+			name: "zero RetryMaxDelay falls back to the 10s default",
+			cfg:  &Config{RetryAttempts: 3},
+			want: 20 * time.Second,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := worstCaseRetryBudget(tt.cfg); got != tt.want {
+				t.Errorf("worstCaseRetryBudget = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSiteResolveTimeoutFor_CoversRetryBudget is the #223 regression: the
+// startup probe timeout must scale with the operator's retry settings instead
+// of being a fixed cap that cancels configured retries mid-backoff.
+func TestSiteResolveTimeoutFor_CoversRetryBudget(t *testing.T) {
+	// A retry budget the old fixed 15s site-resolution cap would have truncated.
+	cfg := &Config{RetryAttempts: 6, RetryInitialDelay: 500 * time.Millisecond, RetryMaxDelay: 10 * time.Second}
+
+	budget := worstCaseRetryBudget(cfg)
+	if budget <= siteResolveBaseTimeout {
+		t.Fatalf("test premise broken: budget %v should exceed the %v base headroom", budget, siteResolveBaseTimeout)
+	}
+
+	got := siteResolveTimeoutFor(cfg)
+	if want := siteResolveBaseTimeout + budget; got != want {
+		t.Errorf("siteResolveTimeoutFor = %v, want base %v + budget %v = %v", got, siteResolveBaseTimeout, budget, want)
+	}
+	if got <= budget {
+		t.Errorf("startup timeout %v must leave request headroom beyond the retry budget %v", got, budget)
+	}
+
+	// With retries disabled the timeout collapses to just the base headroom.
+	none := &Config{RetryAttempts: 1, RetryInitialDelay: 500 * time.Millisecond, RetryMaxDelay: 10 * time.Second}
+	if got := siteResolveTimeoutFor(none); got != siteResolveBaseTimeout {
+		t.Errorf("no-retry timeout = %v, want base %v", got, siteResolveBaseTimeout)
+	}
+}
+
 func TestNewHTTPTransport_SkipTLSVerify(t *testing.T) {
 	tr, err := newHTTPTransport(&Config{SkipTLSVerify: true})
 	if err != nil {

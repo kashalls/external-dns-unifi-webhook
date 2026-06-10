@@ -12,6 +12,13 @@ import (
 // process should report ready. Returning a non-nil error fails the probe.
 type ProbeFunc func(ctx context.Context) error
 
+// probeTimeout bounds a single upstream readiness probe. The probe runs
+// detached from any caller's request context (see Check), so it needs its own
+// ceiling — without one a hung upstream connection (the UniFi client sets no
+// overall http.Client timeout, relying on ctx) would block the singleflight
+// slot forever. Generous enough to absorb the client's default retry budget.
+const probeTimeout = 10 * time.Second
+
 // cachedProbe wraps a ProbeFunc with a TTL-bounded result cache and
 // singleflight deduplication. Multiple concurrent /readyz hits within the
 // TTL share a single in-flight check; subsequent hits in that window return
@@ -52,7 +59,17 @@ func (c *cachedProbe) Check(ctx context.Context) error {
 			return nil, stillCached
 		}
 
-		err := c.probe(ctx)
+		// Detach from the caller's request context before probing. singleflight
+		// shares the leader's result with every queued caller, so if the leader's
+		// context is cancelled (a kubelet probe timeout, a dropped /readyz
+		// connection) the resulting context.Canceled would (a) fail all other
+		// in-flight callers whose own contexts are still alive and (b) get
+		// memoised as the readiness verdict for the whole TTL — knocking a healthy
+		// pod out of Service rotation. WithoutCancel keeps any context values but
+		// drops the cancellation; a fresh timeout still bounds the probe.
+		pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), probeTimeout)
+		err := c.probe(pctx)
+		cancel()
 
 		c.mu.Lock()
 		c.lastAt = time.Now()

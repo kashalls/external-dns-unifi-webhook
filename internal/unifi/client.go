@@ -245,7 +245,6 @@ func (c *httpClient) CreateEndpoint(ctx context.Context, endpoint *externaldnsen
 	created = make([]*DNSRecord, 0, len(endpoint.Targets))
 	for _, target := range endpoint.Targets {
 		r := DNSRecord{
-			Enabled:    true,
 			Key:        endpoint.DNSName,
 			RecordType: endpoint.RecordType,
 			TTL:        endpoint.RecordTTL,

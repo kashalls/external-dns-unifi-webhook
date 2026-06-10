@@ -81,13 +81,23 @@ type siteEntry struct {
 }
 
 // toDNSRecord converts a wire envelope into the internal DNSRecord shape.
-// ok=false means the envelope should be skipped (FORWARD_DOMAIN entries or
-// unknown discriminator values — we don't pretend to manage them).
+// ok=false means the envelope should be skipped: a disabled policy (not serving
+// DNS), a FORWARD_DOMAIN entry, or an unknown discriminator value — none of
+// which we pretend to manage.
+//
+// Disabled policies are skipped rather than reported because external-dns has
+// no "disabled" concept; surfacing one would make external-dns believe a parked
+// record is live. Treating it as not-present lets external-dns re-create the
+// record (enabled) if it is still in the desired set, and otherwise leave it
+// alone. See #221.
 func toDNSRecord(env dnsPolicyEnvelope) (DNSRecord, bool) {
+	if !env.Enabled {
+		return DNSRecord{}, false
+	}
+
 	r := DNSRecord{
-		ID:      env.ID,
-		Enabled: env.Enabled,
-		Key:     env.Domain,
+		ID:  env.ID,
+		Key: env.Domain,
 	}
 	if env.TTLSeconds != nil {
 		r.TTL = endpoint.TTL(*env.TTLSeconds)
@@ -126,6 +136,8 @@ func toDNSRecord(env dnsPolicyEnvelope) (DNSRecord, bool) {
 // POST /dns/policies. TTL is clamped per-type to the spec's documented maxima.
 func fromDNSRecord(r DNSRecord) (dnsPolicyEnvelope, error) {
 	env := dnsPolicyEnvelope{
+		// Records external-dns asks us to write are always live; "disabled" is
+		// a manual UI state we deliberately don't model (see toDNSRecord, #221).
 		Enabled: true,
 		Domain:  r.Key,
 	}

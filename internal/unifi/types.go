@@ -100,7 +100,6 @@ func (c Config) Validate() error {
 // For all other types, Value is the raw target.
 type DNSRecord struct {
 	ID         string
-	Enabled    bool
 	Key        string
 	RecordType string
 	TTL        endpoint.TTL

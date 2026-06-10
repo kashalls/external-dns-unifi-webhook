@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.10.4](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.3...0.10.4) (2026-06-10)
+
+
+### Bug Fixes
+
+* **metrics:** bound the HTTP endpoint label to matched routes ([#244](https://github.com/home-operations/external-dns-unifi-webhook/issues/244)) ([f29edcb](https://github.com/home-operations/external-dns-unifi-webhook/commit/f29edcba85a5c64a24d7d6a73edfc0f53f1fc1a0))
+* **metrics:** reset stale per-type records gauge after a type's records are deleted ([#235](https://github.com/home-operations/external-dns-unifi-webhook/issues/235)) ([1e3fab7](https://github.com/home-operations/external-dns-unifi-webhook/commit/1e3fab7d1b41f9fc577535c15270fb04d0ac2ad1))
+* **metrics:** track consecutive_errors/last_success per operation ([#236](https://github.com/home-operations/external-dns-unifi-webhook/issues/236)) ([9fee152](https://github.com/home-operations/external-dns-unifi-webhook/commit/9fee152ffbb488c2635284fa1a0ee723d720fd30))
+* **server:** run the readiness probe detached from the caller's request context ([#232](https://github.com/home-operations/external-dns-unifi-webhook/issues/232)) ([ec3e3b8](https://github.com/home-operations/external-dns-unifi-webhook/commit/ec3e3b81f70502555ed02ca8e0fa80502b2913f8))
+* **server:** stop /readyz from leaking upstream detail to anonymous callers ([#242](https://github.com/home-operations/external-dns-unifi-webhook/issues/242)) ([a65595b](https://github.com/home-operations/external-dns-unifi-webhook/commit/a65595bc5b088a6c3d505fb5b80ddcf79fe23fae))
+* **unifi:** account for the create-endpoint response body size ([#246](https://github.com/home-operations/external-dns-unifi-webhook/issues/246)) ([ba72eb2](https://github.com/home-operations/external-dns-unifi-webhook/commit/ba72eb23171db86e3a2acf9a538b1f10bb83f9b8))
+* **unifi:** bound apply workers, retry attempts, and the connection pool ([#234](https://github.com/home-operations/external-dns-unifi-webhook/issues/234)) ([d1cde15](https://github.com/home-operations/external-dns-unifi-webhook/commit/d1cde15cb179be4e3573f5480ea7a2197a9e117a))
+* **unifi:** cap the buffered JSON response read ([#238](https://github.com/home-operations/external-dns-unifi-webhook/issues/238)) ([27ba5a7](https://github.com/home-operations/external-dns-unifi-webhook/commit/27ba5a7f47fa1474813008185cfc47081f38ecc4))
+* **unifi:** clear controller-managed TTL on TXT/MX/SRV to stop reconcile churn ([#243](https://github.com/home-operations/external-dns-unifi-webhook/issues/243)) ([47d5f1a](https://github.com/home-operations/external-dns-unifi-webhook/commit/47d5f1a807a0137305184866281e67bfca26a5c5))
+* **unifi:** don't retry non-idempotent POST creates on 5xx/network errors ([#233](https://github.com/home-operations/external-dns-unifi-webhook/issues/233)) ([0b8178c](https://github.com/home-operations/external-dns-unifi-webhook/commit/0b8178c2854e68d8244772064a50ad36807d9798))
+* **unifi:** guard backoff jitter against a panicking divisor ([#245](https://github.com/home-operations/external-dns-unifi-webhook/issues/245)) ([b07a6be](https://github.com/home-operations/external-dns-unifi-webhook/commit/b07a6be82d2d1126bcef66294ab397f8f12a9acb))
+* **unifi:** key record groups by a struct, not concatenated name+type ([#239](https://github.com/home-operations/external-dns-unifi-webhook/issues/239)) ([ad65d42](https://github.com/home-operations/external-dns-unifi-webhook/commit/ad65d422543f154b3efa6a3ac04aeabd2decc2b9))
+* **unifi:** size the startup site-resolution timeout to the retry budget ([#240](https://github.com/home-operations/external-dns-unifi-webhook/issues/240)) ([bd6f975](https://github.com/home-operations/external-dns-unifi-webhook/commit/bd6f9750217ec5a2b2b9aa4e8617cf8f3a582d22))
+* **unifi:** skip disabled UniFi policies instead of reporting them as live ([#241](https://github.com/home-operations/external-dns-unifi-webhook/issues/241)) ([8ff327c](https://github.com/home-operations/external-dns-unifi-webhook/commit/8ff327c543bc456bd1ec3e0ea210be9915cfa57d))
+* **webhook:** log AdjustEndpoints errors; drop no-op Negotiate WriteHeader ([#247](https://github.com/home-operations/external-dns-unifi-webhook/issues/247)) ([af8e136](https://github.com/home-operations/external-dns-unifi-webhook/commit/af8e136a4d6724f200f688ea4d776cc0bfa68fb8)), closes [#227](https://github.com/home-operations/external-dns-unifi-webhook/issues/227) [#228](https://github.com/home-operations/external-dns-unifi-webhook/issues/228)
+
 ## [0.10.3](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.2...0.10.3) (2026-06-10)
 
 

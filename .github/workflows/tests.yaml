@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   test:
-    name: Tests
+    name: Go Tests
     runs-on: ubuntu-24.04
     permissions:
       contents: read

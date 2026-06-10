@@ -9,6 +9,16 @@ import (
 	"sigs.k8s.io/external-dns/endpoint"
 )
 
+// Upper bounds on the operator-tunable concurrency/retry knobs. The defaults
+// (5 workers, 3 attempts) are far below these; the ceilings exist so a typo
+// (UNIFI_APPLY_WORKERS=500) can't fan out enough concurrent connections to
+// exhaust a consumer controller's connection table, and so the retry budget
+// stays sane. Generous enough that no realistic configuration trips them.
+const (
+	maxApplyWorkers  = 100
+	maxRetryAttempts = 10
+)
+
 // Config represents the configuration for the UniFi API.
 type Config struct {
 	Host              string        `env:"UNIFI_HOST,notEmpty"`
@@ -64,11 +74,11 @@ func (c Config) Validate() error {
 	if cloudAPIHosts[u.Host] && c.ConsoleID == "" {
 		return fmt.Errorf("UNIFI_CONSOLE_ID is required when UNIFI_HOST points at the Ubiquiti cloud API (%q)", u.Host)
 	}
-	if c.RetryAttempts < 1 {
-		return fmt.Errorf("UNIFI_RETRY_ATTEMPTS must be at least 1, got %d", c.RetryAttempts)
+	if c.RetryAttempts < 1 || c.RetryAttempts > maxRetryAttempts {
+		return fmt.Errorf("UNIFI_RETRY_ATTEMPTS must be between 1 and %d, got %d", maxRetryAttempts, c.RetryAttempts)
 	}
-	if c.ApplyWorkers < 1 {
-		return fmt.Errorf("UNIFI_APPLY_WORKERS must be at least 1, got %d", c.ApplyWorkers)
+	if c.ApplyWorkers < 1 || c.ApplyWorkers > maxApplyWorkers {
+		return fmt.Errorf("UNIFI_APPLY_WORKERS must be between 1 and %d, got %d", maxApplyWorkers, c.ApplyWorkers)
 	}
 	if c.RetryInitialDelay <= 0 {
 		return fmt.Errorf("UNIFI_RETRY_INITIAL_DELAY must be positive, got %s", c.RetryInitialDelay)

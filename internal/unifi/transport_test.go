@@ -291,6 +291,23 @@ func TestNewHTTPTransport_MissingCAFile(t *testing.T) {
 	}
 }
 
+// TestNewHTTPTransport_BoundsConnections verifies the transport caps per-host
+// connections so a worker count can't translate into unbounded connections to
+// the controller, and keeps idle connections warm up to the configured
+// concurrency (instead of net/http's default of 2).
+func TestNewHTTPTransport_BoundsConnections(t *testing.T) {
+	tr, err := newHTTPTransport(&Config{SkipTLSVerify: true, ApplyWorkers: 7})
+	if err != nil {
+		t.Fatalf("newHTTPTransport: %v", err)
+	}
+	if tr.MaxConnsPerHost != maxApplyWorkers {
+		t.Errorf("MaxConnsPerHost = %d, want %d (absolute ceiling)", tr.MaxConnsPerHost, maxApplyWorkers)
+	}
+	if tr.MaxIdleConnsPerHost != 7 {
+		t.Errorf("MaxIdleConnsPerHost = %d, want 7 (the configured worker count)", tr.MaxIdleConnsPerHost)
+	}
+}
+
 // TestDoRequest_NetworkErrorRetries verifies that connection-refused style
 // errors are retried (not just HTTP error responses).
 func TestDoRequest_NetworkErrorRetries(t *testing.T) {

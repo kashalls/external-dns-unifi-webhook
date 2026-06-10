@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"sigs.k8s.io/external-dns/endpoint"
 )
 
@@ -708,5 +710,51 @@ func TestDecodeJSON_AcceptsBodyAtLimit(t *testing.T) {
 	var dest dnsPolicyPage
 	if _, err := decodeJSON(resp, "DNS policies", &dest); err != nil {
 		t.Fatalf("body exactly at the limit should decode, got: %v", err)
+	}
+}
+
+// TestCreateEndpoint_RecordsResponseSize is the #226 regression: the create
+// path must report the decoded response-body size to the UniFi response-size
+// histogram. It previously hardcoded 0, so the create_endpoint operation never
+// contributed a sample.
+func TestCreateEndpoint_RecordsResponseSize(t *testing.T) {
+	// Echo the posted envelope back as the created record so decodeJSON reads a
+	// non-empty, well-formed body.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	// HistogramVec.WithLabelValues returns an Observer; the concrete child also
+	// implements prometheus.Metric, which is what exposes Write for readback.
+	hist, ok := metrics.Get().UniFiResponseSizeBytes.WithLabelValues("create_endpoint").(prometheus.Metric)
+	if !ok {
+		t.Fatal("response-size histogram child is not a prometheus.Metric")
+	}
+	read := func() (uint64, float64) {
+		t.Helper()
+		var dm dto.Metric
+		if err := hist.Write(&dm); err != nil {
+			t.Fatalf("histogram.Write: %v", err)
+		}
+
+		return dm.GetHistogram().GetSampleCount(), dm.GetHistogram().GetSampleSum()
+	}
+
+	beforeCount, beforeSum := read()
+	ep := endpoint.NewEndpointWithTTL("a.example.com", recordTypeA, 300, "192.0.2.1")
+	if _, err := c.CreateEndpoint(context.Background(), ep); err != nil {
+		t.Fatalf("CreateEndpoint: %v", err)
+	}
+	afterCount, afterSum := read()
+
+	if afterCount != beforeCount+1 {
+		t.Errorf("response-size sample count delta = %d, want 1 (create path observed nothing)", afterCount-beforeCount)
+	}
+	if afterSum <= beforeSum {
+		t.Errorf("response-size sum did not grow (%v -> %v); create path still reports 0 bytes", beforeSum, afterSum)
 	}
 }

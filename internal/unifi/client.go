@@ -62,6 +62,15 @@ const pageLimit = 200
 // hang the process forever.
 const siteResolveTimeout = 15 * time.Second
 
+// maxResponseBytes caps how much of a UniFi API response body we buffer into
+// memory before decoding. Integration API responses are small JSON documents
+// (a policy page is bounded by pageLimit), so a 25 MiB ceiling sits far above
+// any legitimate payload while still protecting the process from a buggy or
+// hostile controller streaming an unbounded body into io.ReadAll. It is a var
+// rather than a const so tests can lower it without generating multi-megabyte
+// fixtures.
+var maxResponseBytes int64 = 25 << 20 // 25 MiB
+
 var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // newUnifiClient constructs a UniFi API client and resolves the site name (or
@@ -143,9 +152,15 @@ func (c *httpClient) getJSON(ctx context.Context, reqURL, scope string, dest any
 // failures as DataErrors scoped by label. Returns the number of body bytes
 // read for metric accounting. The caller owns closing resp.Body.
 func decodeJSON(resp *http.Response, scope string, dest any) (int, error) {
-	body, err := io.ReadAll(resp.Body)
+	// Read one byte past the cap so a body sitting exactly at the limit still
+	// decodes while anything larger is rejected before we try to unmarshal it.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return 0, NewDataError("read", scope+" response body", err)
+	}
+	if int64(len(body)) > maxResponseBytes {
+		return len(body), NewDataError("read", scope+" response body",
+			fmt.Errorf("response exceeds %d-byte limit", maxResponseBytes))
 	}
 	if err := json.Unmarshal(body, dest); err != nil {
 		return len(body), NewDataError("unmarshal", scope, err)

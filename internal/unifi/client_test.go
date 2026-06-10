@@ -3,6 +3,7 @@ package unifi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -646,5 +647,59 @@ func TestSetHeaders(t *testing.T) {
 		if got := req.Header.Get(key); got != want {
 			t.Errorf("Header %s = %q, want %q", key, got, want)
 		}
+	}
+}
+
+// TestDecodeJSON_RejectsOversizedBody proves decodeJSON refuses to buffer a
+// response larger than maxResponseBytes instead of letting io.ReadAll grow
+// unbounded. These two tests are intentionally serial (no t.Parallel) because
+// they mutate the package-level cap; Go resumes parallel tests only after the
+// serial group finishes, so the deferred restore closes the window first.
+func TestDecodeJSON_RejectsOversizedBody(t *testing.T) {
+	defer func(orig int64) { maxResponseBytes = orig }(maxResponseBytes)
+	maxResponseBytes = 16
+
+	// Valid JSON, but well past the 16-byte cap. Decoding into a generic sink
+	// means the only thing that can fail here is the size guard — the old
+	// unbounded io.ReadAll would have buffered it all and returned nil.
+	oversized := `{"data":[` + strings.Repeat(`"x",`, 100) + `"x"]}`
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(oversized))}
+
+	var dest any
+	n, err := decodeJSON(resp, "DNS policies", &dest)
+	if err == nil {
+		t.Fatal("expected error for oversized body, got nil")
+	}
+
+	var dataErr *DataError
+	if !errors.As(err, &dataErr) {
+		t.Fatalf("expected *DataError, got %T: %v", err, err)
+	}
+	if !strings.Contains(dataErr.Error(), "limit") {
+		t.Errorf("error %q should mention the byte limit", dataErr.Error())
+	}
+	// Rejection must happen before unmarshalling, so dest stays nil.
+	if dest != nil {
+		t.Errorf("oversized body must not be decoded: got %v", dest)
+	}
+	// The over-limit read is reported (cap+1), never silently zeroed.
+	if int64(n) <= maxResponseBytes {
+		t.Errorf("byte count = %d, want > cap %d", n, maxResponseBytes)
+	}
+}
+
+// TestDecodeJSON_AcceptsBodyAtLimit guards the boundary: a body sitting exactly
+// at maxResponseBytes still decodes (the +1 LimitReader headroom is what lets
+// it through), so a tight-but-legitimate payload is never rejected.
+func TestDecodeJSON_AcceptsBodyAtLimit(t *testing.T) {
+	defer func(orig int64) { maxResponseBytes = orig }(maxResponseBytes)
+
+	body := `{}`
+	maxResponseBytes = int64(len(body)) // exactly at the cap
+
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(body))}
+	var dest dnsPolicyPage
+	if _, err := decodeJSON(resp, "DNS policies", &dest); err != nil {
+		t.Fatalf("body exactly at the limit should decode, got: %v", err)
 	}
 }

@@ -315,11 +315,26 @@ func (m *Metrics) RecordUniFiAPICall(operation string, duration time.Duration, r
 	}
 	if err != nil {
 		m.UniFiAPIErrorsTotal.WithLabelValues(ProviderName, operation).Inc()
-		m.ConsecutiveErrors.WithLabelValues(ProviderName).Inc()
-	} else {
-		m.ConsecutiveErrors.WithLabelValues(ProviderName).Set(0)
-		m.LastSuccessTimestamp.WithLabelValues(ProviderName).Set(float64(time.Now().Unix()))
 	}
+}
+
+// RecordOperation records the outcome of one top-level provider operation (a
+// full Records or ApplyChanges). The consecutive-error and last-success gauges
+// are tracked here — per operation — rather than in RecordUniFiAPICall: a
+// single ApplyChanges fans out many concurrent UniFi API calls, and updating
+// these gauges from each of them races. One worker's success could Set the
+// count to 0 while its siblings are still failing, so "consecutive" lost all
+// meaning and an alert on consecutive_errors could silently never fire during a
+// failing batch. Per-operation accounting keeps it honest; per-call failures
+// are still counted unambiguously by UniFiAPIErrorsTotal.
+func (m *Metrics) RecordOperation(err error) {
+	if err != nil {
+		m.ConsecutiveErrors.WithLabelValues(ProviderName).Inc()
+
+		return
+	}
+	m.ConsecutiveErrors.WithLabelValues(ProviderName).Set(0)
+	m.LastSuccessTimestamp.WithLabelValues(ProviderName).Set(float64(time.Now().Unix()))
 }
 
 // UpdateRecordsByType updates the records count by type.

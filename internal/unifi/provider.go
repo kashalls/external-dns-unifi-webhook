@@ -50,8 +50,9 @@ func NewUnifiProvider(config *Config) (provider.Provider, error) {
 }
 
 // Records returns the list of records in the DNS provider.
-func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
+func (p *UnifiProvider) Records(ctx context.Context) (_ []*endpoint.Endpoint, err error) {
 	m := metrics.Get()
+	defer func() { m.RecordOperation(err) }()
 
 	records, err := p.client.GetEndpoints(ctx)
 	if err != nil {
@@ -98,8 +99,9 @@ func (p *UnifiProvider) Records(ctx context.Context) ([]*endpoint.Endpoint, erro
 // produce 1+N paginated round trips per reconcile). DeleteRecord tolerates
 // 404 so the snapshot index is safe even if a record disappears between
 // snapshot and delete.
-func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
+func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes) (err error) {
 	m := metrics.Get()
+	defer func() { m.RecordOperation(err) }()
 
 	rawRecords, err := p.client.GetEndpoints(ctx)
 	if err != nil {

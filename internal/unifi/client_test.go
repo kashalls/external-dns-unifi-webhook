@@ -93,6 +93,13 @@ func envA(id, domain, ip string, ttl int) dnsPolicyEnvelope {
 	}
 }
 
+func envAAAA(id, domain, ip string, ttl int) dnsPolicyEnvelope {
+	return dnsPolicyEnvelope{
+		ID: id, Type: policyTypeAAAA, Enabled: true,
+		Domain: domain, IPv6Address: ip, TTLSeconds: &ttl,
+	}
+}
+
 func envCNAME(id, domain, target string, ttl int) dnsPolicyEnvelope {
 	return dnsPolicyEnvelope{
 		ID: id, Type: policyTypeCNAME, Enabled: true,

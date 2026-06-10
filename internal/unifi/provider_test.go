@@ -252,3 +252,32 @@ func TestApplyChanges_DeleteDoesNotCollideAcrossTypes(t *testing.T) {
 		t.Error("AAAA record id-aaaa was deleted as collateral — Key+RecordType collision (#222)")
 	}
 }
+
+// TestRecords_ExcludesDisabledRecords proves a policy disabled in the UniFi UI
+// is not reported as a managed endpoint (#221): external-dns must not believe a
+// parked record is live.
+func TestRecords_ExcludesDisabledRecords(t *testing.T) {
+	disabled := envA("id-off", "off.example.com", "192.0.2.8", 300)
+	disabled.Enabled = false
+	existing := pageOf(
+		envA("id-on", "on.example.com", "192.0.2.1", 300),
+		disabled,
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(existing)
+	}))
+	defer srv.Close()
+
+	p := &UnifiProvider{client: newTestClient(srv)}
+	eps, err := p.Records(context.Background())
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+
+	if len(eps) != 1 {
+		t.Fatalf("got %d endpoints, want 1 (the disabled record must be excluded): %+v", len(eps), eps)
+	}
+	if eps[0].DNSName != "on.example.com" {
+		t.Errorf("endpoint = %q, want on.example.com (the enabled record)", eps[0].DNSName)
+	}
+}

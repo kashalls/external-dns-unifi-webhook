@@ -85,7 +85,18 @@ func TestToDNSRecord_PerType(t *testing.T) {
 		},
 		{
 			name:   "unknown type is dropped",
-			env:    dnsPolicyEnvelope{Type: "MYSTERY", Domain: "x"},
+			env:    dnsPolicyEnvelope{Type: "MYSTERY", Enabled: true, Domain: "x"},
+			wantOK: false,
+		},
+		{
+			// A fully valid A record, but disabled in the UI: must not be
+			// surfaced as a managed record (#221).
+			name: "disabled record is dropped",
+			env: dnsPolicyEnvelope{
+				Type: policyTypeA, Enabled: false,
+				Domain: "parked.example.com", IPv4Address: "192.0.2.9",
+				TTLSeconds: new(300),
+			},
 			wantOK: false,
 		},
 	}

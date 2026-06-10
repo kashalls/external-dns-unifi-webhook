@@ -33,6 +33,11 @@ func TestConfigValidate(t *testing.T) {
 		{"apply workers zero", func(c *Config) { c.ApplyWorkers = 0 }, true},
 		{"apply workers too high", func(c *Config) { c.ApplyWorkers = maxApplyWorkers + 1 }, true},
 		{"initial delay zero", func(c *Config) { c.RetryInitialDelay = 0 }, true},
+		{"initial delay below floor", func(c *Config) { c.RetryInitialDelay = time.Nanosecond }, true},
+		{"initial delay at floor", func(c *Config) {
+			c.RetryInitialDelay = minRetryInitialDelay
+			c.RetryMaxDelay = minRetryInitialDelay
+		}, false},
 		{"max delay below initial", func(c *Config) { c.RetryMaxDelay = 100 * time.Millisecond }, true},
 		{"cloud host without console id", func(c *Config) { c.Host = "https://api.ui.com" }, true},
 		{"cloud host with console id", func(c *Config) {

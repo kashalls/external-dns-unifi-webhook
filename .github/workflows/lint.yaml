@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   lint:
-    name: Run on Ubuntu
+    name: Go Lint
     runs-on: ubuntu-24.04
     permissions:
       contents: read

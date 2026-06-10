@@ -47,3 +47,22 @@ jobs:
 
       - name: Run unit tests
         run: mise run test
+
+      # Surface the total coverage that `mise run test` already computes into
+      # cover.out — it was otherwise generated and discarded. Reported only (no
+      # threshold gate): a minimum-coverage policy is the maintainer's call.
+      - name: Report coverage
+        run: |
+          set -o pipefail
+          if [ ! -f cover.out ]; then
+            echo "cover.out missing; the test step did not produce a coverage profile" >&2
+            exit 1
+          fi
+          total="$(go tool cover -func=cover.out | tail -1)"
+          echo "$total"
+          {
+            echo "### Coverage"
+            echo '```'
+            echo "$total"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

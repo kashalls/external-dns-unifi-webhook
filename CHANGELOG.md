@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.5](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.4...0.10.5) (2026-06-18)
+
+
+### Features
+
+* move the metrics/health server to 8081 ([#254](https://github.com/home-operations/external-dns-unifi-webhook/issues/254)) ([b840e51](https://github.com/home-operations/external-dns-unifi-webhook/commit/b840e517bb0212f58dddf800c187651ff2f62983))
+
+
+### Miscellaneous Chores
+
+* **mise:** update tool oxfmt (0.54.0 → 0.55.0) ([#251](https://github.com/home-operations/external-dns-unifi-webhook/issues/251)) ([10e847e](https://github.com/home-operations/external-dns-unifi-webhook/commit/10e847e6bed37da5e0f64e672b9d2c5c41d94659))
+
 ## [0.10.4](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.3...0.10.4) (2026-06-10)
 
 

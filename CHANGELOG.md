@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.6](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.5...0.10.6) (2026-06-18)
+
+
+### Features
+
+* revert move the metrics/health server to 8081 ([b66dc41](https://github.com/home-operations/external-dns-unifi-webhook/commit/b66dc41d3ecfdd97df2d5c80ffff1af066414d79))
+
 ## [0.10.5](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.4...0.10.5) (2026-06-18)
 
 

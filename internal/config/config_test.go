@@ -13,7 +13,7 @@ func validConfig() Config {
 		ServerMaxBodyBytes:   5 << 20,
 		ServerMaxHeaderBytes: 1 << 16,
 		ServerReadTimeout:    60 * time.Second,
-		HealthServerAddr:     "0.0.0.0:8081",
+		HealthServerAddr:     "0.0.0.0:8080",
 	}
 }
 
@@ -60,8 +60,8 @@ func TestInit_Defaults(t *testing.T) {
 	if cfg.ServerPort != 8888 {
 		t.Errorf("ServerPort = %d, want 8888", cfg.ServerPort)
 	}
-	if cfg.HealthServerAddr != "0.0.0.0:8081" {
-		t.Errorf("HealthServerAddr = %q, want 0.0.0.0:8081", cfg.HealthServerAddr)
+	if cfg.HealthServerAddr != "0.0.0.0:8080" {
+		t.Errorf("HealthServerAddr = %q, want 0.0.0.0:8080", cfg.HealthServerAddr)
 	}
 }
 

@@ -159,7 +159,7 @@ Configure `--domain-filter` (and its variants) on the **ExternalDNS controller**
 | `SERVER_IDLE_TIMEOUT`        | Keep-alive idle timeout.                                   | `120s`            |
 | `SERVER_MAX_HEADER_BYTES`    | Maximum request header size.                               | `65536`           |
 | `SERVER_MAX_BODY_BYTES`      | Maximum POST body size before returning `413`.             | `5242880` (5 MiB) |
-| `HEALTH_SERVER_ADDR`         | Address for the `/metrics`, `/healthz`, `/readyz` server.  | `0.0.0.0:8080`    |
+| `HEALTH_SERVER_ADDR`         | Address for the `/metrics`, `/healthz`, `/readyz` server.  | `0.0.0.0:8081`    |
 | `READINESS_CACHE_TTL`        | How long `/readyz` caches the upstream probe result.       | `30s`             |
 | `PPROF_ENABLED`              | Mount `/debug/pprof/*` on the health server (not in prod). | `false`           |
 | `LOG_LEVEL`                  | Log verbosity: `debug`, `info`, `warn`, `error`.           | `info`            |
@@ -171,10 +171,10 @@ Configure `--domain-filter` (and its variants) on the **ExternalDNS controller**
 | --------------- | -------------- | ----------------------------------------------------------- |
 | `/`             | `8888`         | ExternalDNS negotiate (returns the provider media type).    |
 | `/records`      | `8888`         | ExternalDNS `GET` (list) and `POST` (apply changes).        |
-| `/healthz`      | `8888`, `8080` | Liveness — `200 OK` while the process is running.           |
-| `/readyz`       | `8888`, `8080` | Readiness — probes UniFi, cached for `READINESS_CACHE_TTL`. |
-| `/metrics`      | `8080`         | Prometheus metrics.                                         |
-| `/debug/pprof/` | `8080`         | Go pprof endpoints (only when `PPROF_ENABLED=true`).        |
+| `/healthz`      | `8888`, `8081` | Liveness — `200 OK` while the process is running.           |
+| `/readyz`       | `8888`, `8081` | Readiness — probes UniFi, cached for `READINESS_CACHE_TTL`. |
+| `/metrics`      | `8081`         | Prometheus metrics.                                         |
+| `/debug/pprof/` | `8081`         | Go pprof endpoints (only when `PPROF_ENABLED=true`).        |
 
 `/healthz` and `/readyz` are served on both ports so Kubernetes probes can target the webhook port directly without exposing a second container port through the chart.
 

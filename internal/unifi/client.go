@@ -95,13 +95,18 @@ func newUnifiClient(config *Config) (*httpClient, error) {
 		return nil, err
 	}
 
-	// NewInstrumentedClient wraps the transport so every outbound call emits
-	// external_dns_http_request_duration_seconds, matching the metric naming
-	// the rest of the external-dns ecosystem (and the inbound webhook server)
-	// uses. See sigs.k8s.io/external-dns PR #6307.
+	// Do NOT wrap with extdnshttp.NewInstrumentedClient here. Its
+	// external_dns_http_request_duration_seconds metric is labelled by the
+	// request path, and the UniFi Integration API embeds the per-record UUID in
+	// the path (.../dns/policies/{uuid}). Every record ever touched then becomes
+	// a permanent series, so the metric grows unbounded (tens of thousands of
+	// series for a few dozen records) until the /metrics payload blows past a
+	// scraper's max-scrape-size and scraping breaks entirely. UniFi API timing
+	// is already covered, with bounded operation labels, by
+	// externaldns_webhook_unifi_api_duration_seconds (see RecordUniFiAPICall).
 	c := &httpClient{
 		cfg:   config,
-		httpc: extdnshttp.NewInstrumentedClient(&http.Client{Transport: transport}),
+		httpc: &http.Client{Transport: transport},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), siteResolveTimeoutFor(config))

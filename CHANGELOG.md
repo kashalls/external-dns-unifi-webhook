@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.7](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.6...0.10.7) (2026-06-29)
+
+
+### Bug Fixes
+
+* **unifi:** drop redundant instrumented HTTP client causing unbounded path-cardinality metric ([#262](https://github.com/home-operations/external-dns-unifi-webhook/issues/262)) ([eb75811](https://github.com/home-operations/external-dns-unifi-webhook/commit/eb75811918f7b2753d6f1c81ab3f64c36988e245))
+
+
+### Miscellaneous Chores
+
+* add minimumGroupSize to Go toolchain configuration ([84d0d97](https://github.com/home-operations/external-dns-unifi-webhook/commit/84d0d97f3585a042e9d8e8a49067701d5ec2047a))
+* **mise:** Update tool oxfmt (0.55.0 → 0.56.0) ([#259](https://github.com/home-operations/external-dns-unifi-webhook/issues/259)) ([9c9aeed](https://github.com/home-operations/external-dns-unifi-webhook/commit/9c9aeed11d48fa4c5b64ab738eea4e8a09463e4f))
+* **mise:** Update tool zizmor (1.25.2 → 1.26.1) ([#257](https://github.com/home-operations/external-dns-unifi-webhook/issues/257)) ([d7dab15](https://github.com/home-operations/external-dns-unifi-webhook/commit/d7dab154f08be80b4e4fa12886f6c3e852d4c035))
+* **renovate:** inherit shared toolchain group preset ([#261](https://github.com/home-operations/external-dns-unifi-webhook/issues/261)) ([f4881e7](https://github.com/home-operations/external-dns-unifi-webhook/commit/f4881e765682547c169c612462a2a28d654ab44f))
+
 ## [0.10.6](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.5...0.10.6) (2026-06-18)
 
 

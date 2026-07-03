@@ -17,7 +17,13 @@ type ProbeFunc func(ctx context.Context) error
 // detached from any caller's request context (see Check), so it needs its own
 // ceiling — without one a hung upstream connection (the UniFi client sets no
 // overall http.Client timeout, relying on ctx) would block the singleflight
-// slot forever. Generous enough to absorb the client's default retry budget.
+// slot forever.
+//
+// Deliberately NOT sized to the UniFi client's worst-case retry budget (which
+// Retry-After hints can stretch to tens of seconds): a controller deep in a
+// rate-limit or outage episode should read as not-ready rather than keep the
+// pod in rotation while a probe grinds through its full backoff schedule. The
+// next cached probe re-checks once the TTL lapses.
 const probeTimeout = 10 * time.Second
 
 // cachedProbe wraps a ProbeFunc with a TTL-bounded result cache and

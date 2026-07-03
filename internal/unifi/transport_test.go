@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/home-operations/external-dns-unifi-webhook/internal/metrics"
+	dto "github.com/prometheus/client_model/go"
 )
 
 func newRetryClient(t *testing.T, srv *httptest.Server, cfg *Config) *httpClient {
@@ -413,5 +414,39 @@ func TestDoRequest_NetworkErrorRetries(t *testing.T) {
 	var netErr *NetworkError
 	if !errors.As(err, &netErr) {
 		t.Errorf("expected NetworkError, got %T: %v", err, err)
+	}
+}
+
+// TestDoRequest_FinalAttempt429IsCounted: every 429 the controller sends must
+// increment the rate-limit counter — including the one on the final (or only)
+// attempt, which previously exited through the give-up branch uncounted. With
+// UNIFI_RETRY_ATTEMPTS=1, rate limits were never counted at all.
+func TestDoRequest_FinalAttempt429IsCounted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	rateLimits := metrics.Get().UniFiRateLimitsTotal.WithLabelValues(metrics.ProviderName, "dns_policies")
+	read := func() float64 {
+		t.Helper()
+		var dm dto.Metric
+		if err := rateLimits.Write(&dm); err != nil {
+			t.Fatalf("counter.Write: %v", err)
+		}
+
+		return dm.GetCounter().GetValue()
+	}
+	before := read()
+
+	c := newRetryClient(t, srv, &Config{RetryAttempts: 1})
+	_, err := c.doRequest(context.Background(), http.MethodGet,
+		srv.URL+"/proxy/network/integration/v1/sites/x/dns/policies", nil)
+	if err == nil {
+		t.Fatal("expected an error from an all-429 upstream")
+	}
+
+	if got := read() - before; got != 1 {
+		t.Errorf("rate-limit counter delta = %v, want 1 (the final attempt's 429 must be counted)", got)
 	}
 }

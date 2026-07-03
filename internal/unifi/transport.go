@@ -49,6 +49,11 @@ func newHTTPTransport(cfg *Config) (*http.Transport, error) {
 		// expose the API key to a trivial MITM, so we never honour it.
 		slog.Warn("ignoring UNIFI_SKIP_TLS_VERIFY for the cloud connector; api.ui.com presents a publicly-trusted certificate")
 	case cfg.SkipTLSVerify:
+		// The other branches warn when they *override* the operator's setting;
+		// this one warns because verification is genuinely off (the default, for
+		// self-signed controllers) — operators should see that in the log and
+		// know UNIFI_CA_CERT is the way to keep TLS verified.
+		slog.Warn("TLS certificate verification is disabled (UNIFI_SKIP_TLS_VERIFY); set UNIFI_CA_CERT to verify a self-signed controller")
 		//nolint:gosec // Explicit opt-in via UNIFI_SKIP_TLS_VERIFY for self-signed controllers.
 		tlsCfg.InsecureSkipVerify = true
 	}
@@ -74,8 +79,9 @@ func newHTTPTransport(cfg *Config) (*http.Transport, error) {
 func (c *httpClient) doRequest(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
 	attempts := max(c.cfg.RetryAttempts, 1)
 
-	var lastErr error
-	for attempt := range attempts {
+	// The final attempt always returns inside the loop (the give-up branch
+	// covers attempt == attempts-1), so the loop itself needs no exit condition.
+	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -85,6 +91,14 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body []
 		resp, err := c.doOnce(ctx, method, path, body)
 		if err == nil && resp.StatusCode < 400 {
 			return resp, nil
+		}
+
+		// Count every 429 the controller sends, whether or not we retry it —
+		// the metric promises "rate-limit responses received", and the final
+		// attempt's 429 (or the only one, with UNIFI_RETRY_ATTEMPTS=1) is the
+		// one that actually fails the operation.
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+			metrics.Get().UniFiRateLimitsTotal.WithLabelValues(metrics.ProviderName, opLabel(path)).Inc()
 		}
 
 		retryable, wait := c.retryAfter(method, resp, err, attempt)
@@ -106,9 +120,6 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body []
 		status := "network"
 		if resp != nil {
 			status = strconv.Itoa(resp.StatusCode)
-			if resp.StatusCode == http.StatusTooManyRequests {
-				metrics.Get().UniFiRateLimitsTotal.WithLabelValues(metrics.ProviderName, opLabel(path)).Inc()
-			}
 		}
 		metrics.Get().UniFiRetriesTotal.WithLabelValues(metrics.ProviderName, opLabel(path), status).Inc()
 		slog.Debug("retrying upstream request", "attempt", attempt+1, "wait", wait, "status", status)
@@ -118,10 +129,7 @@ func (c *httpClient) doRequest(ctx context.Context, method, path string, body []
 			return nil, ctx.Err()
 		case <-time.After(wait):
 		}
-		lastErr = err
 	}
-
-	return nil, lastErr
 }
 
 // doOnce performs a single request attempt. The caller decides whether to

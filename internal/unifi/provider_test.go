@@ -321,3 +321,70 @@ func TestAdjustEndpoints_ClearsTTLForControllerManagedTypes(t *testing.T) {
 		}
 	}
 }
+
+// TestApplyChanges_CNAMEUpdateIsNotAConflict: a routine CNAME update
+// (UpdateOld+UpdateNew for the same name) must delete the old record exactly
+// once — in the delete phase — and must NOT take the conflict-cleanup branch.
+// Before the deletedKeys guard, the create phase re-read the pre-delete
+// snapshot, counted a spurious CNAME conflict, and issued a second DELETE that
+// 404ed on every CNAME target change.
+func TestApplyChanges_CNAMEUpdateIsNotAConflict(t *testing.T) {
+	var deleteCount, notFoundServed atomic.Int32
+	existing := []dnsPolicyEnvelope{
+		envCNAME("old-cname", "alias.example.com", "old.target.example.com", 300),
+	}
+	var deletedOnce atomic.Bool
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_ = json.NewEncoder(w).Encode(pageOf(existing...))
+		case http.MethodPost:
+			body, _ := io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(body)
+		case http.MethodDelete:
+			deleteCount.Add(1)
+			if !deletedOnce.CompareAndSwap(false, true) {
+				// The record is already gone — a second DELETE is the bug.
+				notFoundServed.Add(1)
+				w.WriteHeader(http.StatusNotFound)
+
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	conflicts := metrics.Get().CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName)
+	readConflicts := func() float64 {
+		t.Helper()
+		var m dto.Metric
+		if err := conflicts.Write(&m); err != nil {
+			t.Fatalf("counter.Write: %v", err)
+		}
+
+		return m.GetCounter().GetValue()
+	}
+	before := readConflicts()
+
+	p := &UnifiProvider{client: newTestClient(srv), workers: 1}
+	changes := &plan.Changes{
+		UpdateOld: []*endpoint.Endpoint{endpoint.NewEndpointWithTTL("alias.example.com", "CNAME", 300, "old.target.example.com")},
+		UpdateNew: []*endpoint.Endpoint{endpoint.NewEndpointWithTTL("alias.example.com", "CNAME", 300, "new.target.example.com")},
+	}
+	if err := p.ApplyChanges(context.Background(), changes); err != nil {
+		t.Fatalf("ApplyChanges: %v", err)
+	}
+
+	if got := deleteCount.Load(); got != 1 {
+		t.Errorf("DELETE count = %d, want 1 (the update's own delete; no redundant conflict cleanup)", got)
+	}
+	if got := notFoundServed.Load(); got != 0 {
+		t.Errorf("served %d 404s — the stale snapshot was re-deleted", got)
+	}
+	if got := readConflicts() - before; got != 0 {
+		t.Errorf("CNAMEConflictsTotal delta = %v, want 0 (an update is not a conflict)", got)
+	}
+}

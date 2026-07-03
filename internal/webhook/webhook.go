@@ -46,6 +46,7 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 	records, err := p.provider.Records(r.Context())
 	if err != nil {
 		requestLog(r).Error("getting records", "error", err)
+		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusInternalServerError)
 
 		return

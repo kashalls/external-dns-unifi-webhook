@@ -180,13 +180,27 @@ func (p *UnifiProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 		return err
 	}
 
+	// Keys the delete phase just processed. The snapshot index still lists their
+	// (now removed) record IDs, so the CNAME-conflict cleanup below must skip
+	// them: a routine CNAME *update* (UpdateOld+UpdateNew for the same name) is
+	// not a conflict, and re-deleting the stale IDs would only burn an API round
+	// trip per record (the 404s are tolerated) and false-positive the conflict
+	// metric on every CNAME target change.
+	deletedKeys := make(map[recordKey]struct{}, len(deleteEPs))
+	for _, ep := range deleteEPs {
+		deletedKeys[recordKey{ep.DNSName, ep.RecordType}] = struct{}{}
+	}
+
 	createEPs := slices.Concat(changes.Create, changes.UpdateNew)
 	if err := runBounded(ctx, p.workers, createEPs, func(ctx context.Context, ep *endpoint.Endpoint) error {
 		if ep.RecordType == recordTypeCNAME {
-			if ids := byKeyType[recordKey{ep.DNSName, recordTypeCNAME}]; len(ids) > 0 {
-				m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
-				if err := p.deleteByIDs(ctx, ids); err != nil {
-					return fmt.Errorf("deleting conflicting CNAME %s: %w", ep.DNSName, err)
+			key := recordKey{ep.DNSName, recordTypeCNAME}
+			if _, handled := deletedKeys[key]; !handled {
+				if ids := byKeyType[key]; len(ids) > 0 {
+					m.CNAMEConflictsTotal.WithLabelValues(metrics.ProviderName).Inc()
+					if err := p.deleteByIDs(ctx, ids); err != nil {
+						return fmt.Errorf("deleting conflicting CNAME %s: %w", ep.DNSName, err)
+					}
 				}
 			}
 		}

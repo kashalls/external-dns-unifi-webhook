@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.8](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.7...0.10.8) (2026-07-03)
+
+
+### Bug Fixes
+
+* **unifi:** don't treat a CNAME update as a conflict; count final-attempt 429s ([#265](https://github.com/home-operations/external-dns-unifi-webhook/issues/265)) ([0b31441](https://github.com/home-operations/external-dns-unifi-webhook/commit/0b314417af10f6ba837be4bb0f7069dbf463ab74))
+
+
+### Miscellaneous Chores
+
+* **mise:** Update tool oxfmt (0.56.0 → 0.57.0) ([#263](https://github.com/home-operations/external-dns-unifi-webhook/issues/263)) ([ee3403b](https://github.com/home-operations/external-dns-unifi-webhook/commit/ee3403b069a16143480ee801c4f4c702d0f849b9))
+
 ## [0.10.7](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.6...0.10.7) (2026-06-29)
 
 

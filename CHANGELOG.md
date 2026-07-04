@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.9](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.8...0.10.9) (2026-07-04)
+
+
+### Bug Fixes
+
+* bind the health server dual-stack by default ([#266](https://github.com/home-operations/external-dns-unifi-webhook/issues/266)) ([bf1dcd3](https://github.com/home-operations/external-dns-unifi-webhook/commit/bf1dcd34b094477553fda4930445844c12fd5c19))
+
 ## [0.10.8](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.7...0.10.8) (2026-07-03)
 
 

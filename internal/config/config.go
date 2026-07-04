@@ -26,7 +26,7 @@ type Config struct {
 	ServerIdleTimeout       time.Duration `env:"SERVER_IDLE_TIMEOUT"        envDefault:"120s"`
 	ServerMaxHeaderBytes    int           `env:"SERVER_MAX_HEADER_BYTES"    envDefault:"65536"`
 	ServerMaxBodyBytes      int64         `env:"SERVER_MAX_BODY_BYTES"      envDefault:"5242880"`
-	HealthServerAddr        string        `env:"HEALTH_SERVER_ADDR"         envDefault:"0.0.0.0:8080"`
+	HealthServerAddr        string        `env:"HEALTH_SERVER_ADDR"         envDefault:":8080"`
 	ReadinessCacheTTL       time.Duration `env:"READINESS_CACHE_TTL"        envDefault:"30s"`
 	PprofEnabled            bool          `env:"PPROF_ENABLED"              envDefault:"false"`
 }

@@ -159,7 +159,7 @@ Configure `--domain-filter` (and its variants) on the **ExternalDNS controller**
 | `SERVER_IDLE_TIMEOUT`        | Keep-alive idle timeout.                                   | `120s`            |
 | `SERVER_MAX_HEADER_BYTES`    | Maximum request header size.                               | `65536`           |
 | `SERVER_MAX_BODY_BYTES`      | Maximum POST body size before returning `413`.             | `5242880` (5 MiB) |
-| `HEALTH_SERVER_ADDR`         | Address for the `/metrics`, `/healthz`, `/readyz` server.  | `0.0.0.0:8080`    |
+| `HEALTH_SERVER_ADDR`         | Address for the `/metrics`, `/healthz`, `/readyz` server.  | `:8080`           |
 | `READINESS_CACHE_TTL`        | How long `/readyz` caches the upstream probe result.       | `30s`             |
 | `PPROF_ENABLED`              | Mount `/debug/pprof/*` on the health server (not in prod). | `false`           |
 | `LOG_LEVEL`                  | Log verbosity: `debug`, `info`, `warn`, `error`.           | `info`            |

@@ -1,7 +1,7 @@
 [tools]
 go = "1.26.4"
 golangci-lint = "2.12.2"
-lefthook = "2.1.9"
+lefthook = "2.1.10"
 oxfmt = "0.58.0"
 zizmor = "1.26.1"
 

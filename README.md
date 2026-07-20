@@ -31,8 +31,8 @@ UniFi uses [dnsmasq](https://dnsmasq.org) as its DNS backend, so the provider in
 
 - **Wildcards** (`*.example.com`) are not supported.
 - **One CNAME per name.** The webhook reconciles this transparently:
-    - creating a CNAME where one already exists evicts the existing record first;
-    - if ExternalDNS sends multiple targets for a single CNAME, only the first is used and the rest are dropped with a warning.
+  - creating a CNAME where one already exists evicts the existing record first;
+  - if ExternalDNS sends multiple targets for a single CNAME, only the first is used and the rest are dropped with a warning.
 
 ## Quick start
 
@@ -52,9 +52,9 @@ Every request authenticates with an API key; username/password auth is not suppo
 apiVersion: v1
 kind: Secret
 metadata:
-    name: unifi-dns-secret
+  name: unifi-dns-secret
 stringData:
-    UNIFI_API_KEY: <your-api-key>
+  UNIFI_API_KEY: <your-api-key>
 ```
 
 ### 3. Install with Helm
@@ -70,42 +70,42 @@ Create a values file (`external-dns-unifi-values.yaml`):
 ```yaml
 fullnameOverride: external-dns-unifi
 provider:
-    name: webhook
-    webhook:
-        image:
-            repository: ghcr.io/home-operations/external-dns-unifi-webhook
-            tag: main # replace with a versioned release tag
-        env:
-            - name: UNIFI_HOST
-              value: https://unifi.internal # your UniFi controller, or https://api.ui.com for the cloud connector
-            - name: UNIFI_API_KEY
-              valueFrom:
-                  secretKeyRef:
-                      name: unifi-dns-secret
-                      key: UNIFI_API_KEY
-        livenessProbe:
-            httpGet:
-                path: /healthz
-                port: http-webhook
-            initialDelaySeconds: 10
-            timeoutSeconds: 5
-        readinessProbe:
-            httpGet:
-                path: /readyz
-                port: http-webhook
-            initialDelaySeconds: 10
-            timeoutSeconds: 5
+  name: webhook
+  webhook:
+    image:
+      repository: ghcr.io/home-operations/external-dns-unifi-webhook
+      tag: main # replace with a versioned release tag
+    env:
+      - name: UNIFI_HOST
+        value: https://unifi.internal # your UniFi controller, or https://api.ui.com for the cloud connector
+      - name: UNIFI_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: unifi-dns-secret
+            key: UNIFI_API_KEY
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: http-webhook
+      initialDelaySeconds: 10
+      timeoutSeconds: 5
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: http-webhook
+      initialDelaySeconds: 10
+      timeoutSeconds: 5
 triggerLoopOnEvent: true
 policy: sync
 sources:
-    - gateway-httproute
-    - service
+  - gateway-httproute
+  - service
 txtOwnerId: main
 txtPrefix: k8s.main.%{record_type}-
 domainFilters:
-    - example.com # replace with your domain
+  - example.com # replace with your domain
 serviceMonitor:
-    enabled: true
+  enabled: true
 ```
 
 Install:

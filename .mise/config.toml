@@ -3,7 +3,7 @@ go = "1.26.5"
 golangci-lint = "2.12.2"
 lefthook = "2.1.10"
 oxfmt = "0.59.0"
-zizmor = "1.27.0"
+zizmor = "1.28.0"
 
 [tasks.fmt]
 description = "Run go fmt against code"

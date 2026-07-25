@@ -26,6 +26,9 @@ permissions:
 
 jobs:
   lint:
+    if: >-
+      ${{ !(startsWith(github.head_ref, 'release-please--')
+      && github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Go Lint
     runs-on: ubuntu-24.04
     permissions:

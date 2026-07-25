@@ -3,12 +3,6 @@
 name: E2E
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**.md"
-      - ".release-please-manifest.json"
   pull_request:
     branches:
       - main
@@ -26,6 +20,9 @@ permissions:
 
 jobs:
   e2e:
+    if: >-
+      ${{ !(startsWith(github.head_ref, 'release-please--')
+      && github.event.pull_request.head.repo.full_name == github.repository) }}
     name: End-to-end (subprocess)
     runs-on: ubuntu-24.04
     timeout-minutes: 10

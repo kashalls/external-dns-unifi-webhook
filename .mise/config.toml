@@ -4,7 +4,7 @@ go = "1.26.5"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 golangci-lint = "2.12.2"
 lefthook = "2.1.10"
-oxfmt = "0.62.0"
+oxfmt = "0.63.0"
 zizmor = "1.29.0"
 
 [tasks.fmt]

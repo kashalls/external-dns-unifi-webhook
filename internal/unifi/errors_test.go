@@ -408,8 +408,7 @@ func TestErrorChaining(t *testing.T) {
 	wrappedTwice := fmt.Errorf("second wrap: %w", wrappedOnce)
 
 	// Should still be detectable as DataError through multiple wraps.
-	var target *DataError
-	if !errors.As(wrappedTwice, &target) {
+	if _, ok := errors.AsType[*DataError](wrappedTwice); !ok {
 		t.Error("errors.As failed to detect DataError through multiple wraps")
 	}
 

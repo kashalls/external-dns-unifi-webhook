@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.11](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.10...0.10.11) (2026-08-21)
+
+
+### Bug Fixes
+
+* **go:** update to go 1.27.0 ([#313](https://github.com/home-operations/external-dns-unifi-webhook/issues/313)) ([931e211](https://github.com/home-operations/external-dns-unifi-webhook/commit/931e2116d51dded40a65344fea63c79c7679118d))
+
 ## [0.10.10](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.9...0.10.10) (2026-08-21)
 
 

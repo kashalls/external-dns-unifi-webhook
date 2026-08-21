@@ -411,8 +411,7 @@ func TestDoRequest_NetworkErrorRetries(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error against closed server")
 	}
-	var netErr *NetworkError
-	if !errors.As(err, &netErr) {
+	if _, ok := errors.AsType[*NetworkError](err); !ok {
 		t.Errorf("expected NetworkError, got %T: %v", err, err)
 	}
 }

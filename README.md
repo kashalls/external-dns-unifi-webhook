@@ -144,7 +144,7 @@ To manage a remote console without exposing the controller on your LAN, set `UNI
 
 #### Domain filtering
 
-Configure `--domain-filter` (and its variants) on the **ExternalDNS controller**, not on this webhook. UniFi has no zone concept the webhook could narrow against, so it follows the [ExternalDNS `GetDomainFilter` contract](https://github.com/kubernetes-sigs/external-dns/blob/v0.21.0/docs/contributing/sources-and-providers.md#implementing-getdomainfilter) and leaves filtering to the controller.
+Configure `--domain-filter` (and its variants) on the **ExternalDNS controller**, not on this webhook. UniFi has no zone concept the webhook could narrow against, so it follows the [ExternalDNS `GetDomainFilter` contract](https://github.com/kubernetes-sigs/external-dns/blob/v0.22.0/docs/contributing/sources-and-providers.md#implementing-getdomainfilter) and leaves filtering to the controller.
 
 ### Webhook server
 

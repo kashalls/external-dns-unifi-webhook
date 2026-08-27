@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.12](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.11...0.10.12) (2026-08-27)
+
+
+### Bug Fixes
+
+* drop UPX compression, packed binaries segfault (upx/upx[#18902](https://github.com/home-operations/external-dns-unifi-webhook/issues/18902)) ([#319](https://github.com/home-operations/external-dns-unifi-webhook/issues/319)) ([26464ed](https://github.com/home-operations/external-dns-unifi-webhook/commit/26464ed9515a6f9c9eacb57912ff8364e33f9de4))
+
+
+### Miscellaneous Chores
+
+* **github-action:** update action docker/github-builder (v1.16.0 → v1.17.0) ([#318](https://github.com/home-operations/external-dns-unifi-webhook/issues/318)) ([1495e6a](https://github.com/home-operations/external-dns-unifi-webhook/commit/1495e6af8ded30bd5c1b740828f090e1aa2e9516))
+* **mise:** update mise tools ([#317](https://github.com/home-operations/external-dns-unifi-webhook/issues/317)) ([12e06ec](https://github.com/home-operations/external-dns-unifi-webhook/commit/12e06eccbb4104ada1890dd3fb57de62c65ae427))
+* **mise:** update tool oxfmt (0.63.0 → 0.64.0) ([#315](https://github.com/home-operations/external-dns-unifi-webhook/issues/315)) ([3db5214](https://github.com/home-operations/external-dns-unifi-webhook/commit/3db521499841f7f7f9e3f0eba3b3923d0896fd5e))
+
 ## [0.10.11](https://github.com/home-operations/external-dns-unifi-webhook/compare/0.10.10...0.10.11) (2026-08-21)
 
 
